@@ -304,17 +304,6 @@ export default function ImportPreviewModal({
                   </div>
                 )}
               </div>
-
-              {/* Download Template */}
-              <div className="flex items-center justify-center">
-                <button
-                  onClick={handleDownloadTemplate}
-                  className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  <Download className="w-4 h-4" />
-                  Download Sample Template
-                </button>
-              </div>
             </div>
           )}
 

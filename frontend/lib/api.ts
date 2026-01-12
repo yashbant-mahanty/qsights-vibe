@@ -811,10 +811,13 @@ export const questionnairesApi = {
 
   // Import functionality
   async downloadImportTemplate(): Promise<Blob> {
+    const token = getBackendToken();
     const response = await fetch(`${API_URL}/questionnaires/import/template`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': token ? `Bearer ${token}` : '',
+        'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       },
+      credentials: 'include',
     });
     if (!response.ok) {
       throw new Error('Failed to download template');
@@ -830,14 +833,16 @@ export const questionnairesApi = {
     warnings?: { row?: number; section?: string; question?: string; warning: string }[];
     error?: string;
   }> {
+    const token = getBackendToken();
     const formData = new FormData();
     formData.append('file', file);
 
     const response = await fetch(`${API_URL}/questionnaires/import/parse`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': token ? `Bearer ${token}` : '',
       },
+      credentials: 'include',
       body: formData,
     });
 
