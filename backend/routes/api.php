@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\ActivityApprovalRequestController;
 use App\Http\Controllers\Api\ProgramController;
 use App\Http\Controllers\Api\ProgramRoleController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\QuestionnaireImportController;
 
 // Public Authentication Routes
 Route::post('/auth/validate-email', [AuthController::class, 'validateEmail']);
@@ -210,6 +211,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/questionnaires/{id}/archive', [QuestionnaireController::class, 'archive']);
         Route::post('/questionnaires/{id}/duplicate', [QuestionnaireController::class, 'duplicate']);
         Route::post('/questionnaires/{id}/restore', [QuestionnaireController::class, 'restore']);
+        
+        // Import functionality
+        Route::get('/questionnaires/import/template', [QuestionnaireImportController::class, 'downloadTemplate']);
+        Route::post('/questionnaires/import/parse', [QuestionnaireImportController::class, 'parseFile']);
+        Route::post('/questionnaires/import', [QuestionnaireImportController::class, 'import']);
         
         // Section management
         Route::post('/questionnaires/{id}/sections', [QuestionnaireController::class, 'addSection']);

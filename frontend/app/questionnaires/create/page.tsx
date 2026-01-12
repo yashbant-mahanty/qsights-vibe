@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import RichTextEditor from "@/components/RichTextEditor";
 import IsolatedTextInput from "@/components/IsolatedTextInput";
 import EnhancedConditionalLogicEditor from "@/components/EnhancedConditionalLogicEditor";
+import ImportPreviewModal from "@/components/ImportPreviewModal";
 import {
   ArrowLeft,
   Plus,
@@ -31,6 +32,9 @@ import {
   GitBranch,
   FileText,
   Globe,
+  FileSpreadsheet,
+  Download,
+  Upload,
 } from "lucide-react";
 import { questionnairesApi, programsApi, type Program } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -84,6 +88,7 @@ export default function QuestionnaireBuilderPage() {
   const [showProgressBar, setShowProgressBar] = useState(true);
   const [allowSaveAndContinue, setAllowSaveAndContinue] = useState(true);
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -1559,6 +1564,54 @@ export default function QuestionnaireBuilderPage() {
               </CardContent>
             </Card>
 
+            {/* Import from Excel/CSV Section */}
+            <Card className="border border-gray-200 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-gray-900">Bulk Import Questions</h3>
+                      <p className="text-sm text-gray-500">Import questions from Excel or CSV file</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const blob = await questionnairesApi.downloadImportTemplate();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = "questionnaire_import_template.xlsx";
+                          document.body.appendChild(a);
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                          document.body.removeChild(a);
+                          toast({ title: "Success", description: "Template downloaded!", variant: "success" });
+                        } catch (err) {
+                          toast({ title: "Error", description: "Failed to download template", variant: "error" });
+                        }
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download Template
+                    </button>
+                    <button
+                      onClick={() => setShowImportModal(true)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm bg-green-600 text-white hover:bg-green-700 rounded-lg transition-colors"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Import Excel/CSV
+                    </button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Sections */}
             {!showPreview ? (
               <div className="space-y-4">
@@ -2460,6 +2513,82 @@ export default function QuestionnaireBuilderPage() {
           }}
         />
       )}
+
+      {/* Import Modal */}
+      <ImportPreviewModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={async (importedSections) => {
+          // Convert imported sections to the internal format
+          const newSections = importedSections.map((importedSection, idx) => ({
+            id: Date.now() + idx,
+            title: importedSection.title,
+            description: "",
+            questions: importedSection.questions.map((q, qIdx) => {
+              const typeMapping: Record<string, string> = {
+                radio: "mcq",
+                checkbox: "multi",
+                text: "text",
+                textarea: "text",
+                rating: "rating",
+                scale: "slider",
+                matrix: "matrix",
+                information: "information",
+              };
+              
+              const questionBase: any = {
+                id: Date.now() + idx * 1000 + qIdx,
+                type: typeMapping[q.type] || q.type,
+                question: q.title,
+                required: q.is_required,
+                isRichText: false,
+                formattedQuestion: "",
+                formattedOptions: [],
+                description: "",
+                conditionalLogic: null,
+                parentQuestionId: null,
+                conditionalValue: null,
+                nestingLevel: 0,
+              };
+
+              // Add type-specific fields
+              if (q.type === "radio" || q.type === "checkbox") {
+                questionBase.options = q.options?.map(opt => opt.text) || [];
+                questionBase.correctAnswers = q.options?.filter(opt => opt.is_correct).map(opt => opt.text) || [];
+              } else if (q.type === "rating") {
+                questionBase.scale = q.settings?.scale || 5;
+              } else if (q.type === "scale") {
+                questionBase.min = q.settings?.min || 0;
+                questionBase.max = q.settings?.max || 100;
+              } else if (q.type === "matrix") {
+                questionBase.rows = q.settings?.rows || ["Row 1"];
+                questionBase.columns = q.settings?.columns || ["Column 1"];
+              }
+
+              return questionBase;
+            }),
+          }));
+
+          // Append to existing sections or replace first empty section
+          setSections(prevSections => {
+            // If only one empty section exists, replace it
+            if (prevSections.length === 1 && prevSections[0].questions.length === 0) {
+              return newSections;
+            }
+            // Otherwise append
+            return [...prevSections, ...newSections];
+          });
+
+          // Expand all new sections
+          setExpandedSections(prev => [...prev, ...newSections.map(s => s.id)]);
+
+          toast({
+            title: "Import Successful",
+            description: `Imported ${newSections.length} sections with ${newSections.reduce((acc, s) => acc + s.questions.length, 0)} questions`,
+            variant: "success",
+          });
+        }}
+      />
     </AppLayout>
   );
 }

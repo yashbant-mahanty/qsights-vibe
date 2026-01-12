@@ -808,6 +808,58 @@ export const questionnairesApi = {
     });
     return data.data || data;
   },
+
+  // Import functionality
+  async downloadImportTemplate(): Promise<Blob> {
+    const response = await fetch(`${API_URL}/questionnaires/import/template`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error('Failed to download template');
+    }
+    return response.blob();
+  },
+
+  async parseImportFile(file: File): Promise<{
+    success: boolean;
+    data?: any[];
+    summary?: { total_sections: number; total_questions: number; total_options: number };
+    errors?: { row: number; error: string }[];
+    warnings?: { row?: number; section?: string; question?: string; warning: string }[];
+    error?: string;
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_URL}/questionnaires/import/parse`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+      body: formData,
+    });
+
+    return response.json();
+  },
+
+  async importQuestions(questionnaireId: string, sections: any[]): Promise<{
+    success: boolean;
+    message?: string;
+    questionnaire?: Questionnaire;
+    imported?: { sections: number; questions: number };
+    error?: string;
+  }> {
+    const data = await fetchWithAuth('/questionnaires/import', {
+      method: 'POST',
+      body: JSON.stringify({
+        questionnaire_id: questionnaireId,
+        sections,
+      }),
+    });
+    return data;
+  },
 };
 
 // Activities API
