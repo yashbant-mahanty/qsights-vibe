@@ -1,0 +1,356 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Activity;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
+
+class ActivityController extends Controller
+{
+    /**
+     * Display a listing of activities with filtering
+     */
+    public function index(Request $request)
+    {
+        $query = Activity::with(['program', 'questionnaire']);
+
+        // Handle withCount parameter
+        if ($request->has('withCount')) {
+            $withCount = explode(',', $request->withCount);
+            $query->withCount($withCount);
+        }
+
+        // Filter by program
+        if ($request->has('program_id')) {
+            $query->byProgram($request->program_id);
+        }
+
+        // Filter by type
+        if ($request->has('type')) {
+            $query->byType($request->type);
+        }
+
+        // Filter by status (draft, upcoming, live, expired, closed, archived)
+        if ($request->has('status')) {
+            $status = $request->status;
+            switch ($status) {
+                case 'upcoming':
+                    $query->upcoming();
+                    break;
+                case 'live':
+                    $query->live();
+                    break;
+                case 'expired':
+                    $query->expired();
+                    break;
+                case 'closed':
+                    $query->closed();
+                    break;
+                case 'draft':
+                    $query->draft();
+                    break;
+                case 'archived':
+                    $query->archived();
+                    break;
+            }
+        }
+
+        // Filter by guest access
+        if ($request->has('allow_guests')) {
+            if ($request->boolean('allow_guests')) {
+                $query->withGuests();
+            } else {
+                $query->where('allow_guests', false);
+            }
+        }
+
+        // Filter by multilingual
+        if ($request->has('is_multilingual')) {
+            if ($request->boolean('is_multilingual')) {
+                $query->multilingual();
+            } else {
+                $query->where('is_multilingual', false);
+            }
+        }
+
+        // Search
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'ilike', "%{$search}%")
+                  ->orWhere('description', 'ilike', "%{$search}%");
+            });
+        }
+
+        // Include trashed
+        if ($request->boolean('with_trashed')) {
+            $query->withTrashed();
+        }
+
+        $activities = $query->paginate($request->input('per_page', 15));
+
+        // Add computed status to each activity
+        $activities->getCollection()->transform(function ($activity) {
+            $activity->computed_status = $activity->getComputedStatus();
+            return $activity;
+        });
+
+        return response()->json($activities);
+    }
+
+    /**
+     * Store a newly created activity
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'program_id' => 'required|uuid|exists:programs,id',
+            'questionnaire_id' => 'nullable|uuid|exists:questionnaires,id',
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'required|in:survey,poll,assessment',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'close_date' => 'nullable|date|after_or_equal:end_date',
+            'status' => 'nullable|in:draft,upcoming,live,expired,closed,archived',
+            'allow_guests' => 'nullable|boolean',
+            'is_multilingual' => 'nullable|boolean',
+            'languages' => 'nullable|array',
+            'languages.*' => 'string|max:10',
+            'settings' => 'nullable|array',
+        ]);
+
+        $activity = Activity::create([
+            'id' => Str::uuid(),
+            'program_id' => $validated['program_id'],
+            'questionnaire_id' => $validated['questionnaire_id'] ?? null,
+            'name' => $validated['name'],
+            'description' => $validated['description'] ?? null,
+            'type' => $validated['type'],
+            'start_date' => $validated['start_date'] ?? null,
+            'end_date' => $validated['end_date'] ?? null,
+            'close_date' => $validated['close_date'] ?? null,
+            'status' => $validated['status'] ?? 'draft',
+            'allow_guests' => $validated['allow_guests'] ?? false,
+            'is_multilingual' => $validated['is_multilingual'] ?? false,
+            'languages' => $validated['languages'] ?? null,
+            'settings' => $validated['settings'] ?? null,
+        ]);
+
+        $activity->load(['program', 'questionnaire']);
+        $activity->computed_status = $activity->getComputedStatus();
+
+        return response()->json([
+            'message' => 'Activity created successfully',
+            'data' => $activity
+        ], 201);
+    }
+
+    /**
+     * Display the specified activity
+     */
+    public function show(string $id)
+    {
+        $activity = Activity::with(['program', 'questionnaire'])
+            ->findOrFail($id);
+
+        $activity->computed_status = $activity->getComputedStatus();
+
+        return response()->json(['data' => $activity]);
+    }
+
+    /**
+     * Update the specified activity
+     */
+    public function update(Request $request, string $id)
+    {
+        $activity = Activity::findOrFail($id);
+
+        $validated = $request->validate([
+            'program_id' => 'sometimes|required|uuid|exists:programs,id',
+            'questionnaire_id' => 'nullable|uuid|exists:questionnaires,id',
+            'name' => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'sometimes|required|in:survey,poll,assessment',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'close_date' => 'nullable|date|after_or_equal:end_date',
+            'status' => 'sometimes|in:draft,upcoming,live,expired,closed,archived',
+            'allow_guests' => 'nullable|boolean',
+            'is_multilingual' => 'nullable|boolean',
+            'languages' => 'nullable|array',
+            'languages.*' => 'string|max:10',
+            'settings' => 'nullable|array',
+        ]);
+
+        $activity->update($validated);
+        $activity->load(['program', 'questionnaire']);
+        $activity->computed_status = $activity->getComputedStatus();
+
+        return response()->json([
+            'message' => 'Activity updated successfully',
+            'data' => $activity
+        ]);
+    }
+
+    /**
+     * Soft delete the specified activity
+     */
+    public function destroy(string $id)
+    {
+        $activity = Activity::findOrFail($id);
+        $activity->delete();
+
+        return response()->json([
+            'message' => 'Activity deleted successfully'
+        ]);
+    }
+
+    /**
+     * Assign or update questionnaire for activity
+     */
+    public function assignQuestionnaire(Request $request, string $id)
+    {
+        $activity = Activity::findOrFail($id);
+
+        $validated = $request->validate([
+            'questionnaire_id' => 'required|uuid|exists:questionnaires,id',
+        ]);
+
+        $activity->update([
+            'questionnaire_id' => $validated['questionnaire_id']
+        ]);
+
+        $activity->load(['program', 'questionnaire']);
+        $activity->computed_status = $activity->getComputedStatus();
+
+        return response()->json([
+            'message' => 'Questionnaire assigned successfully',
+            'data' => $activity
+        ]);
+    }
+
+    /**
+     * Unassign questionnaire from activity
+     */
+    public function unassignQuestionnaire(string $id)
+    {
+        $activity = Activity::findOrFail($id);
+        $activity->update(['questionnaire_id' => null]);
+        $activity->load(['program', 'questionnaire']);
+
+        return response()->json([
+            'message' => 'Questionnaire unassigned successfully',
+            'data' => $activity
+        ]);
+    }
+
+    /**
+     * Archive activity
+     */
+    public function archive(string $id)
+    {
+        $activity = Activity::findOrFail($id);
+        $activity->update(['status' => 'archived']);
+        $activity->computed_status = $activity->getComputedStatus();
+
+        return response()->json([
+            'message' => 'Activity archived successfully',
+            'data' => $activity
+        ]);
+    }
+
+    /**
+     * Activate activity (set to upcoming or live based on dates)
+     */
+    public function activate(string $id)
+    {
+        $activity = Activity::findOrFail($id);
+        
+        $now = Carbon::now();
+        $status = 'live';
+
+        if ($activity->start_date && $now->lessThan($activity->start_date)) {
+            $status = 'upcoming';
+        }
+
+        $activity->update(['status' => $status]);
+        $activity->computed_status = $activity->getComputedStatus();
+
+        return response()->json([
+            'message' => 'Activity activated successfully',
+            'data' => $activity
+        ]);
+    }
+
+    /**
+     * Restore soft deleted activity
+     */
+    public function restore(string $id)
+    {
+        $activity = Activity::withTrashed()->findOrFail($id);
+        $activity->restore();
+        $activity->load(['program', 'questionnaire']);
+        $activity->computed_status = $activity->getComputedStatus();
+
+        return response()->json([
+            'message' => 'Activity restored successfully',
+            'data' => $activity
+        ]);
+    }
+
+    /**
+     * Permanently delete activity
+     */
+    public function forceDestroy(string $id)
+    {
+        $activity = Activity::withTrashed()->findOrFail($id);
+        $activity->forceDelete();
+
+        return response()->json([
+            'message' => 'Activity permanently deleted'
+        ]);
+    }
+
+    /**
+     * Get activity statistics by status
+     */
+    public function statistics(Request $request)
+    {
+        $query = Activity::query();
+
+        // Filter by program if provided
+        if ($request->has('program_id')) {
+            $query->byProgram($request->program_id);
+        }
+
+        $total = $query->count();
+        $draft = (clone $query)->draft()->count();
+        $upcoming = (clone $query)->upcoming()->count();
+        $live = (clone $query)->live()->count();
+        $expired = (clone $query)->expired()->count();
+        $closed = (clone $query)->closed()->count();
+        $archived = (clone $query)->archived()->count();
+        $withGuests = (clone $query)->withGuests()->count();
+        $multilingual = (clone $query)->multilingual()->count();
+
+        return response()->json([
+            'total' => $total,
+            'by_status' => [
+                'draft' => $draft,
+                'upcoming' => $upcoming,
+                'live' => $live,
+                'expired' => $expired,
+                'closed' => $closed,
+                'archived' => $archived,
+            ],
+            'features' => [
+                'allow_guests' => $withGuests,
+                'is_multilingual' => $multilingual,
+            ]
+        ]);
+    }
+}

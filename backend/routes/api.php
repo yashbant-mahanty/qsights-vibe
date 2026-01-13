@@ -516,3 +516,19 @@ Route::prefix('contact-requests')->group(function () {
         Route::delete('/{id}', [App\Http\Controllers\Api\ContactRequestController::class, 'destroy']);
     });
 });
+
+// Event Contact Messages Routes
+Route::prefix('event-contact-messages')->group(function () {
+    // Public endpoint (no auth required for submitting contact message during event)
+    Route::post('/', [App\Http\Controllers\Api\EventContactMessageController::class, 'store']);
+    
+    // Admin only endpoints (Admin & Super Admin)
+    Route::middleware(['auth:sanctum', 'role:super-admin,admin'])->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\EventContactMessageController::class, 'index']);
+        Route::get('/unread-count', [App\Http\Controllers\Api\EventContactMessageController::class, 'unreadCount']);
+        Route::get('/{id}', [App\Http\Controllers\Api\EventContactMessageController::class, 'show']);
+        Route::patch('/{id}/read', [App\Http\Controllers\Api\EventContactMessageController::class, 'markAsRead']);
+        Route::patch('/{id}/responded', [App\Http\Controllers\Api\EventContactMessageController::class, 'markAsResponded']);
+        Route::delete('/{id}', [App\Http\Controllers\Api\EventContactMessageController::class, 'destroy']);
+    });
+});

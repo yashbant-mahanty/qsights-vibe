@@ -1,0 +1,166 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Activity;
+use App\Models\Questionnaire;
+use App\Models\Response;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+
+class PublicActivityController extends Controller
+{
+    /**
+     * Get public activity data (no authentication required)
+     */
+    public function show($id)
+    {
+        try {
+            $activity = Activity::with(['questionnaire.sections.questions'])
+                ->findOrFail($id);
+
+            // Only allow access to live activities
+            if ($activity->status !== 'active') {
+                return response()->json([
+                    'error' => 'Activity is not accessible',
+                    'message' => 'This activity is not currently available for participation'
+                ], 403);
+            }
+
+            // Check if activity is within date range
+            $now = now();
+            if ($activity->start_date && $now->lt($activity->start_date)) {
+                return response()->json([
+                    'error' => 'Activity not started',
+                    'message' => 'This activity has not started yet'
+                ], 403);
+            }
+
+            if ($activity->end_date && $now->gt($activity->end_date)) {
+                return response()->json([
+                    'error' => 'Activity expired',
+                    'message' => 'This activity has ended'
+                ], 403);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $activity
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Activity not found',
+                'message' => $e->getMessage()
+            ], 404);
+        }
+    }
+
+    /**
+     * Get public questionnaire data (no authentication required)
+     */
+    public function getQuestionnaire($id)
+    {
+        try {
+            $questionnaire = Questionnaire::with(['sections.questions'])
+                ->findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'data' => $questionnaire
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Questionnaire not found',
+                'message' => $e->getMessage()
+            ], 404);
+        }
+    }
+
+    /**
+     * Submit response (no authentication required for guest/participant)
+     */
+    public function submitResponse(Request $request, $id)
+    {
+        try {
+            // Validate request
+            $validator = Validator::make($request->all(), [
+                'answers' => 'required|array',
+                'type' => 'required|in:participant,guest',
+                'participant_name' => 'required_if:type,participant|string|max:255',
+                'participant_email' => 'required_if:type,participant|email|max:255',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'messages' => $validator->errors()
+                ], 422);
+            }
+
+            $activity = Activity::findOrFail($id);
+
+            // Verify activity is live
+            if ($activity->status !== 'active') {
+                return response()->json([
+                    'error' => 'Activity is not accessible',
+                    'message' => 'This activity is not currently accepting responses'
+                ], 403);
+            }
+
+            // Count total and answered questions
+            $totalQuestions = 0;
+            if ($activity->questionnaire) {
+                foreach ($activity->questionnaire->sections as $section) {
+                    $totalQuestions += count($section->questions);
+                }
+            }
+            
+            $answeredQuestions = count($request->answers);
+            $completionPercentage = $totalQuestions > 0 ? ($answeredQuestions / $totalQuestions) * 100 : 0;
+
+            // Generate guest identifier for guest responses
+            $guestIdentifier = null;
+            if ($request->type === 'guest') {
+                $guestIdentifier = Str::random(32);
+            }
+
+            // Create response record
+            $response = Response::create([
+                'id' => (string) Str::uuid(),
+                'activity_id' => $activity->id,
+                'participant_id' => null, // No participant ID for public responses
+                'guest_identifier' => $guestIdentifier,
+                'status' => 'submitted',
+                'language' => 'en',
+                'total_questions' => $totalQuestions,
+                'answered_questions' => $answeredQuestions,
+                'completion_percentage' => $completionPercentage,
+                'started_at' => now(),
+                'submitted_at' => now(),
+                'last_saved_at' => now(),
+                'metadata' => [
+                    'participant_name' => $request->participant_name,
+                    'participant_email' => $request->participant_email,
+                    'type' => $request->type,
+                    'answers' => $request->answers,
+                ],
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Response submitted successfully',
+                'data' => [
+                    'response_id' => $response->id,
+                    'submitted_at' => $response->submitted_at
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Failed to submit response',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+}

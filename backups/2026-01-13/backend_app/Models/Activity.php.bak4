@@ -1,0 +1,265 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Carbon\Carbon;
+
+class Activity extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $fillable = [
+        'program_id',
+        'questionnaire_id',
+        'name',
+        'description',
+        'type',
+        'start_date',
+        'end_date',
+        'close_date',
+        'status',
+        'allow_guests',
+        'is_multilingual',
+        'languages',
+        'settings',
+    ];
+
+    protected $casts = [
+        'start_date' => 'datetime',
+        'end_date' => 'datetime',
+        'close_date' => 'datetime',
+        'allow_guests' => 'boolean',
+        'is_multilingual' => 'boolean',
+        'languages' => 'array',
+        'settings' => 'array',
+    ];
+
+    /**
+     * Relationships
+     */
+    public function program()
+    {
+        return $this->belongsTo(Program::class);
+    }
+
+    public function questionnaire()
+    {
+        return $this->belongsTo(Questionnaire::class);
+    }
+
+    public function responses()
+    {
+        return $this->hasMany(Response::class);
+
+    public function getParticipantsCountAttribute()
+    {
+        if (!$this->program_id) return 0;
+        return \App\Models\Participant::whereHas('programs', function($query) {
+            $query->where('program_id', $this->program_id);
+        })->count();
+    }
+    }
+
+
+    /**
+     * Analytics methods
+     */
+    public function getParticipationRate()
+    {
+        $totalParticipants = $this->program->participants()->where('status', 'active')->count();
+        $totalResponses = $this->responses()->count();
+
+        return $totalParticipants > 0 
+            ? round(($totalResponses / $totalParticipants) * 100, 2) 
+            : 0;
+    }
+
+    public function getCompletionRate()
+    {
+        $totalResponses = $this->responses()->count();
+        $submittedResponses = $this->responses()->submitted()->count();
+
+        return $totalResponses > 0 
+            ? round(($submittedResponses / $totalResponses) * 100, 2) 
+            : 0;
+    }
+
+    public function getAverageResponseTime()
+    {
+        return $this->responses()
+            ->whereNotNull('submitted_at')
+            ->selectRaw('AVG(EXTRACT(EPOCH FROM (submitted_at - created_at))) as avg_time')
+            ->value('avg_time');
+    }
+
+    public function getResponseStats()
+    {
+        return [
+            'total' => $this->responses()->count(),
+            'submitted' => $this->responses()->submitted()->count(),
+            'in_progress' => $this->responses()->inProgress()->count(),
+            'guests' => $this->responses()->whereNotNull('guest_identifier')->count(),
+        ];
+    }
+
+    /**
+     * Scopes for date-based status filtering
+     */
+    public function scopeUpcoming($query)
+    {
+        $now = Carbon::now();
+        return $query->where('status', '!=', 'draft')
+            ->where(function($q) use ($now) {
+                $q->where('start_date', '>', $now)
+                  ->orWhere('status', 'upcoming');
+            });
+    }
+
+    public function scopeLive($query)
+    {
+        $now = Carbon::now();
+        return $query->where(function($q) use ($now) {
+            $q->where('status', 'live')
+              ->orWhere(function($q2) use ($now) {
+                  $q2->where('start_date', '<=', $now)
+                     ->where(function($q3) use ($now) {
+                         $q3->whereNull('end_date')
+                            ->orWhere('end_date', '>=', $now);
+                     });
+              });
+        });
+    }
+
+    public function scopeExpired($query)
+    {
+        $now = Carbon::now();
+        return $query->where(function($q) use ($now) {
+            $q->where('status', 'expired')
+              ->orWhere(function($q2) use ($now) {
+                  $q2->where('end_date', '<', $now)
+                     ->where(function($q3) use ($now) {
+                         $q3->whereNull('close_date')
+                            ->orWhere('close_date', '>=', $now);
+                     });
+              });
+        });
+    }
+
+    public function scopeClosed($query)
+    {
+        $now = Carbon::now();
+        return $query->where(function($q) use ($now) {
+            $q->where('status', 'closed')
+              ->orWhere(function($q2) use ($now) {
+                  $q2->whereNotNull('close_date')
+                     ->where('close_date', '<', $now);
+              });
+        });
+    }
+
+    public function scopeDraft($query)
+    {
+        return $query->where('status', 'draft');
+    }
+
+    public function scopeArchived($query)
+    {
+        return $query->where('status', 'archived');
+    }
+
+    public function scopeByProgram($query, $programId)
+    {
+        return $query->where('program_id', $programId);
+    }
+
+    public function scopeByType($query, $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    public function scopeWithGuests($query)
+    {
+        return $query->where('allow_guests', true);
+    }
+
+    public function scopeMultilingual($query)
+    {
+        return $query->where('is_multilingual', true);
+    }
+
+    /**
+     * Helper methods
+     */
+    public function getComputedStatus()
+    {
+        $now = Carbon::now();
+        
+        // Manual statuses take precedence
+        if (in_array($this->status, ['draft', 'archived'])) {
+            return $this->status;
+        }
+
+        // Check closed status first
+        if ($this->close_date && $now->greaterThan($this->close_date)) {
+            return 'closed';
+        }
+
+        // Check expired status
+        if ($this->end_date && $now->greaterThan($this->end_date)) {
+            return 'expired';
+        }
+
+        // Check live status
+        if ($this->start_date && $now->greaterThanOrEqualTo($this->start_date)) {
+            if (!$this->end_date || $now->lessThanOrEqualTo($this->end_date)) {
+                return 'live';
+            }
+        }
+
+        // Check upcoming
+        if ($this->start_date && $now->lessThan($this->start_date)) {
+            return 'upcoming';
+        }
+
+        return $this->status;
+    }
+
+    public function isLive()
+    {
+        return $this->getComputedStatus() === 'live';
+    }
+
+    public function isUpcoming()
+    {
+        return $this->getComputedStatus() === 'upcoming';
+    }
+
+    public function isExpired()
+    {
+        return $this->getComputedStatus() === 'expired';
+    }
+
+    public function isClosed()
+    {
+        return $this->getComputedStatus() === 'closed';
+    }
+
+    public function isDraft()
+    {
+        return $this->status === 'draft';
+    }
+
+    public function isArchived()
+    {
+        return $this->status === 'archived';
+    }
+
+    public function canAcceptResponses()
+    {
+        return in_array($this->getComputedStatus(), ['live', 'expired']);
+    }
+}
