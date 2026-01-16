@@ -23,6 +23,9 @@ Route::post('/auth/forgot-password', [App\Http\Controllers\Api\PasswordResetCont
 Route::post('/auth/verify-otp', [App\Http\Controllers\Api\PasswordResetController::class, 'verifyOTP']);
 Route::post('/auth/reset-password', [App\Http\Controllers\Api\PasswordResetController::class, 'resetPassword']);
 
+// Email-Embedded Response Submission (Public - No Auth Required)
+Route::get('/public/email-response', [App\Http\Controllers\Api\Public\EmailResponseController::class, 'submit']);
+
 // Protected Authentication Routes
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -261,6 +264,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/activities', [ActivityController::class, 'store']);
         Route::put('/activities/{id}', [ActivityController::class, 'update']);
         Route::patch('/activities/{id}', [ActivityController::class, 'update']);
+        Route::patch('/activities/{id}/toggle-reminders', [ActivityController::class, 'toggleParticipantReminders']);
         
         // Activity participant management
         Route::get('/activities/{id}/participants/available', [ActivityController::class, 'getAvailableParticipants']);
@@ -296,6 +300,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Super Admin only
     Route::middleware(['role:super-admin'])->group(function () {
         Route::delete('/activities/{id}/force', [ActivityController::class, 'forceDestroy']);
+        
+        // System Settings - Email Configuration
+        Route::get('/system-settings', [App\Http\Controllers\Api\SystemSettingsController::class, 'index']);
+        Route::post('/system-settings', [App\Http\Controllers\Api\SystemSettingsController::class, 'store']);
+        Route::post('/system-settings/test-email', [App\Http\Controllers\Api\SystemSettingsController::class, 'testEmail']);
+        
+        // System Settings - AWS S3 Configuration
+        Route::get('/system-settings/s3', [App\Http\Controllers\Api\SystemSettingsController::class, 'getS3Config']);
+        Route::post('/system-settings/s3', [App\Http\Controllers\Api\SystemSettingsController::class, 'storeS3']);
+        Route::post('/system-settings/s3/test', [App\Http\Controllers\Api\SystemSettingsController::class, 'testS3']);
     });
 });
 
@@ -361,6 +375,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications/reports', [App\Http\Controllers\Api\NotificationController::class, 'getAllReports']);
     Route::get('/notifications/reports/{activityId}', [App\Http\Controllers\Api\NotificationController::class, 'getReports']);
     Route::get('/notifications/test', [App\Http\Controllers\Api\NotificationController::class, 'testEndpoint']);
+    
+    // Email-Embedded Survey routes
+    Route::post('/email-embedded-survey/send', [App\Http\Controllers\Api\EmailEmbeddedSurveyController::class, 'send']);
+    Route::get('/email-embedded-survey/questions/{activityId}', [App\Http\Controllers\Api\EmailEmbeddedSurveyController::class, 'getEmbeddableQuestions']);
 });
 
 // User Notifications (In-App) Routes
@@ -369,6 +387,7 @@ Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
     Route::get('/unread-count', [App\Http\Controllers\Api\UserNotificationController::class, 'unreadCount']);
     Route::post('/{id}/read', [App\Http\Controllers\Api\UserNotificationController::class, 'markAsRead']);
     Route::post('/mark-all-read', [App\Http\Controllers\Api\UserNotificationController::class, 'markAllAsRead']);
+    Route::post('/clear-all', [App\Http\Controllers\Api\UserNotificationController::class, 'clearAll']);
     Route::delete('/{id}', [App\Http\Controllers\Api\UserNotificationController::class, 'destroy']);
     
     // Internal/System routes for creating notifications
@@ -585,5 +604,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('my-evaluations')->group(function () {
         Route::get('/pending', [App\Http\Controllers\Api\EvaluationTakeController::class, 'getMyPendingEvaluations']);
         Route::get('/completed', [App\Http\Controllers\Api\EvaluationTakeController::class, 'getMyCompletedEvaluations']);
+    });
+    
+    // System Settings (Super Admin only)
+    Route::middleware(['role:super-admin'])->prefix('system-settings')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\SystemSettingsController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\Api\SystemSettingsController::class, 'store']);
+        Route::post('/test-email', [App\Http\Controllers\Api\SystemSettingsController::class, 'testEmail']);
     });
 });
