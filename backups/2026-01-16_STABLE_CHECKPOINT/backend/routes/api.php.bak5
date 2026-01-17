@@ -1,0 +1,234 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\GroupHeadController;
+use App\Http\Controllers\Api\ParticipantController;
+use App\Http\Controllers\Api\QuestionnaireController;
+use App\Http\Controllers\Api\ActivityController;
+use App\Http\Controllers\Api\ProgramController;
+
+// Public Authentication Routes
+Route::post('/auth/validate-email', [AuthController::class, 'validateEmail']);
+Route::post('/auth/login', [AuthController::class, 'login']);
+
+// Protected Authentication Routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::post('/auth/refresh', [AuthController::class, 'refresh']);
+    Route::get('/auth/me', [AuthController::class, 'me']);
+});
+
+Route::get('/user', function (Request $request) {
+    return $request->user();
+})->middleware('auth:sanctum');
+
+// Organization Routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    // Public read operations (all authenticated users)
+    Route::get('/organizations', [OrganizationController::class, 'index']);
+    Route::get('/organizations/{id}', [OrganizationController::class, 'show']);
+    
+    // Admin-only operations
+    Route::middleware(['role:super-admin,admin'])->group(function () {
+        Route::post('/organizations', [OrganizationController::class, 'store']);
+        Route::put('/organizations/{id}', [OrganizationController::class, 'update']);
+        Route::patch('/organizations/{id}', [OrganizationController::class, 'update']);
+        Route::delete('/organizations/{id}', [OrganizationController::class, 'destroy']);
+        Route::post('/organizations/{id}/deactivate', [OrganizationController::class, 'deactivate']);
+        Route::post('/organizations/{id}/activate', [OrganizationController::class, 'activate']);
+        Route::post('/organizations/{id}/restore', [OrganizationController::class, 'restore']);
+    });
+    
+    // Super Admin only
+    Route::middleware(['role:super-admin'])->group(function () {
+        Route::delete('/organizations/{id}/force', [OrganizationController::class, 'forceDestroy']);
+    });
+});
+
+// Group Head Routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    // Public read operations (all authenticated users)
+    Route::get('/group-heads', [GroupHeadController::class, 'index']);
+    Route::get('/group-heads/{id}', [GroupHeadController::class, 'show']);
+    
+    // Admin-only operations (super-admin and admin can manage group heads)
+    Route::middleware(['role:super-admin,admin'])->group(function () {
+        Route::post('/group-heads', [GroupHeadController::class, 'store']);
+        Route::put('/group-heads/{id}', [GroupHeadController::class, 'update']);
+        Route::patch('/group-heads/{id}', [GroupHeadController::class, 'update']);
+        Route::delete('/group-heads/{id}', [GroupHeadController::class, 'destroy']);
+        Route::post('/group-heads/{id}/deactivate', [GroupHeadController::class, 'deactivate']);
+        Route::post('/group-heads/{id}/activate', [GroupHeadController::class, 'activate']);
+        Route::post('/group-heads/{id}/reset-password', [GroupHeadController::class, 'resetPassword']);
+        Route::post('/group-heads/{id}/restore', [GroupHeadController::class, 'restore']);
+    });
+    
+    // Super Admin only
+    Route::middleware(['role:super-admin'])->group(function () {
+        Route::delete('/group-heads/{id}/force', [GroupHeadController::class, 'forceDestroy']);
+    });
+});
+
+// Program Routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    // Public read operations (all authenticated users)
+    Route::get('/programs', [ProgramController::class, 'index']);
+    Route::get('/programs/{id}', [ProgramController::class, 'show']);
+    Route::get('/programs/{id}/statistics', [ProgramController::class, 'statistics']);
+    Route::get('/programs/{id}/users', [ProgramController::class, 'getProgramUsers']);
+    Route::post('/programs/{id}/users/{userId}/reset-password', [ProgramController::class, 'resetProgramUserPassword']);
+    
+    // Admin and Group Head can manage programs
+    Route::middleware(['role:super-admin,admin'])->group(function () {
+        Route::post('/programs', [ProgramController::class, 'store']);
+        Route::put('/programs/{id}', [ProgramController::class, 'update']);
+        Route::patch('/programs/{id}', [ProgramController::class, 'update']);
+        Route::delete('/programs/{id}', [ProgramController::class, 'destroy']);
+        Route::post('/programs/{id}/deactivate', [ProgramController::class, 'deactivate']);
+        Route::post('/programs/{id}/activate', [ProgramController::class, 'activate']);
+        Route::post('/programs/{id}/restore', [ProgramController::class, 'restore']);
+    });
+    
+    // Super Admin only
+    Route::middleware(['role:super-admin'])->group(function () {
+        Route::delete('/programs/{id}/force', [ProgramController::class, 'forceDestroy']);
+    });
+});
+
+// Participant Routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    
+    // Public read operations
+    Route::get('/participants', [ParticipantController::class, 'index']);
+    Route::get('/participants/{id}', [ParticipantController::class, 'show']);
+    Route::get('/participants/template/download', [ParticipantController::class, 'downloadTemplate']);
+    
+    // Admin and Program roles can manage participants
+    Route::middleware(['role:super-admin,admin,program-admin,program-manager'])->group(function () {
+        Route::post('/participants', [ParticipantController::class, 'store']);
+        Route::post('/participants/bulk-import', [ParticipantController::class, 'bulkImport']);
+        Route::put('/participants/{id}', [ParticipantController::class, 'update']);
+        Route::patch('/participants/{id}', [ParticipantController::class, 'update']);
+        Route::delete('/participants/{id}', [ParticipantController::class, 'destroy']);
+        Route::post('/participants/{id}/activate', [ParticipantController::class, 'activate']);
+        Route::post('/participants/{id}/deactivate', [ParticipantController::class, 'deactivate']);
+        Route::post('/participants/{id}/assign-programs', [ParticipantController::class, 'assignPrograms']);
+        Route::post('/participants/{id}/unassign-programs', [ParticipantController::class, 'unassignPrograms']);
+        Route::post('/participants/{id}/restore', [ParticipantController::class, 'restore']);
+    });
+    
+    // Super Admin only
+    Route::middleware(['role:super-admin'])->group(function () {
+        Route::delete('/participants/{id}/force', [ParticipantController::class, 'forceDestroy']);
+    });
+});
+
+// Questionnaire Routes
+Route::middleware(['auth:sanctum'])->group(function () {
+
+    
+    // Public read operations
+    Route::get('/questionnaires', [QuestionnaireController::class, 'index']);
+    Route::get('/questionnaires/{id}', [QuestionnaireController::class, 'show']);
+    
+    // Admin and Program roles can manage questionnaires
+    Route::middleware(['role:super-admin,admin,program-admin,program-manager'])->group(function () {
+        Route::post('/questionnaires', [QuestionnaireController::class, 'store']);
+        Route::put('/questionnaires/{id}', [QuestionnaireController::class, 'update']);
+        Route::patch('/questionnaires/{id}', [QuestionnaireController::class, 'update']);
+        Route::delete('/questionnaires/{id}', [QuestionnaireController::class, 'destroy']);
+        Route::post('/questionnaires/{id}/publish', [QuestionnaireController::class, 'publish']);
+        Route::post('/questionnaires/{id}/archive', [QuestionnaireController::class, 'archive']);
+        Route::post('/questionnaires/{id}/duplicate', [QuestionnaireController::class, 'duplicate']);
+        Route::post('/questionnaires/{id}/restore', [QuestionnaireController::class, 'restore']);
+        
+        // Section management
+        Route::post('/questionnaires/{id}/sections', [QuestionnaireController::class, 'addSection']);
+        Route::put('/questionnaires/{questionnaire}/sections/{section}', [QuestionnaireController::class, 'updateSection']);
+        Route::delete('/questionnaires/{questionnaire}/sections/{section}', [QuestionnaireController::class, 'deleteSection']);
+        
+        // Question management
+        Route::post('/questionnaires/{questionnaire}/sections/{section}/questions', [QuestionnaireController::class, 'addQuestion']);
+        Route::put('/questionnaires/{questionnaire}/sections/{section}/questions/{question}', [QuestionnaireController::class, 'updateQuestion']);
+        Route::delete('/questionnaires/{questionnaire}/sections/{section}/questions/{question}', [QuestionnaireController::class, 'deleteQuestion']);
+    });
+    
+    // Super Admin only
+    Route::middleware(['role:super-admin'])->group(function () {
+        Route::delete('/questionnaires/{id}/force', [QuestionnaireController::class, 'forceDestroy']);
+    });
+});
+
+// Activity Routes
+Route::middleware(['auth:sanctum'])->group(function () {
+    
+    // Public read operations
+    Route::get('/activities', [ActivityController::class, 'index']);
+    Route::get('/activities/statistics', [ActivityController::class, 'statistics']);
+    Route::get('/activities/{id}', [ActivityController::class, 'show']);
+    
+    // Admin and Program roles can manage activities
+    Route::middleware(['role:super-admin,admin,program-admin,program-manager'])->group(function () {
+        Route::post('/activities', [ActivityController::class, 'store']);
+        Route::put('/activities/{id}', [ActivityController::class, 'update']);
+        Route::patch('/activities/{id}', [ActivityController::class, 'update']);
+        Route::delete('/activities/{id}', [ActivityController::class, 'destroy']);
+        
+        // Questionnaire assignment
+        Route::post('/activities/{id}/assign-questionnaire', [ActivityController::class, 'assignQuestionnaire']);
+        Route::delete('/activities/{id}/unassign-questionnaire', [ActivityController::class, 'unassignQuestionnaire']);
+        
+        // Status management
+        Route::post('/activities/{id}/archive', [ActivityController::class, 'archive']);
+        Route::post('/activities/{id}/activate', [ActivityController::class, 'activate']);
+        Route::post('/activities/{id}/restore', [ActivityController::class, 'restore']);
+    });
+    
+    // Super Admin only
+    Route::middleware(['role:super-admin'])->group(function () {
+        Route::delete('/activities/{id}/force', [ActivityController::class, 'forceDestroy']);
+    });
+});
+
+// Response Submission Routes
+Route::middleware('auth:sanctum')->group(function () {
+    // Start/resume responses
+    Route::post('/activities/{activity}/responses/start', [App\Http\Controllers\Api\ResponseController::class, 'start']);
+    Route::post('/activities/{activity}/responses/resume', [App\Http\Controllers\Api\ResponseController::class, 'resume']);
+    
+    // Save and submit responses
+    Route::post('/responses/{response}/save', [App\Http\Controllers\Api\ResponseController::class, 'saveProgress']);
+    Route::post('/responses/{response}/submit', [App\Http\Controllers\Api\ResponseController::class, 'submit']);
+    
+    // Get progress
+    Route::get('/responses/{response}/progress', [App\Http\Controllers\Api\ResponseController::class, 'getProgress']);
+    
+    // Admin/Moderator routes
+    Route::middleware('role:super-admin,admin,program-admin,program-manager,program-moderator')->group(function () {
+        Route::get('/activities/{activity}/responses', [App\Http\Controllers\Api\ResponseController::class, 'index']);
+        Route::get('/activities/{activity}/responses/statistics', [App\Http\Controllers\Api\ResponseController::class, 'statistics']);
+    });
+});
+
+// Report Routes
+Route::middleware(['auth:sanctum'])->prefix('reports')->group(function () {
+    // Activity-level reports
+    Route::get('/participation/{activityId}', [App\Http\Controllers\Api\ReportController::class, 'participationMetrics']);
+    Route::get('/completion/{activityId}', [App\Http\Controllers\Api\ReportController::class, 'completionMetrics']);
+    Route::get('/responses/{activityId}', [App\Http\Controllers\Api\ReportController::class, 'drillDownResponses']);
+    Route::get('/question/{activityId}/{questionId}', [App\Http\Controllers\Api\ReportController::class, 'questionAnalytics']);
+    
+    // Program-level reports
+    Route::get('/program/{programId}', [App\Http\Controllers\Api\ReportController::class, 'programOverview']);
+    
+    // Export endpoints
+    Route::get('/export/{activityId}/{format}', [App\Http\Controllers\Api\ReportController::class, 'exportReport'])->where('format', 'csv|excel|pdf');
+    Route::get('/export/program/{programId}', [App\Http\Controllers\Api\ReportController::class, 'exportProgramReport']);
+});
+Route::prefix('public')->group(function () {
+    Route::get('activities/{id}', [App\Http\Controllers\Api\PublicActivityController::class, 'show']);
+    Route::post('activities/{id}/register', [App\Http\Controllers\Api\PublicActivityController::class, 'registerParticipant']);
+    Route::post('activities/{id}/submit', [App\Http\Controllers\Api\PublicActivityController::class, 'submitResponse']);
+});

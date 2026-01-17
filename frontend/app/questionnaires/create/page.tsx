@@ -10,6 +10,7 @@ import RichTextEditor from "@/components/RichTextEditor";
 import IsolatedTextInput from "@/components/IsolatedTextInput";
 import EnhancedConditionalLogicEditor from "@/components/EnhancedConditionalLogicEditor";
 import ImportPreviewModal from "@/components/ImportPreviewModal";
+import S3ImageUpload from "@/components/S3ImageUpload";
 import {
   ArrowLeft,
   Plus,
@@ -35,7 +36,20 @@ import {
   FileSpreadsheet,
   Download,
   Upload,
+  Gauge,
+  ThumbsUp,
+  TrendingUp,
+  Smile,
+  Heart,
 } from "lucide-react";
+import {
+  SliderScale,
+  DialGauge,
+  LikertVisual,
+  NPSScale,
+  StarRating,
+  DEFAULT_SETTINGS,
+} from "@/components/questions";
 import { questionnairesApi, programsApi, type Program } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 import { ConditionalLogic, QuestionWithLogic } from "@/types/conditionalLogic";
@@ -189,6 +203,11 @@ export default function QuestionnaireBuilderPage() {
     { id: "rating", label: "Rating", icon: Star, color: "text-yellow-600" },
     { id: "matrix", label: "Matrix", icon: LayoutGrid, color: "text-pink-600" },
     { id: "information", label: "Information Block", icon: FileText, color: "text-teal-600" },
+    { id: "slider_scale", label: "Slider Scale", icon: TrendingUp, color: "text-indigo-600" },
+    { id: "dial_gauge", label: "Dial Gauge", icon: Gauge, color: "text-red-600" },
+    { id: "likert_visual", label: "Likert Visual", icon: Smile, color: "text-amber-600" },
+    { id: "nps", label: "NPS Scale", icon: ThumbsUp, color: "text-cyan-600" },
+    { id: "star_rating", label: "Star Rating", icon: Heart, color: "text-rose-600" },
   ];
 
   const toggleSection = (sectionId: number) => {
@@ -237,6 +256,12 @@ export default function QuestionnaireBuilderPage() {
         ...(type === "rating" ? { scale: 5 } : {}),
         ...(type === "slider" ? { min: 0, max: 100 } : {}),
         ...(type === "matrix" ? { rows: ["Row 1", "Row 2"], columns: ["Column 1", "Column 2"] } : {}),
+        // Advanced interactive question types
+        ...(type === "slider_scale" ? { settings: { ...DEFAULT_SETTINGS.slider_scale } } : {}),
+        ...(type === "dial_gauge" ? { settings: { ...DEFAULT_SETTINGS.dial_gauge } } : {}),
+        ...(type === "likert_visual" ? { settings: { ...DEFAULT_SETTINGS.likert_visual } } : {}),
+        ...(type === "nps" ? { settings: { ...DEFAULT_SETTINGS.nps } } : {}),
+        ...(type === "star_rating" ? { settings: { ...DEFAULT_SETTINGS.star_rating } } : {}),
       };
 
       setSections(prevSections =>
@@ -1416,6 +1441,1223 @@ export default function QuestionnaireBuilderPage() {
             </div>
           </div>
         );
+      case "slider_scale":
+        const sliderSettings = question.settings || DEFAULT_SETTINGS.slider_scale;
+        return (
+          <div className="py-4 space-y-4">
+            <SliderScale
+              value={null}
+              onChange={() => {}}
+              settings={sliderSettings}
+              disabled={true}
+            />
+            {/* Settings Panel */}
+            {!showPreview && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <Settings className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">Slider Settings</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Min Value */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Min Value</Label>
+                    <Input
+                      type="number"
+                      value={sliderSettings.min ?? 0}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, min: parseInt(e.target.value) || 0 } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  {/* Max Value */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Max Value</Label>
+                    <Input
+                      type="number"
+                      value={sliderSettings.max ?? 100}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, max: parseInt(e.target.value) || 100 } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  {/* Step */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Step</Label>
+                    <Input
+                      type="number"
+                      value={sliderSettings.step ?? 1}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, step: parseInt(e.target.value) || 1 } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4 mt-4">
+                  {/* Start Label */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Start Label</Label>
+                    <Input
+                      type="text"
+                      value={sliderSettings.labels?.start || ''}
+                      placeholder="e.g., Low"
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, labels: { ...sliderSettings.labels, start: e.target.value } } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  {/* Middle Label */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Middle Label</Label>
+                    <Input
+                      type="text"
+                      value={sliderSettings.labels?.middle || ''}
+                      placeholder="e.g., Medium"
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, labels: { ...sliderSettings.labels, middle: e.target.value } } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  {/* End Label */}
+                  <div>
+                    <Label className="text-xs text-gray-600">End Label</Label>
+                    <Input
+                      type="text"
+                      value={sliderSettings.labels?.end || ''}
+                      placeholder="e.g., High"
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, labels: { ...sliderSettings.labels, end: e.target.value } } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-6 mt-4">
+                  {/* Show Value Toggle */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`slider-value-${question.id}`}
+                      checked={sliderSettings.showValue !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, showValue: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`slider-value-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      Show Value
+                    </Label>
+                  </div>
+                  {/* Show Ticks Toggle */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`slider-ticks-${question.id}`}
+                      checked={sliderSettings.showTicks !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, showTicks: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`slider-ticks-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      Show Ticks
+                    </Label>
+                  </div>
+                  {/* Use Custom Images Toggle */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`slider-custom-${question.id}`}
+                      checked={sliderSettings.useCustomImages === true}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, useCustomImages: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`slider-custom-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      🖼️ Use Custom Images
+                    </Label>
+                  </div>
+                </div>
+                {/* Custom Images Section for Slider */}
+                {sliderSettings.useCustomImages && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-3">Custom Slider Images</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Thumb/Handle Image */}
+                      <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium text-blue-700">Slider Thumb (Handle)</span>
+                          {sliderSettings.customImages?.thumbUrl && (
+                            <span className="text-xs text-green-600">✓</span>
+                          )}
+                        </div>
+                        <S3ImageUpload
+                          value={sliderSettings.customImages?.thumbUrl || ''}
+                          onChange={(url) => {
+                            const newCustomImages = { ...(sliderSettings.customImages || {}), thumbUrl: url };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...sliderSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          folder="questionnaire-images/slider"
+                          placeholder="Upload thumb image"
+                          showPreview={true}
+                          maxSize={5}
+                        />
+                        <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/thumb.png"
+                          value={sliderSettings.customImages?.thumbUrl || ''}
+                          onChange={(e) => {
+                            const newCustomImages = { ...(sliderSettings.customImages || {}), thumbUrl: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...sliderSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="text-xs h-7"
+                        />
+                      </div>
+                      {/* Track Image */}
+                      <div className="p-3 bg-gray-100 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium text-gray-700">Track Background</span>
+                          {sliderSettings.customImages?.trackUrl && (
+                            <span className="text-xs text-green-600">✓</span>
+                          )}
+                        </div>
+                        <S3ImageUpload
+                          value={sliderSettings.customImages?.trackUrl || ''}
+                          onChange={(url) => {
+                            const newCustomImages = { ...(sliderSettings.customImages || {}), trackUrl: url };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...sliderSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          folder="questionnaire-images/slider"
+                          placeholder="Upload track image"
+                          showPreview={true}
+                          maxSize={5}
+                        />
+                        <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/track.png"
+                          value={sliderSettings.customImages?.trackUrl || ''}
+                          onChange={(e) => {
+                            const newCustomImages = { ...(sliderSettings.customImages || {}), trackUrl: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...sliderSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="text-xs h-7"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">💡 Custom thumb replaces the slider handle. Track background appears behind the slider.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      case "dial_gauge":
+        const dialSettings = question.settings || DEFAULT_SETTINGS.dial_gauge;
+        return (
+          <div className="py-4 space-y-4">
+            <div className="flex justify-center">
+              <DialGauge
+                value={null}
+                onChange={() => {}}
+                settings={dialSettings}
+                disabled={true}
+              />
+            </div>
+            {/* Settings Panel */}
+            {!showPreview && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <Settings className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">Gauge Settings</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Min Value */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Min Value</Label>
+                    <Input
+                      type="number"
+                      value={dialSettings.min ?? 0}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, min: parseInt(e.target.value) || 0 } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  {/* Max Value */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Max Value</Label>
+                    <Input
+                      type="number"
+                      value={dialSettings.max ?? 10}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, max: parseInt(e.target.value) || 10 } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  {/* Size */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Size</Label>
+                    <select
+                      value={dialSettings.size || 'md'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, size: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="sm">Small</option>
+                      <option value="md">Medium</option>
+                      <option value="lg">Large</option>
+                      <option value="xl">Extra Large</option>
+                    </select>
+                  </div>
+                </div>
+                {/* Show Value Toggle */}
+                <div className="flex items-center gap-6 mt-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`dial-value-${question.id}`}
+                      checked={dialSettings.showValue !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, showValue: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`dial-value-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      Show Value
+                    </Label>
+                  </div>
+                  {/* Use Custom Images Toggle */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`dial-custom-${question.id}`}
+                      checked={dialSettings.useCustomImages === true}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, useCustomImages: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`dial-custom-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      🖼️ Use Custom Images
+                    </Label>
+                  </div>
+                </div>
+                {/* Custom Images Section for Dial Gauge */}
+                {dialSettings.useCustomImages && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-3">Custom Gauge Images</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Gauge Background Image */}
+                      <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium text-purple-700">Gauge Background</span>
+                          {dialSettings.customImages?.backgroundUrl && (
+                            <span className="text-xs text-green-600">✓</span>
+                          )}
+                        </div>
+                        <S3ImageUpload
+                          value={dialSettings.customImages?.backgroundUrl || ''}
+                          onChange={(url) => {
+                            const newCustomImages = { ...(dialSettings.customImages || {}), backgroundUrl: url };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dialSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          folder="questionnaire-images/dial-gauge"
+                          placeholder="Upload gauge background"
+                          showPreview={true}
+                          maxSize={5}
+                        />
+                        <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/gauge-bg.png"
+                          value={dialSettings.customImages?.backgroundUrl || ''}
+                          onChange={(e) => {
+                            const newCustomImages = { ...(dialSettings.customImages || {}), backgroundUrl: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dialSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="text-xs h-7"
+                        />
+                      </div>
+                      {/* Needle/Pointer Image */}
+                      <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium text-orange-700">Needle/Pointer</span>
+                          {dialSettings.customImages?.needleUrl && (
+                            <span className="text-xs text-green-600">✓</span>
+                          )}
+                        </div>
+                        <S3ImageUpload
+                          value={dialSettings.customImages?.needleUrl || ''}
+                          onChange={(url) => {
+                            const newCustomImages = { ...(dialSettings.customImages || {}), needleUrl: url };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dialSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          folder="questionnaire-images/dial-gauge"
+                          placeholder="Upload needle image"
+                          showPreview={true}
+                          maxSize={5}
+                        />
+                        <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/needle.png"
+                          value={dialSettings.customImages?.needleUrl || ''}
+                          onChange={(e) => {
+                            const newCustomImages = { ...(dialSettings.customImages || {}), needleUrl: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dialSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="text-xs h-7"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">💡 Custom background replaces the gauge dial. Needle image replaces the pointer.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      case "likert_visual":
+        const likertSettings = question.settings || DEFAULT_SETTINGS.likert_visual;
+        return (
+          <div className="py-4 space-y-4">
+            <LikertVisual
+              value={null}
+              onChange={() => {}}
+              settings={likertSettings}
+              disabled={true}
+            />
+            {/* Settings Panel */}
+            {!showPreview && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <Settings className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">Display Settings</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Scale Selection */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Scale</Label>
+                    <select
+                      value={likertSettings.scale || 5}
+                      onChange={(e) => {
+                        const newScale = parseInt(e.target.value) as 5 | 7;
+                        const defaultLabels = newScale === 5 
+                          ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
+                          : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...likertSettings, scale: newScale, labels: defaultLabels } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value={5}>5 Point Scale</option>
+                      <option value={7}>7 Point Scale</option>
+                    </select>
+                  </div>
+                  {/* Icon Style Selection */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Icon Style</Label>
+                    <select
+                      value={likertSettings.iconStyle || 'emoji'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...likertSettings, iconStyle: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="emoji">Emoji 😀</option>
+                      <option value="face">Face Icons</option>
+                      <option value="simple">Simple Circles</option>
+                      <option value="custom">Custom Images</option>
+                    </select>
+                  </div>
+                  {/* Size Selection */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Size</Label>
+                    <select
+                      value={likertSettings.size || 'md'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...likertSettings, size: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="sm">Small</option>
+                      <option value="md">Medium</option>
+                      <option value="lg">Large</option>
+                    </select>
+                  </div>
+                  {/* Show Labels Toggle */}
+                  <div className="flex items-center gap-2 pt-5">
+                    <input
+                      type="checkbox"
+                      id={`likert-labels-${question.id}`}
+                      checked={likertSettings.showLabels !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...likertSettings, showLabels: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`likert-labels-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      Show Labels
+                    </Label>
+                  </div>
+                </div>
+                {/* Custom Images Section */}
+                {likertSettings.iconStyle === 'custom' && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-2">Custom Images for Each Scale Point</Label>
+                    <div className="space-y-3">
+                      {Array.from({ length: likertSettings.scale || 5 }).map((_, idx) => (
+                        <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-sm font-medium text-gray-700">Point {idx + 1}</span>
+                            {likertSettings.customImages?.[idx]?.imageUrl && (
+                              <span className="text-xs text-green-600">✓ Image set</span>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <S3ImageUpload
+                              value={likertSettings.customImages?.[idx]?.imageUrl || ''}
+                              onChange={(url) => {
+                                const newCustomImages = [...(likertSettings.customImages || [])];
+                                newCustomImages[idx] = { value: idx + 1, imageUrl: url };
+                                setSections(prevSections =>
+                                  prevSections.map(section =>
+                                    section.id === sectionId
+                                      ? {
+                                          ...section,
+                                          questions: section.questions.map((q: any) =>
+                                            q.id === question.id
+                                              ? { ...q, settings: { ...likertSettings, customImages: newCustomImages } }
+                                              : q
+                                          )
+                                        }
+                                      : section
+                                  )
+                                );
+                              }}
+                              folder="questionnaire-images/likert"
+                              placeholder={`Upload image for point ${idx + 1}`}
+                              showPreview={true}
+                              maxSize={10}
+                            />
+                            <div className="text-xs text-gray-400 text-center">— or enter URL manually —</div>
+                            <Input
+                              type="url"
+                              placeholder={`https://example.com/image-${idx + 1}.png`}
+                              value={likertSettings.customImages?.[idx]?.imageUrl || ''}
+                              onChange={(e) => {
+                                const newCustomImages = [...(likertSettings.customImages || [])];
+                                newCustomImages[idx] = { value: idx + 1, imageUrl: e.target.value };
+                                setSections(prevSections =>
+                                  prevSections.map(section =>
+                                    section.id === sectionId
+                                      ? {
+                                          ...section,
+                                          questions: section.questions.map((q: any) =>
+                                            q.id === question.id
+                                              ? { ...q, settings: { ...likertSettings, customImages: newCustomImages } }
+                                              : q
+                                          )
+                                        }
+                                      : section
+                                  )
+                                );
+                              }}
+                              className="text-xs h-8"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">💡 Upload images or enter URLs for each scale point. Images will be displayed instead of icons.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      case "nps":
+        return (
+          <div className="py-4">
+            <NPSScale
+              value={null}
+              onChange={() => {}}
+              settings={question.settings || DEFAULT_SETTINGS.nps}
+              disabled={true}
+            />
+          </div>
+        );
+      case "star_rating":
+        const starSettings = question.settings || DEFAULT_SETTINGS.star_rating;
+        return (
+          <div className="py-4 space-y-4">
+            <StarRating
+              value={null}
+              onChange={() => {}}
+              settings={starSettings}
+              disabled={true}
+            />
+            {/* Settings Panel */}
+            {!showPreview && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <Settings className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">Display Settings</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Max Stars */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Number of Stars</Label>
+                    <select
+                      value={starSettings.maxStars || 5}
+                      onChange={(e) => {
+                        const newMaxStars = parseInt(e.target.value);
+                        const defaultLabels = Array.from({ length: newMaxStars }, (_, i) => ({
+                          value: i + 1,
+                          label: i === 0 ? 'Poor' : i === newMaxStars - 1 ? 'Excellent' : `${i + 1} Stars`
+                        }));
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...starSettings, maxStars: newMaxStars, labels: defaultLabels } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value={3}>3 Stars</option>
+                      <option value={5}>5 Stars</option>
+                      <option value={7}>7 Stars</option>
+                      <option value={10}>10 Stars</option>
+                    </select>
+                  </div>
+                  {/* Icon Type */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Icon Type</Label>
+                    <select
+                      value={starSettings.icon || 'star'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...starSettings, icon: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="star">⭐ Star</option>
+                      <option value="heart">❤️ Heart</option>
+                      <option value="thumbsup">👍 Thumbs Up</option>
+                      <option value="custom">🖼️ Custom Images</option>
+                    </select>
+                  </div>
+                  {/* Size */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Size</Label>
+                    <select
+                      value={starSettings.size || 'lg'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...starSettings, size: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="sm">Small</option>
+                      <option value="md">Medium</option>
+                      <option value="lg">Large</option>
+                      <option value="xl">Extra Large</option>
+                    </select>
+                  </div>
+                  {/* Active Color - only for non-custom icons */}
+                  {starSettings.icon !== 'custom' && (
+                    <div>
+                      <Label className="text-xs text-gray-600">Active Color</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="color"
+                          value={starSettings.activeColor || '#fbbf24'}
+                          onChange={(e) => {
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...starSettings, activeColor: e.target.value } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="w-8 h-8 rounded border cursor-pointer"
+                        />
+                        <span className="text-xs text-gray-500">{starSettings.activeColor || '#fbbf24'}</span>
+                      </div>
+                    </div>
+                  )}
+                  {/* Show Labels Toggle */}
+                  <div className="flex items-center gap-2 pt-5">
+                    <input
+                      type="checkbox"
+                      id={`star-labels-${question.id}`}
+                      checked={starSettings.showLabel !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...starSettings, showLabel: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`star-labels-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      Show Labels
+                    </Label>
+                  </div>
+                  {/* Allow Half Stars */}
+                  <div className="flex items-center gap-2 pt-5">
+                    <input
+                      type="checkbox"
+                      id={`star-half-${question.id}`}
+                      checked={starSettings.allowHalf === true}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...starSettings, allowHalf: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`star-half-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      Allow Half Stars
+                    </Label>
+                  </div>
+                </div>
+                {/* Custom Images Section */}
+                {starSettings.icon === 'custom' && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-2">Custom Images</Label>
+                    <div className="space-y-4">
+                      {/* Active/Selected Image */}
+                      <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium text-green-700">Active State (Selected)</span>
+                          {starSettings.customImages?.activeImageUrl && (
+                            <span className="text-xs text-green-600">✓ Image set</span>
+                          )}
+                        </div>
+                        <S3ImageUpload
+                          value={starSettings.customImages?.activeImageUrl || ''}
+                          onChange={(url) => {
+                            const newCustomImages = { ...(starSettings.customImages || {}), activeImageUrl: url };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          folder="questionnaire-images/star-rating"
+                          placeholder="Upload image for selected state"
+                          showPreview={true}
+                          maxSize={10}
+                        />
+                        <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/active-star.png"
+                          value={starSettings.customImages?.activeImageUrl || ''}
+                          onChange={(e) => {
+                            const newCustomImages = { ...(starSettings.customImages || {}), activeImageUrl: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="text-xs h-8"
+                        />
+                      </div>
+                      {/* Inactive/Unselected Image */}
+                      <div className="p-3 bg-gray-100 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium text-gray-700">Inactive State (Unselected)</span>
+                          {starSettings.customImages?.inactiveImageUrl && (
+                            <span className="text-xs text-green-600">✓ Image set</span>
+                          )}
+                        </div>
+                        <S3ImageUpload
+                          value={starSettings.customImages?.inactiveImageUrl || ''}
+                          onChange={(url) => {
+                            const newCustomImages = { ...(starSettings.customImages || {}), inactiveImageUrl: url };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          folder="questionnaire-images/star-rating"
+                          placeholder="Upload image for unselected state"
+                          showPreview={true}
+                          maxSize={10}
+                        />
+                        <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/inactive-star.png"
+                          value={starSettings.customImages?.inactiveImageUrl || ''}
+                          onChange={(e) => {
+                            const newCustomImages = { ...(starSettings.customImages || {}), inactiveImageUrl: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="text-xs h-8"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">💡 Upload or provide URLs for both states: one for selected (filled) and one for unselected (empty).</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
       default:
         return null;
     }
@@ -1429,9 +2671,10 @@ export default function QuestionnaireBuilderPage() {
           <div className="flex items-center gap-4">
             <a
               href="/questionnaires"
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="group flex items-center gap-2 px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
             >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
+              <ArrowLeft className="w-4 h-4 text-gray-600" />
+              <span className="text-sm font-medium text-gray-600">Back</span>
             </a>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Questionnaire Builder</h1>

@@ -1,0 +1,28 @@
+// Replace the index() method's withCount section with:
+
+->withCount([
+    'responses' => function ($query) {
+        $query->whereNotNull('participant_id');
+    },
+    'responses as authenticated_responses_count' => function ($query) {
+        $query->whereHas('participant', function($q) {
+            $q->where('is_guest', false);
+        });
+    },
+    'responses as guest_responses_count' => function ($query) {
+        $query->whereHas('participant', function($q) {
+            $q->where('is_guest', true);
+        });
+    },
+    'participants as participants_count',
+    'participants as authenticated_participants_count' => function ($query) {
+        $query->where('is_guest', false);
+    },
+    'participants as guest_participants_count' => function ($query) {
+        $query->where('is_guest', true);
+    },
+    'responses as participants_responded_count' => function ($query) {
+        $query->selectRaw('COUNT(DISTINCT participant_id)')
+              ->whereNotNull('participant_id');
+    }
+])

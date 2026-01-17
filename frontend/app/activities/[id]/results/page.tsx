@@ -121,15 +121,15 @@ export default function ActivityResultsPage() {
       }
       console.log('==============================');
 
-      // Load notification reports for this activity
+      // Load notification logs for this activity (NEW API with participant details)
       try {
-        console.log('🔍 Loading notification reports for activity:', activityId);
-        const notifData = await notificationsApi.getReportsForActivity(activityId);
-        console.log('✅ Notification reports loaded:', notifData);
-        console.log('Reports count:', notifData.data?.length || 0);
+        console.log('🔍 Loading notification logs for activity:', activityId);
+        const notifData = await notificationsApi.getLogsForActivity(activityId);
+        console.log('✅ Notification logs loaded:', notifData);
+        console.log('Logs count:', notifData.data?.length || 0);
         setNotificationReports(notifData.data || []);
       } catch (err) {
-        console.error('❌ Failed to load notification reports:', err);
+        console.error('❌ Failed to load notification logs:', err);
         setNotificationReports([]);
       }
 
@@ -1393,39 +1393,37 @@ export default function ActivityResultsPage() {
               {/* Notification Statistics Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <GradientStatCard
-                  title="Total Campaigns"
+                  title="Total Notifications"
                   value={notificationReports.length}
-                  subtitle="Email campaigns sent"
+                  subtitle="Email notifications sent"
                   icon={Mail}
                   variant="blue"
                 />
 
                 <GradientStatCard
-                  title="Total Sent"
-                  value={notificationReports.reduce((sum, r) => sum + r.sent_count, 0)}
-                  subtitle="Emails successfully delivered"
+                  title="Delivered"
+                  value={notificationReports.filter((r:any) => ['delivered', 'opened', 'read', 'clicked'].includes(r.status)).length}
+                  subtitle="Successfully delivered"
                   icon={CheckCircle}
                   variant="green"
                 />
 
                 <GradientStatCard
-                  title="Failed"
-                  value={notificationReports.reduce((sum, r) => sum + r.failed_count, 0)}
-                  subtitle={`${notificationReports.reduce((sum, r) => sum + r.total_recipients, 0) > 0
-                    ? ((notificationReports.reduce((sum, r) => sum + r.failed_count, 0) / notificationReports.reduce((sum, r) => sum + r.total_recipients, 0)) * 100).toFixed(1)
-                    : 0}% failure rate`}
-                  icon={X}
-                  variant="red"
+                  title="Opened"
+                  value={notificationReports.filter((r:any) => ['opened', 'read', 'clicked'].includes(r.status)).length}
+                  subtitle="Emails opened by recipients"
+                  icon={Eye}
+                  variant="purple"
                 />
 
                 <GradientStatCard
-                  title="Success Rate"
-                  value={`${notificationReports.reduce((sum, r) => sum + r.total_recipients, 0) > 0
-                    ? ((notificationReports.reduce((sum, r) => sum + r.sent_count, 0) / notificationReports.reduce((sum, r) => sum + r.total_recipients, 0)) * 100).toFixed(1)
-                    : 0}%`}
-                  subtitle="Overall delivery success"
-                  icon={TrendingUp}
-                  variant="purple"
+                  title="Failed"
+                  value={notificationReports.filter((r:any) => r.status === 'failed').length}
+                  subtitle={`${notificationReports.length > 0
+                    ? ((notificationReports.filter((r:any) => r.status === 'failed').length / notificationReports.length) * 100).toFixed(1)
+                    : 0}% failure rate`}
+                  icon={X}
+                  variant="red"
                 />
               </div>
 
@@ -1437,9 +1435,9 @@ export default function ActivityResultsPage() {
                       <div className="p-2 bg-amber-100 rounded-lg">
                         <Mail className="w-5 h-5 text-amber-600" />
                       </div>
-                      <span>Email Campaign Reports</span>
+                      <span>Email Notification Details</span>
                       <span className="ml-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-semibold">
-                        {notificationReports.length} {notificationReports.length === 1 ? 'Campaign' : 'Campaigns'}
+                        {notificationReports.length} {notificationReports.length === 1 ? 'Notification' : 'Notifications'}
                       </span>
                     </CardTitle>
                   </div>
@@ -1450,79 +1448,88 @@ export default function ActivityResultsPage() {
                       <thead className="bg-gradient-to-r from-gray-100 to-gray-50 border-b-2 border-gray-200">
                         <tr>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Template Type
+                            Participant
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Total Recipients
+                            Email
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Sent Successfully
+                            Type
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Failed
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Success Rate
+                            Status
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Sent At
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Delivered At
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Opened At
                           </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {notificationReports.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                            <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                               <div className="flex flex-col items-center gap-3">
                                 <Mail className="w-12 h-12 text-gray-300" />
-                                <p className="text-lg font-medium">No email campaigns sent yet</p>
-                                <p className="text-sm">Send notifications to participants to see reports here</p>
+                                <p className="text-lg font-medium">No email notifications sent yet</p>
+                                <p className="text-sm">Send notifications to participants to see tracking details here</p>
                               </div>
                             </td>
                           </tr>
                         ) : (
-                          notificationReports.map((report) => (
-                            <tr key={report.id} className="hover:bg-gray-50 transition-colors">
+                          notificationReports.map((log: any) => (
+                            <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-6 py-4">
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {log.participant_name || log.user_name || 'Unknown'}
+                                </p>
+                              </td>
+                              <td className="px-6 py-4">
+                                <p className="text-sm text-gray-600">{log.participant_email}</p>
+                              </td>
                               <td className="px-6 py-4">
                                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                                  {report.template_type.replace(/_/g, ' ').toUpperCase()}
+                                  {(log.notification_type || 'email').replace(/_/g, ' ').toUpperCase()}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
-                                <p className="text-sm font-semibold text-gray-900">{report.total_recipients}</p>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-2">
-                                  <CheckCircle className="w-4 h-4 text-green-500" />
-                                  <p className="text-sm font-semibold text-green-600">{report.sent_count}</p>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4">
-                                {report.failed_count > 0 ? (
+                                {log.status === 'sent' || log.status === 'delivered' ? (
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle className="w-4 h-4 text-green-500" />
+                                    <span className="text-sm font-semibold text-green-600 capitalize">{log.status}</span>
+                                  </div>
+                                ) : log.status === 'opened' || log.status === 'read' || log.status === 'clicked' ? (
+                                  <div className="flex items-center gap-2">
+                                    <Eye className="w-4 h-4 text-purple-500" />
+                                    <span className="text-sm font-semibold text-purple-600 capitalize">{log.status}</span>
+                                  </div>
+                                ) : log.status === 'failed' ? (
                                   <div className="flex items-center gap-2">
                                     <X className="w-4 h-4 text-red-500" />
-                                    <p className="text-sm font-semibold text-red-600">{report.failed_count}</p>
+                                    <span className="text-sm font-semibold text-red-600">Failed</span>
                                   </div>
                                 ) : (
-                                  <p className="text-sm text-gray-500">-</p>
+                                  <span className="text-sm text-gray-500 capitalize">{log.status}</span>
                                 )}
                               </td>
                               <td className="px-6 py-4">
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[100px]">
-                                    <div
-                                      className="bg-gradient-to-r from-green-400 to-green-600 h-2 rounded-full"
-                                      style={{ width: `${(report.sent_count / report.total_recipients) * 100}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-sm font-semibold text-gray-700">
-                                    {((report.sent_count / report.total_recipients) * 100).toFixed(1)}%
-                                  </span>
-                                </div>
+                                <p className="text-xs text-gray-900">
+                                  {log.sent_at ? new Date(log.sent_at).toLocaleString() : '-'}
+                                </p>
                               </td>
                               <td className="px-6 py-4">
-                                <p className="text-xs text-gray-900">
-                                  {new Date(report.created_at).toLocaleString()}
+                                <p className="text-xs text-gray-600">
+                                  {log.delivered_at ? new Date(log.delivered_at).toLocaleString() : '-'}
+                                </p>
+                              </td>
+                              <td className="px-6 py-4">
+                                <p className="text-xs text-gray-600">
+                                  {log.opened_at ? new Date(log.opened_at).toLocaleString() : '-'}
                                 </p>
                               </td>
                             </tr>

@@ -23,7 +23,24 @@ class QuestionnaireController extends Controller
                     $q->where('status', 'active')
                       ->whereNull('deleted_at');
                 });
-            }
+            },
+            'responses as authenticated_responses_count' => function ($query) {
+                $query->whereHas('participant', function($q) {
+                    $q->where('is_guest', false)
+                      ->where('status', 'active')
+                      ->whereNull('deleted_at');
+                });
+            },
+            'responses as guest_responses_count' => function ($query) {
+                $query->whereHas('participant', function($q) {
+                    $q->where('status', 'active')
+                      ->whereNull('deleted_at')
+                      ->where(function($guestQ) {
+                          $guestQ->where('is_guest', true)
+                                 ->orWhereRaw("additional_data IS NOT NULL AND additional_data->>'participant_type' = 'anonymous'");
+                      });
+                });
+            },
         ]);
         
         // Only include non-deleted questionnaires by default
@@ -52,6 +69,10 @@ class QuestionnaireController extends Controller
         if ($request->boolean('with_trashed')) {
             $query->withTrashed();
         }
+
+        // Sort by last modified (latest first)
+        $query->orderBy('updated_at', 'desc')
+              ->orderBy('created_at', 'desc');
 
         $questionnaires = $query->paginate($request->input('per_page', 15));
 
@@ -85,7 +106,7 @@ class QuestionnaireController extends Controller
             'sections.*.conditional_logic' => 'nullable|array',
             'sections.*.translations' => 'nullable|array',
             'sections.*.questions' => 'nullable|array',
-            'sections.*.questions.*.type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information',
+            'sections.*.questions.*.type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating',
             'sections.*.questions.*.title' => 'required|string|max:255',
             'sections.*.questions.*.description' => 'nullable|string',
             'sections.*.questions.*.parent_question_id' => 'nullable|uuid',
@@ -225,7 +246,7 @@ class QuestionnaireController extends Controller
             'sections.*.translations' => 'nullable|array',
             'sections.*.questions' => 'nullable|array',
             'sections.*.questions.*.id' => 'nullable',
-            'sections.*.questions.*.type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information',
+            'sections.*.questions.*.type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating',
             'sections.*.questions.*.title' => 'required|string|max:255',
             'sections.*.questions.*.description' => 'nullable|string',
             'sections.*.questions.*.parent_question_id' => 'nullable|uuid',

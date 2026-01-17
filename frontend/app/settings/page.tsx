@@ -21,9 +21,11 @@ import {
   AlertCircle,
   Palette,
   Settings as SettingsIcon,
+  Database,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/toast";
+import DataSafetySettings from "@/components/admin/DataSafetySettings";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -253,15 +255,8 @@ export default function SettingsPage() {
         </div>
 
         {/* Tabs - Modern Dashboard Style */}
-        <Tabs defaultValue="profile" className="space-y-6">
+        <Tabs defaultValue="notifications" className="space-y-6">
           <TabsList className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200 flex-wrap gap-1">
-            <TabsTrigger 
-              value="profile" 
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-100 hover:text-gray-900"
-            >
-              <User className="w-4 h-4 mr-2" />
-              Profile
-            </TabsTrigger>
             <TabsTrigger 
               value="notifications" 
               className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-amber-600 data-[state=active]:shadow-lg data-[state=active]:shadow-amber-100 hover:text-gray-900"
@@ -310,130 +305,25 @@ export default function SettingsPage() {
                 CMS & Content
               </TabsTrigger>
             )}
+            {currentUser?.role === 'super-admin' && (
+              <TabsTrigger 
+                value="system"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-lg data-[state=active]:shadow-orange-100 hover:text-gray-900"
+              >
+                <SettingsIcon className="w-4 h-4 mr-2" />
+                System Config
+              </TabsTrigger>
+            )}
+            {currentUser?.role === 'super-admin' && (
+              <TabsTrigger 
+                value="data-safety"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-emerald-600 data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-100 hover:text-gray-900"
+              >
+                <Database className="w-4 h-4 mr-2" />
+                Data Safety
+              </TabsTrigger>
+            )}
           </TabsList>
-
-          {/* Profile Tab Content */}
-          <TabsContent value="profile" className="space-y-6">
-                {/* Profile Picture */}
-                <Card>
-                  <CardHeader className="border-b border-gray-200">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <Camera className="w-5 h-5 text-qsights-blue" />
-                      Profile Picture
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-6">
-                      <div className="relative">
-                        <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-3xl font-bold">
-                          {profileData.firstName[0]}
-                          {profileData.lastName[0]}
-                        </div>
-                        <button className="absolute bottom-0 right-0 p-2 bg-qsights-blue text-white rounded-full hover:bg-qsights-blue/90 transition-colors shadow-lg">
-                          <Camera className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {profileData.firstName} {profileData.lastName}
-                        </h3>
-                        <p className="text-sm text-gray-600">{profileData.role}</p>
-                        <button className="mt-2 text-sm text-qsights-blue hover:underline">
-                          Upload new picture
-                        </button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Personal Information */}
-                <Card>
-                  <CardHeader className="border-b border-gray-200">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <User className="w-5 h-5 text-qsights-blue" />
-                      Personal Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="firstName" className="text-sm font-medium text-gray-700">
-                          First Name
-                        </Label>
-                        <Input
-                          id="firstName"
-                          name="firstName"
-                          value={profileData.firstName}
-                          onChange={handleProfileChange}
-                          className="w-full"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="lastName" className="text-sm font-medium text-gray-700">
-                          Last Name
-                        </Label>
-                        <Input
-                          id="lastName"
-                          name="lastName"
-                          value={profileData.lastName}
-                          onChange={handleProfileChange}
-                          className="w-full"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                        Email Address
-                      </Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <Input
-                          id="email"
-                          name="email"
-                          type="email"
-                          value={profileData.email}
-                          onChange={handleProfileChange}
-                          className="w-full pl-10"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="phone" className="text-sm font-medium text-gray-700">
-                        Phone Number
-                      </Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <Input
-                          id="phone"
-                          name="phone"
-                          type="tel"
-                          value={profileData.phone}
-                          onChange={handleProfileChange}
-                          className="w-full pl-10"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="organization" className="text-sm font-medium text-gray-700">
-                        Organization
-                      </Label>
-                      <div className="relative">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <Input
-                          id="organization"
-                          name="organization"
-                          value={profileData.organization}
-                          disabled
-                          className="w-full pl-10 bg-gray-50"
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-          </TabsContent>
 
           {/* Notifications Tab Content */}
           <TabsContent value="notifications" className="space-y-6">
@@ -1020,6 +910,105 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+          )}
+
+          {/* System Configuration Tab Content */}
+          {currentUser?.role === 'super-admin' && (
+            <TabsContent value="system" className="space-y-6">
+              {/* Info Box at Top */}
+              <div className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <SettingsIcon className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-orange-900">
+                      System-Wide Configuration
+                    </p>
+                    <p className="text-xs text-orange-800 mt-1">
+                      Configure email services, API integrations, and system-level settings. All credentials are encrypted at rest.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Card>
+                <CardHeader className="border-b border-gray-200">
+                  <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <SettingsIcon className="w-5 h-5 text-qsights-blue" />
+                    System Configuration
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+                  {/* Feature Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <Mail className="w-8 h-8 text-blue-600 mb-3" />
+                      <h3 className="font-semibold text-sm text-gray-900 mb-1">Email Service</h3>
+                      <p className="text-xs text-gray-600">SendGrid API configuration for all email communications</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                      <Shield className="w-8 h-8 text-green-600 mb-3" />
+                      <h3 className="font-semibold text-sm text-gray-900 mb-1">Secure Storage</h3>
+                      <p className="text-xs text-gray-600">All API keys encrypted at rest in database</p>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                      <Key className="w-8 h-8 text-purple-600 mb-3" />
+                      <h3 className="font-semibold text-sm text-gray-900 mb-1">Audit Logging</h3>
+                      <p className="text-xs text-gray-600">Track all configuration changes with full history</p>
+                    </div>
+                  </div>
+
+                  {/* Call to Action */}
+                  <div className="p-6 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl text-white">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold mb-2">Manage System Settings</h3>
+                        <p className="text-sm text-orange-100 mb-4">
+                          Access the system configuration page to manage:
+                        </p>
+                        <ul className="space-y-1.5 text-sm text-orange-50">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            SendGrid API credentials (encrypted)
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Sender email and display name
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Test email connection
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            View configuration change history
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Enable/disable email services
+                          </li>
+                        </ul>
+                      </div>
+                      <div className="ml-6">
+                        <button
+                          onClick={() => router.push('/settings/system')}
+                          className="px-6 py-3 bg-white text-orange-600 rounded-lg font-semibold hover:bg-gray-50 transition-colors shadow-lg flex items-center gap-2"
+                        >
+                          <SettingsIcon className="w-5 h-5" />
+                          Open System Config
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Data Safety Tab Content */}
+          {currentUser?.role === 'super-admin' && (
+            <TabsContent value="data-safety" className="space-y-6">
+              <DataSafetySettings />
             </TabsContent>
           )}
         </Tabs>

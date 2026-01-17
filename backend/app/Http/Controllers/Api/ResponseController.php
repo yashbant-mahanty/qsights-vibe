@@ -7,6 +7,7 @@ use App\Models\Response;
 use App\Models\Answer;
 use App\Models\Activity;
 use App\Models\Question;
+use App\Services\ResponseAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,13 @@ use Carbon\Carbon;
 
 class ResponseController extends Controller
 {
+    protected $responseAuditService;
+
+    public function __construct(ResponseAuditService $responseAuditService)
+    {
+        $this->responseAuditService = $responseAuditService;
+    }
+
     /**
      * Start a new response or get existing in-progress response
      */
@@ -160,6 +168,9 @@ class ResponseController extends Controller
 
             // Update progress metrics
             $response->updateProgress();
+            
+            // DUAL-SAVE: Also sync answers to JSON column for backup/redundancy
+            $this->syncAnswersToJsonColumn($response);
 
             // Mark as auto-saved if requested
             if ($request->boolean('auto_save')) {
@@ -263,9 +274,27 @@ class ResponseController extends Controller
 
             // Mark as submitted
             $response->updateProgress();
+            
+            // DUAL-SAVE: Sync answers to JSON column for backup before final submission
+            $this->syncAnswersToJsonColumn($response);
+            
             $response->markAsSubmitted();
 
             DB::commit();
+
+            // AUDIT LOGGING: Log to secondary backup (async, non-blocking)
+            // This happens AFTER primary save is committed
+            try {
+                $allAnswers = Answer::where('response_id', $responseId)->get();
+                $source = $request->input('source', 'web'); // Can be passed from frontend
+                $this->responseAuditService->logResponse($response, $allAnswers->toArray(), $source);
+            } catch (\Exception $e) {
+                // Log error but don't fail the request
+                \Log::warning('ResponseController: Audit logging failed (non-critical)', [
+                    'response_id' => $responseId,
+                    'error' => $e->getMessage()
+                ]);
+            }
 
             $response->load(['answers.question', 'activity', 'participant']);
 
@@ -343,28 +372,24 @@ class ResponseController extends Controller
         // Get activity to access participants
         $activity = Activity::findOrFail($activityId);
         
-        // Get valid participant IDs (matching event list logic, exclude preview)
+        // Get valid participant IDs - simplified to match ActivityController response count logic
+        // Include ALL active participants (both registered and guest), exclude only preview
+        // Use qualified column names for clarity (all columns are in participants table)
         $validParticipantIds = $activity->participants()
-            ->where('is_preview', false) // Exclude preview participants
-            ->where(function($query) {
-                // Include registered participants (is_guest=false, not marked as anonymous)
-                $query->where(function($q) {
-                    $q->where('is_guest', false)
-                      ->where(function($q2) {
-                          $q2->whereNull('additional_data')
-                             ->orWhereRaw("(additional_data->>'participant_type' IS NULL OR additional_data->>'participant_type' != 'anonymous')");
-                      });
-                })
-                // OR include anonymous participants (marked with participant_type='anonymous')
-                ->orWhereRaw("additional_data->>'participant_type' = 'anonymous'");
-            })
+            ->where('participants.is_preview', false) // Exclude preview participants
+            ->where('participants.status', 'active') // Only active participants
+            ->whereNull('participants.deleted_at') // Not deleted
             ->pluck('participants.id')
             ->toArray();
 
         $query = Response::with(['participant', 'activity', 'answers.question'])
             ->byActivity($activityId)
             ->where('is_preview', false) // Exclude preview responses
-            ->whereIn('participant_id', $validParticipantIds); // Only include responses from valid participants
+            ->where(function($q) use ($validParticipantIds) {
+                // Include responses from valid participants OR guest responses (null participant_id)
+                $q->whereIn('participant_id', $validParticipantIds)
+                  ->orWhereNull('participant_id');
+            });
 
         // Filter by status
         if ($request->has('status')) {
@@ -383,34 +408,49 @@ class ResponseController extends Controller
 
         $responses = $query->paginate($request->input('per_page', 15));
 
-        // Transform responses to ensure answers are properly loaded from the relationship
-        // NOT from the JSON column (legacy format)
+        // Transform responses to ensure answers are properly formatted for the frontend
+        // The frontend expects: [{question_id: 'uuid', value: 'answer', value_array: [...]}]
         $responses->getCollection()->transform(function ($response) {
             // CRITICAL: The Response model has both:
-            // 1. answers (JSON column) - legacy format: {question_id: "answer_text"}
+            // 1. answers (JSON column) - legacy format: {"question_id": "answer_text"} or {"105": "Doctor"}
             // 2. answers() relationship - proper Answer records with value/value_array
-            // 
-            // We MUST use the relationship data for analytics to work!
             
             if ($response->relationLoaded('answers')) {
-                // Get the relationship data (Answer models)
                 $answersRelation = $response->getRelation('answers');
                 
                 // If it's a Laravel Collection, convert to array
                 if (is_object($answersRelation) && method_exists($answersRelation, 'values')) {
-                    $response->setRelation('answers', $answersRelation->values()->toArray());
-                } 
-                // If it's already an array but looks like legacy format (associative array with UUIDs as keys)
-                // then reload from database to get proper Answer records
-                elseif (is_array($answersRelation) && count($answersRelation) > 0) {
-                    // Check if it's the legacy JSON format (keys are UUIDs, values are strings)
-                    $firstKey = array_key_first($answersRelation);
-                    if (is_string($firstKey) && strlen($firstKey) === 36 && is_string($answersRelation[$firstKey])) {
-                        // This is the legacy JSON column format - reload from relationship
-                        $response->load('answers.question');
-                        $answersRelation = $response->getRelation('answers');
-                        if (is_object($answersRelation) && method_exists($answersRelation, 'values')) {
-                            $response->setRelation('answers', $answersRelation->values()->toArray());
+                    $answersArray = $answersRelation->values()->toArray();
+                    
+                    // If relationship has data, use it
+                    if (!empty($answersArray)) {
+                        $response->setRelation('answers', $answersArray);
+                        return $response;
+                    }
+                }
+                
+                // If relationship is empty, try to use the JSON column data
+                // This is for backward compatibility with legacy data
+                if (empty($answersRelation) || (is_object($answersRelation) && $answersRelation->isEmpty())) {
+                    // Get the raw JSON column value
+                    $jsonAnswers = $response->getRawOriginal('answers');
+                    
+                    if (!empty($jsonAnswers)) {
+                        $parsedAnswers = is_string($jsonAnswers) ? json_decode($jsonAnswers, true) : $jsonAnswers;
+                        
+                        if (!empty($parsedAnswers) && is_array($parsedAnswers)) {
+                            // Convert legacy format to expected format
+                            // Legacy: {"question_id_or_number": "answer_value"}
+                            // Expected: [{question_id: "uuid", value: "answer", value_array: null}]
+                            $formattedAnswers = [];
+                            foreach ($parsedAnswers as $questionId => $value) {
+                                $formattedAnswers[] = [
+                                    'question_id' => (string) $questionId,
+                                    'value' => is_array($value) ? null : $value,
+                                    'value_array' => is_array($value) ? $value : null,
+                                ];
+                            }
+                            $response->setRelation('answers', $formattedAnswers);
                         }
                     }
                 }
@@ -504,5 +544,44 @@ class ResponseController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * DUAL-SAVE: Sync answers from Answer table to JSON column for redundancy/backup
+     * This ensures data is stored in both places for disaster recovery
+     * Format: {"question_id": "answer_value"} or {"question_id": ["array", "values"]}
+     */
+    private function syncAnswersToJsonColumn(Response $response): void
+    {
+        try {
+            // Reload answers relationship to get fresh data
+            $response->load('answers');
+            
+            $jsonAnswers = [];
+            foreach ($response->answers as $answer) {
+                // Use question_id as key, store value or value_array
+                $questionId = (string) $answer->question_id;
+                
+                // Prioritize value_array for multi-select/checkbox/matrix questions
+                if (!empty($answer->value_array)) {
+                    $jsonAnswers[$questionId] = $answer->value_array;
+                } elseif ($answer->value !== null && $answer->value !== '') {
+                    $jsonAnswers[$questionId] = $answer->value;
+                }
+            }
+            
+            // Only update if we have answers
+            if (!empty($jsonAnswers)) {
+                // Use raw DB update to avoid model events/casts interference
+                DB::table('responses')
+                    ->where('id', $response->id)
+                    ->update(['answers' => json_encode($jsonAnswers)]);
+                
+                \Log::info("DUAL-SAVE: Synced " . count($jsonAnswers) . " answers to JSON column for response {$response->id}");
+            }
+        } catch (\Exception $e) {
+            // Log error but don't fail the main operation
+            \Log::error("DUAL-SAVE failed for response {$response->id}: " . $e->getMessage());
+        }
     }
 }

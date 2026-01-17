@@ -1,0 +1,8 @@
+// Add these routes to routes/api.php
+
+// Public routes (no authentication required)
+Route::prefix('public')->group(function () {
+    Route::get('activities/{id}', [App\Http\Controllers\Api\PublicActivityController::class, 'show']);
+    Route::post('activities/{id}/register', [App\Http\Controllers\Api\PublicActivityController::class, 'registerParticipant']);
+    Route::post('activities/{id}/submit', [App\Http\Controllers\Api\PublicActivityController::class, 'submitResponse']);
+});
