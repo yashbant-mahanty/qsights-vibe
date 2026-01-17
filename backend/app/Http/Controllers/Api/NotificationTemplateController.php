@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\NotificationTemplate;
+use App\Services\QrCodeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -134,12 +135,18 @@ class NotificationTemplateController extends Controller
             $template->update($validated);
             $message = 'Notification template updated successfully';
         } else {
+            // Generate a name from the notification type
+            $typeName = ucwords(str_replace(['-', '_'], ' ', $validated['notification_type']));
+            
             // Create new template
             $template = NotificationTemplate::create([
                 'id' => Str::uuid(),
                 'activity_id' => $activityId,
+                'name' => $typeName . ' Template', // Required field
+                'type' => $validated['notification_type'], // Legacy field
                 'notification_type' => $validated['notification_type'],
                 'subject' => $validated['subject'],
+                'body' => $validated['body_html'], // Legacy field
                 'body_html' => $validated['body_html'],
                 'body_text' => $validated['body_text'] ?? strip_tags($validated['body_html']),
                 'is_active' => $validated['is_active'] ?? true,
@@ -259,6 +266,10 @@ class NotificationTemplateController extends Controller
             'body_text' => 'nullable|string',
         ]);
 
+        // Generate QR code for preview
+        $qrCodeService = new QrCodeService();
+        $qrCode = $qrCodeService->generateActivityQrCode($activityId);
+
         // Sample data for preview
         $sampleData = [
             'participant_name' => 'John Doe',
@@ -272,6 +283,7 @@ class NotificationTemplateController extends Controller
             'program_description' => $activity->program->description ?? '',
             'organization_name' => $activity->program->organization->name ?? 'QSights',
             'activity_url' => env('APP_URL') . '/activities/' . $activityId,
+            'qr_code' => $qrCode,
             'days_until_start' => $activity->start_date ? now()->diffInDays($activity->start_date, false) : 0,
             'current_date' => now()->format('F j, Y'),
             'response_count' => $activity->responses()->count(),

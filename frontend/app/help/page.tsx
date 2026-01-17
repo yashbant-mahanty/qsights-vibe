@@ -20,6 +20,9 @@ import {
   ArrowLeft,
   Send,
   ExternalLink,
+  Pencil,
+  X,
+  Check,
 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 
@@ -33,6 +36,14 @@ export default function HelpSupportPage() {
     priority: "medium",
   });
   const [sending, setSending] = useState(false);
+  
+  // Support contact editing
+  const [supportEmail, setSupportEmail] = useState("support@qsights.com");
+  const [supportPhone, setSupportPhone] = useState("+1 (555) 123-4567");
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [tempEmail, setTempEmail] = useState("");
+  const [tempPhone, setTempPhone] = useState("");
 
   const faqs = [
     {
@@ -148,9 +159,10 @@ export default function HelpSupportPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm font-medium">Back</span>
           </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Help & Support</h1>
@@ -175,18 +187,99 @@ export default function HelpSupportPage() {
 
         {/* Quick Contact */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Mail className="w-6 h-6 text-blue-600" />
+          <Card className="hover:shadow-lg transition-shadow relative group">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setTempEmail(supportEmail);
+                setEditingEmail(true);
+              }}
+              className="absolute top-2 right-2 p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+              title="Edit email"
+            >
+              <Pencil className="w-3.5 h-3.5 text-gray-600" />
+            </button>
+            <a href={`mailto:${supportEmail}`} className="block">
+              <CardContent className="p-6 text-center cursor-pointer">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Mail className="w-6 h-6 text-blue-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Email Support</h3>
+                <p className="text-sm text-gray-600 mt-1">{supportEmail}</p>
+                <p className="text-xs text-gray-500 mt-2">Response within 24 hours</p>
+              </CardContent>
+            </a>
+            
+            {/* Edit Email Modal */}
+            {editingEmail && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingEmail(false)}>
+                <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">Edit Support Email</h3>
+                    <button onClick={() => setEditingEmail(false)} className="p-1 hover:bg-gray-100 rounded">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="supportEmail">Email Address</Label>
+                      <Input
+                        id="supportEmail"
+                        type="email"
+                        value={tempEmail}
+                        onChange={(e) => setTempEmail(e.target.value)}
+                        placeholder="support@example.com"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setEditingEmail(false)}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (tempEmail && tempEmail.includes('@')) {
+                            setSupportEmail(tempEmail);
+                            setEditingEmail(false);
+                            toast({
+                              title: "Updated",
+                              description: "Support email has been updated",
+                              variant: "success"
+                            });
+                          } else {
+                            toast({
+                              title: "Invalid Email",
+                              description: "Please enter a valid email address",
+                              variant: "error"
+                            });
+                          }
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                      >
+                        <Check className="w-4 h-4" />
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h3 className="font-semibold text-gray-900">Email Support</h3>
-              <p className="text-sm text-gray-600 mt-1">support@qsights.com</p>
-              <p className="text-xs text-gray-500 mt-2">Response within 24 hours</p>
-            </CardContent>
+            )}
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Card 
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => {
+              toast({
+                title: "Live Chat",
+                description: "Live chat feature coming soon! Please use email or phone support for now.",
+                variant: "info"
+              });
+            }}
+          >
             <CardContent className="p-6 text-center">
               <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <MessageCircle className="w-6 h-6 text-green-600" />
@@ -197,15 +290,87 @@ export default function HelpSupportPage() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Phone className="w-6 h-6 text-purple-600" />
+          <Card className="hover:shadow-lg transition-shadow relative group">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setTempPhone(supportPhone);
+                setEditingPhone(true);
+              }}
+              className="absolute top-2 right-2 p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+              title="Edit phone"
+            >
+              <Pencil className="w-3.5 h-3.5 text-gray-600" />
+            </button>
+            <a href={`tel:${supportPhone.replace(/[^+\\d]/g, '')}`} className="block">
+              <CardContent className="p-6 text-center cursor-pointer">
+                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Phone className="w-6 h-6 text-purple-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Phone Support</h3>
+                <p className="text-sm text-gray-600 mt-1">{supportPhone}</p>
+                <p className="text-xs text-gray-500 mt-2">Mon-Fri, 9 AM - 6 PM EST</p>
+              </CardContent>
+            </a>
+            
+            {/* Edit Phone Modal */}
+            {editingPhone && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingPhone(false)}>
+                <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">Edit Support Phone</h3>
+                    <button onClick={() => setEditingPhone(false)} className="p-1 hover:bg-gray-100 rounded">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="supportPhone">Phone Number</Label>
+                      <Input
+                        id="supportPhone"
+                        type="tel"
+                        value={tempPhone}
+                        onChange={(e) => setTempPhone(e.target.value)}
+                        placeholder="+1 (555) 123-4567"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setEditingPhone(false)}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (tempPhone && tempPhone.length >= 10) {
+                            setSupportPhone(tempPhone);
+                            setEditingPhone(false);
+                            toast({
+                              title: "Updated",
+                              description: "Support phone has been updated",
+                              variant: "success"
+                            });
+                          } else {
+                            toast({
+                              title: "Invalid Phone",
+                              description: "Please enter a valid phone number",
+                              variant: "error"
+                            });
+                          }
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                      >
+                        <Check className="w-4 h-4" />
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h3 className="font-semibold text-gray-900">Phone Support</h3>
-              <p className="text-sm text-gray-600 mt-1">+1 (555) 123-4567</p>
-              <p className="text-xs text-gray-500 mt-2">Mon-Fri, 9 AM - 6 PM EST</p>
-            </CardContent>
+            )}
           </Card>
         </div>
 

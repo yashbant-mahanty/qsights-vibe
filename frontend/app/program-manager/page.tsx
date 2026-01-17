@@ -36,6 +36,8 @@ export default function ProgramManagerDashboard() {
   const [activities, setActivities] = useState<any[]>([]);
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [activeParticipants, setActiveParticipants] = useState(0);
+  const [authenticatedParticipants, setAuthenticatedParticipants] = useState(0);
+  const [guestParticipants, setGuestParticipants] = useState(0);
   const [completedActivities, setCompletedActivities] = useState(0);
   const [pendingResponses, setPendingResponses] = useState(0);
   const [completionRate, setCompletionRate] = useState(0);
@@ -45,22 +47,22 @@ export default function ProgramManagerDashboard() {
   const stats = [
     {
       title: 'Total Participants',
-      value: totalParticipants.toString(),
-      subtitle: activeParticipants > 0 ? `${activeParticipants} active` : 'No active',
+      value: `${totalParticipants} (${authenticatedParticipants}/${guestParticipants})`,
+      subtitle: "(Participant/Anonymous)",
       icon: Users,
       variant: 'blue' as const,
     },
     {
       title: 'Active Participants',
       value: activeParticipants.toString(),
-      subtitle: `${completionRate}% completion rate`,
+      subtitle: totalParticipants > 0 ? `${Math.round((activeParticipants/totalParticipants)*100)}% of total` : "0% of total",
       icon: Activity,
       variant: 'green' as const,
     },
     {
       title: 'Events Completed',
       value: completedActivities.toString(),
-      subtitle: activities.length > 0 ? `${activities.length} total` : '0 total',
+      subtitle: activities.length > 0 ? `${activities.length} total events` : '0 total events',
       icon: CheckCircle,
       variant: 'purple' as const,
     },
@@ -167,12 +169,16 @@ export default function ProgramManagerDashboard() {
       // Calculate stats
       const total = participantsData.length;
       const active = participantsData.filter((p: any) => p.status === 'active').length;
+      const authenticated = participantsData.filter((p: any) => !p.is_guest && !p.isGuest).length;
+      const guests = participantsData.filter((p: any) => p.is_guest || p.isGuest).length;
       const completed = activitiesData.filter((a: any) => a.status === 'completed').length;
       const pending = activitiesData.filter((a: any) => a.status === 'active' || a.status === 'scheduled').length;
       const rate = active > 0 ? Math.round((participantsData.filter((p: any) => p.responses_count > 0).length / active) * 100) : 0;
 
       setTotalParticipants(total);
       setActiveParticipants(active);
+      setAuthenticatedParticipants(authenticated);
+      setGuestParticipants(guests);
       setCompletedActivities(completed);
       setPendingResponses(pending);
       setCompletionRate(rate);
@@ -254,7 +260,7 @@ export default function ProgramManagerDashboard() {
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Program Manager Dashboard</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
             <p className="text-gray-600 mt-1">Monitor participant engagement and activity completion</p>
           </div>
           <div className="flex items-center gap-3">

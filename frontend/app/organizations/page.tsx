@@ -231,23 +231,28 @@ export default function OrganizationsPage() {
   });  const totalAuthenticated = organizations_display.reduce((sum, o) => sum + o.authenticatedParticipants, 0);
   const totalGuest = organizations_display.reduce((sum, o) => sum + o.guestParticipants, 0);
   const grandTotal = totalAuthenticated + totalGuest;
+  const activeOrgsCount = organizations_display.filter((o) => o.status === "active").length;
+  const inactiveOrgsCount = organizations_display.filter((o) => o.status === "inactive").length;
 
   const stats = [
     {
       title: "Total Organizations",
       value: organizations_display.length,
+      subtitle: `${activeOrgsCount} active`,
       icon: Building2,
       variant: 'blue' as const,
     },
     {
       title: "Active",
-      value: organizations_display.filter((o) => o.status === "active").length,
+      value: activeOrgsCount,
+      subtitle: organizations_display.length > 0 ? `${Math.round((activeOrgsCount/organizations_display.length)*100)}% of total` : "0% of total",
       icon: CheckCircle,
       variant: 'green' as const,
     },
     {
       title: "Inactive",
-      value: organizations_display.filter((o) => o.status === "inactive").length,
+      value: inactiveOrgsCount,
+      subtitle: organizations_display.length > 0 ? `${Math.round((inactiveOrgsCount/organizations_display.length)*100)}% of total` : "0% of total",
       icon: XCircle,
       variant: 'red' as const,
     },
@@ -268,6 +273,11 @@ export default function OrganizationsPage() {
     const matchesStatus =
       selectedStatus === "all" || org.status === selectedStatus;
     return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+    // Sort by latest first (updated_at or created_at)
+    const dateA = new Date(a.lastActive || 0).getTime();
+    const dateB = new Date(b.lastActive || 0).getTime();
+    return dateB - dateA;
   });
 
   const totalPages = Math.ceil(filteredOrganizations.length / itemsPerPage);

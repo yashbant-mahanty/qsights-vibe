@@ -11,10 +11,14 @@ class NotificationTemplate extends Model
 
     protected $fillable = [
         'activity_id',
+        'name',
+        'type',
         'notification_type',
         'subject',
+        'body',
         'body_html',
         'body_text',
+        'variables',
         'is_active',
         'placeholders',
     ];
@@ -22,6 +26,7 @@ class NotificationTemplate extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'placeholders' => 'array',
+        'variables' => 'array',
     ];
 
     /**
@@ -64,6 +69,7 @@ class NotificationTemplate extends Model
             'program_description' => 'Program description',
             'organization_name' => 'Organization name',
             'activity_url' => 'Direct link to activity',
+            'qr_code' => 'QR code image linking to the activity (event-specific)',
             'days_until_start' => 'Days until activity starts',
             'current_date' => 'Current date',
             'response_count' => 'Number of responses received',
@@ -152,6 +158,8 @@ class NotificationTemplate extends Model
         .button { display: inline-block; padding: 12px 30px; background: #4CAF50; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
         .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
         .details { background: white; padding: 15px; border-left: 4px solid #4CAF50; margin: 20px 0; }
+        .qr-section { text-align: center; margin: 25px 0; padding: 20px; background: white; border-radius: 8px; }
+        .qr-section p { margin: 10px 0 0 0; color: #666; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -167,6 +175,10 @@ class NotificationTemplate extends Model
                 <p><strong>Type:</strong> {{activity_type}}</p>
                 <p><strong>Start Date:</strong> {{activity_start_date}}</p>
                 <p><strong>Description:</strong> {{activity_description}}</p>
+            </div>
+            <div class="qr-section">
+                {{qr_code}}
+                <p>Scan QR code to access the activity</p>
             </div>
             <p>We look forward to your participation!</p>
             <a href="{{activity_url}}" class="button">View Activity</a>
@@ -197,6 +209,8 @@ HTML;
         .button { display: inline-block; padding: 12px 30px; background: #FF9800; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
         .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
         .reminder-box { background: #fff3cd; border: 2px solid #ffc107; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .qr-section { text-align: center; margin: 25px 0; padding: 20px; background: white; border-radius: 8px; }
+        .qr-section p { margin: 10px 0 0 0; color: #666; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -211,6 +225,10 @@ HTML;
             </div>
             <p>Don't miss out on this opportunity to participate. Your input is valuable to us.</p>
             <p><strong>Start Date:</strong> {{activity_start_date}}</p>
+            <div class="qr-section">
+                {{qr_code}}
+                <p>Scan QR code to participate</p>
+            </div>
             <a href="{{activity_url}}" class="button">Participate Now</a>
         </div>
         <div class="footer">

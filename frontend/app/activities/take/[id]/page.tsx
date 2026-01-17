@@ -21,11 +21,21 @@ import {
   Send,
   UserPlus,
   MessageCircle,
+  Bell,
+  BellRing,
 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { filterQuestionsByLogic } from "@/utils/conditionalLogicEvaluator";
 import EventContactModal from "@/components/EventContactModal";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  SliderScale,
+  DialGauge,
+  LikertVisual,
+  NPSScale,
+  StarRating,
+  DEFAULT_SETTINGS,
+} from "@/components/questions";
 
 interface FormField {
   id: string;
@@ -54,11 +64,16 @@ interface Activity {
   is_multilingual?: boolean;
   languages?: string[];
   contact_us_enabled?: boolean;
+  allow_participant_reminders?: boolean;
   landing_config?: {
     logoUrl?: string;
     logoSize?: string;
     pageTitle?: string;
     pageTitleColor?: string;
+    bannerTitle?: string;
+    bannerTitleColor?: string;
+    bannerTitleSize?: string;
+    bannerTitlePosition?: string;
     bannerBackgroundColor?: string;
     bannerText?: string;
     bannerTextColor?: string;
@@ -67,7 +82,22 @@ interface Activity {
     bannerTextPosition?: string;
     bannerImagePosition?: string;
     bannerShowOnInnerPages?: boolean;
+    bannerEnabled?: boolean;
     backgroundColor?: string;
+    backgroundImageUrl?: string;
+    backgroundStyle?: string;
+    gradientFrom?: string;
+    gradientTo?: string;
+    backgroundImageOpacity?: number;
+    contentHeaderType?: string;
+    contentHeaderLogoUrl?: string;
+    contentHeaderLogoSize?: string;
+    contentHeaderBackgroundStyle?: string;
+    contentHeaderBackgroundColor?: string;
+    contentHeaderGradientFrom?: string;
+    contentHeaderGradientTo?: string;
+    contentHeaderCustomTitle?: string;
+    contentHeaderCustomSubtitle?: string;
     footerText?: string;
     footerTextColor?: string;
     footerBackgroundColor?: string;
@@ -86,10 +116,27 @@ interface Activity {
     leftContentImageUrl?: string;
     leftContentImagePosition?: string;
     leftContentBackgroundColor?: string;
+    splitScreenLeftBackgroundImageUrl?: string;
+    splitScreenLeftBackgroundPosition?: string;
+    splitScreenLeftBackgroundVerticalPosition?: string;
+    splitScreenLeftBackgroundOpacity?: number;
+    splitScreenLeftBackgroundColor?: string;
+    splitScreenRightBackgroundImageUrl?: string;
+    splitScreenRightBackgroundOpacity?: number;
+    splitScreenRightBackgroundColor?: string;
+    fullPageBackgroundImageUrl?: string;
+    fullPageBackgroundOpacity?: number;
+    fullPageBackgroundColor?: string;
     activityCardHeaderColor?: string;
     loginBoxBannerLogoUrl?: string;
     loginButtonColor?: string;
     loginBoxAlignment?: string;
+    loginBoxContentType?: string;
+    loginBoxLogoUrl?: string;
+    loginBoxLogoHorizontalPosition?: string;
+    loginBoxLogoVerticalPosition?: string;
+    loginBoxCustomTitle?: string;
+    loginBoxCustomSubtitle?: string;
     [key: string]: any;
   };
 }
@@ -159,24 +206,24 @@ export default function TakeActivityPage() {
   const activityId = params.id as string;
   
   
-  // URL parameters - handle both encrypted tokens and legacy parameters
-  const urlToken = searchParams.get("token"); // Can be encrypted link token OR access token (legacy)
+  // URL parameters - handle both encrypted link tokens (from Copy Event Links) and legacy parameters
+  const urlToken = searchParams.get("token"); // Can be encrypted link token OR participant access token
   const legacyType = searchParams.get("type"); // Legacy: 'registration'
   const legacyPreview = searchParams.get("preview") === "true"; // Legacy preview mode
   const legacyMode = searchParams.get("mode"); // Legacy: 'anonymous'
   
-  // State for decrypted token data
+  // State for decrypted link token data
   const [tokenDecrypted, setTokenDecrypted] = useState(false);
   const [tokenLinkType, setTokenLinkType] = useState<string | null>(null);
   
-  // Determine if this is an encrypted link token (vs access token)
-  // Access tokens are typically shorter and used for different purpose
-  const isEncryptedToken = urlToken && urlToken.length > 50; // Encrypted tokens are long
+  // Determine if this is an encrypted link token (from Copy Event Links)
+  // Encrypted tokens are VERY long (>100 chars), access tokens are shorter (typically 64 chars)
+  const isEncryptedLinkToken = urlToken && urlToken.length > 100;
   
-  // Validate encrypted token on mount
+  // Validate encrypted link token on mount
   useEffect(() => {
-    if (isEncryptedToken && !tokenDecrypted) {
-      const validateToken = async () => {
+    if (isEncryptedLinkToken && !tokenDecrypted) {
+      const validateLinkToken = async () => {
         try {
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/activities/validate-link-token`, {
             method: 'POST',
@@ -187,25 +234,27 @@ export default function TakeActivityPage() {
           if (response.ok) {
             const data = await response.json();
             setTokenLinkType(data.type); // 'registration', 'preview', or 'anonymous'
-            console.log('Encrypted token validated:', data.type);
+            console.log('Encrypted link token validated:', data.type);
           }
         } catch (error) {
-          console.error('Token validation failed:', error);
+          console.error('Link token validation failed:', error);
         }
         setTokenDecrypted(true);
       };
       
-      validateToken();
+      validateLinkToken();
     } else {
       setTokenDecrypted(true);
     }
-  }, [isEncryptedToken, urlToken, tokenDecrypted]);
+  }, [isEncryptedLinkToken, urlToken, tokenDecrypted]);
   
   // Determine link type (encrypted token takes precedence over legacy params)
   const linkType = tokenLinkType || legacyType;
   const isPreview = tokenLinkType === 'preview' || legacyPreview;
   const mode = tokenLinkType === 'anonymous' ? 'anonymous' : legacyMode;
-  const token = !isEncryptedToken ? urlToken : null; // Access token (not encrypted)
+  
+  // Access token (for participant validation) - only use non-encrypted tokens
+  const token = !isEncryptedLinkToken ? urlToken : null;
   
   // Set initial form/start state based on link type
   const isAnonymous = mode === "anonymous";
@@ -301,6 +350,25 @@ export default function TakeActivityPage() {
 
   // Timer state
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+
+  // Add to Calendar handler
+  const handleAddToCalendar = () => {
+    if (!activity) return;
+    
+    const formatDateForGoogle = (dateStr: string) => {
+      const date = new Date(dateStr);
+      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    };
+    
+    const title = encodeURIComponent(activity.name);
+    const description = encodeURIComponent(activity.description || '');
+    const startDate = activity.start_date ? formatDateForGoogle(activity.start_date) : '';
+    const endDate = activity.end_date ? formatDateForGoogle(activity.end_date) : '';
+    
+    const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${description}&dates=${startDate}/${endDate}`;
+    
+    window.open(calendarUrl, '_blank');
+  };
 
   // Helper function to get translated text based on selected language (with per-question override support)
   const getTranslatedText = (question: any, field: 'question' | 'options' | 'placeholder', optionIndex?: number): string | string[] => {
@@ -683,21 +751,54 @@ export default function TakeActivityPage() {
       setTokenValidated(true);
       setTokenValidating(false);
       
-      // ALWAYS show form to collect language and other fields
-      setShowForm(true);
-      
       const participantName = data.participant?.name || data.data?.participant?.name || 'there';
       const needsLanguage = activity?.is_multilingual && Array.isArray(activity?.languages) && activity.languages.length > 1;
-      const detailsMessage = needsLanguage
-        ? `Hello ${participantName}, please select your language and complete any additional details.`
-        : `Hello ${participantName}, please review and complete any missing details.`;
+      
+      // Check if we can auto-skip to questionnaire:
+      // 1. Token is validated with name and email from DB
+      // 2. No additional registration fields beyond name/email exist
+      // 3. Activity is not multilingual OR has only one language
+      const formFields = activity?.registration_form_fields || [];
+      const hasOnlyDefaultFields = formFields.length === 0 || 
+        formFields.every((field: any) => {
+          const fieldId = field.id || field.name;
+          return ['name', 'full_name', 'email', 'email_address'].includes(fieldId) || field.type === 'email';
+        });
+      
+      const canAutoSkip = hasOnlyDefaultFields && !needsLanguage && nameFromToken && emailFromToken;
+      
+      if (canAutoSkip) {
+        // Auto-skip to questionnaire - no additional fields to collect
+        console.log('Auto-skipping to questionnaire - only default fields and all pre-filled');
+        
+        // Set start time
+        const now = Date.now();
+        setStartTime(now);
+        
+        setShowForm(false);
+        setStarted(true);
+        
+        toast({
+          title: `Welcome, ${participantName}!`,
+          description: "Starting your activity now...",
+          variant: "success",
+          duration: 2000
+        });
+      } else {
+        // Show form to collect additional fields or language selection
+        setShowForm(true);
+        
+        const detailsMessage = needsLanguage
+          ? `Hello ${participantName}, please select your language to continue.`
+          : `Hello ${participantName}, please complete the additional details below.`;
 
-      toast({
-        title: "Welcome!",
-        description: detailsMessage,
-        variant: "success",
-        duration: 3000
-      });
+        toast({
+          title: "Welcome!",
+          description: detailsMessage,
+          variant: "success",
+          duration: 3000
+        });
+      }
     } catch (err) {
       console.error('Token validation error:', err);
       setTokenError('Failed to validate access token');
@@ -873,13 +974,21 @@ export default function TakeActivityPage() {
     // REGISTRATION MODE: Validate required fields based on activity's registration form
     const formFields = activity?.registration_form_fields || [
       { id: "name", type: "text", label: "Full Name", required: true, order: 0, isMandatory: true },
-      { id: "email", type: "email", label: "Email Address", required: true, order: 1, isMandatory: true },
+      { id: "email", type: "email", label: "Communication Email ID", required: true, order: 1, isMandatory: true },
     ];
 
     // Check required fields (only for registration mode)
+    // Skip validation for pre-filled fields when token is validated
     for (const field of formFields) {
       if (field.required || field.isMandatory) {
         const fieldKey = field.id || (field as any).name || 'unknown';
+        
+        // Skip validation for default fields (name/email) if token is validated and data is pre-filled
+        const isDefaultField = ['name', 'full_name', 'email', 'email_address'].includes(fieldKey) || field.type === 'email';
+        if (token && tokenValidated && isDefaultField && participantData[fieldKey]) {
+          continue; // Skip - already pre-filled from token
+        }
+        
         const value = participantData[fieldKey];
         if (!value || (typeof value === "string" && !value.trim())) {
           toast({ 
@@ -1362,10 +1471,10 @@ export default function TakeActivityPage() {
       
       return true;
     } else {
-      // All questions mode - validate all questions
-      if (!questionnaire?.sections) return true;
+      // All questions mode - validate all VISIBLE questions (respecting conditional logic)
+      if (!allFilteredSections || allFilteredSections.length === 0) return true;
       
-      for (const section of questionnaire.sections) {
+      for (const section of allFilteredSections) {
         for (const question of section.questions) {
           // For Assessments: ALWAYS require an answer
           // For Surveys/Polls: Only require if question is mandatory
@@ -2078,6 +2187,66 @@ export default function TakeActivityPage() {
           </div>
         );
 
+      case "slider_scale":
+        return (
+          <div className="py-4">
+            <SliderScale
+              value={responses[questionId] !== undefined ? Number(responses[questionId]) : null}
+              onChange={(value) => handleResponseChange(questionId, value)}
+              settings={question.settings || DEFAULT_SETTINGS.slider_scale}
+              disabled={isSubmitted}
+            />
+          </div>
+        );
+
+      case "dial_gauge":
+        return (
+          <div className="py-4 flex justify-center">
+            <DialGauge
+              value={responses[questionId] !== undefined ? Number(responses[questionId]) : null}
+              onChange={(value) => handleResponseChange(questionId, value)}
+              settings={question.settings || DEFAULT_SETTINGS.dial_gauge}
+              disabled={isSubmitted}
+            />
+          </div>
+        );
+
+      case "likert_visual":
+        return (
+          <div className="py-4">
+            <LikertVisual
+              value={responses[questionId] !== undefined ? Number(responses[questionId]) : null}
+              onChange={(value) => handleResponseChange(questionId, value)}
+              settings={question.settings || DEFAULT_SETTINGS.likert_visual}
+              disabled={isSubmitted}
+            />
+          </div>
+        );
+
+      case "nps":
+        return (
+          <div className="py-4">
+            <NPSScale
+              value={responses[questionId] !== undefined ? Number(responses[questionId]) : null}
+              onChange={(value) => handleResponseChange(questionId, value)}
+              settings={question.settings || DEFAULT_SETTINGS.nps}
+              disabled={isSubmitted}
+            />
+          </div>
+        );
+
+      case "star_rating":
+        return (
+          <div className="py-4">
+            <StarRating
+              value={responses[questionId] !== undefined ? Number(responses[questionId]) : null}
+              onChange={(value) => handleResponseChange(questionId, value)}
+              settings={question.settings || DEFAULT_SETTINGS.star_rating}
+              disabled={isSubmitted}
+            />
+          </div>
+        );
+
       default:
         return (
           <Input
@@ -2091,6 +2260,7 @@ export default function TakeActivityPage() {
     }
   };
 
+  // Wait for both activity loading and token decryption
   if (loading || !tokenDecrypted) {
     return (
       <div 
@@ -2316,7 +2486,7 @@ export default function TakeActivityPage() {
       {
         id: "email",
         type: "email" as const,
-        label: "Email Address",
+        label: "Communication Email ID",
         placeholder: "your.email@example.com",
         required: true,
         order: 1,
@@ -2441,19 +2611,48 @@ export default function TakeActivityPage() {
 
     return (
       <div 
-        className="flex flex-col min-h-screen"
+        className="flex flex-col min-h-screen relative"
         style={{ 
-          backgroundColor: activity?.landing_config?.backgroundColor || "#F9FAFB",
+          backgroundColor: activity?.landing_config?.loginBoxAlignment !== 'right' 
+            ? (activity?.landing_config?.fullPageBackgroundColor || activity?.landing_config?.backgroundColor || "#F9FAFB")
+            : (activity?.landing_config?.backgroundColor || "#F9FAFB"),
           overflow: 'hidden',
         }}
       >
+        {/* Full Page Background Image for Non-Split Templates */}
+        {activity?.landing_config?.fullPageBackgroundImageUrl && 
+         activity?.landing_config?.loginBoxAlignment !== 'right' && (
+          <>
+            <div 
+              className="absolute inset-0"
+              style={{ 
+                backgroundImage: `url(${activity.landing_config.fullPageBackgroundImageUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                opacity: (activity.landing_config.fullPageBackgroundOpacity ?? 100) / 100,
+                zIndex: 1,
+              }}
+            />
+            {/* Subtle overlay for better readability */}
+            <div 
+              className="absolute inset-0" 
+              style={{ 
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                zIndex: 2,
+              }}
+            />
+          </>
+        )}
+
         {/* Top Banner with Logo and Text */}
         {activity?.landing_config?.bannerEnabled !== false && activity?.landing_config?.bannerBackgroundColor && (
           <div 
-            className="fixed top-0 left-0 right-0 z-20" 
+            className="fixed top-0 left-0 right-0" 
             style={{ 
               backgroundColor: activity.landing_config.bannerBackgroundColor || "#3B82F6",
               height: activity.landing_config.bannerHeight || "120px",
+              zIndex: 20,
               backgroundImage: activity.landing_config.bannerImageUrl ? `url(${activity.landing_config.bannerImageUrl})` : undefined,
               backgroundSize: "cover",
               backgroundPosition: activity.landing_config.bannerImagePosition || "center",
@@ -2514,12 +2713,21 @@ export default function TakeActivityPage() {
                   />
                 </div>
               )}
-              {/* Banner Text - Absolutely centered in full banner width */}
+              {/* Banner Text/Title - Positioned based on config */}
               {activity?.landing_config?.bannerText && (
-                <div className="absolute inset-0 flex items-center justify-center w-full h-full pointer-events-none z-20">
+                <div className={`absolute inset-0 flex items-center w-full h-full pointer-events-none z-20 ${
+                  activity.landing_config.bannerTextPosition === 'left' ? 'justify-start pl-24' : 
+                  activity.landing_config.bannerTextPosition === 'right' ? 'justify-end pr-24' : 'justify-center'
+                }`}>
                   <h1 
-                    className="text-2xl font-bold text-center w-full"
-                    style={{ color: activity.landing_config.bannerTextColor || "#FFFFFF", margin: 0 }}
+                    className="font-bold"
+                    style={{ 
+                      color: activity.landing_config.bannerTextColor || "#FFFFFF", 
+                      margin: 0,
+                      fontSize: activity.landing_config.bannerTextSize === 'small' ? '1.25rem' :
+                               activity.landing_config.bannerTextSize === 'large' ? '2rem' :
+                               activity.landing_config.bannerTextSize === 'xlarge' ? '2.5rem' : '1.5rem'
+                    }}
                   >
                     {activity.landing_config.bannerText}
                   </h1>
@@ -2599,24 +2807,64 @@ export default function TakeActivityPage() {
             <div 
               className="w-full lg:w-1/2 order-2 lg:order-1 px-4 py-8 lg:p-12 flex flex-col justify-center items-center relative"
               style={{ 
-                backgroundColor: activity.landing_config.leftContentBackgroundColor || "#0EA5E9",
-                backgroundImage: activity.landing_config.leftContentImagePosition === 'fullscreen' && activity.landing_config.leftContentImageUrl 
-                  ? `url(${activity.landing_config.leftContentImageUrl})` : undefined,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                minHeight: '100vh'
+                backgroundColor: activity.landing_config.splitScreenLeftBackgroundColor || activity.landing_config.leftContentBackgroundColor || "#0EA5E9",
+                minHeight: '100vh',
+                overflow: 'hidden'
               }}
             >
-              {/* Overlay for better text readability on fullscreen background */}
-              {activity.landing_config.leftContentImagePosition === 'fullscreen' && activity.landing_config.leftContentImageUrl && (
-                <div className="absolute inset-0 bg-black/30"></div>
+              {/* Split Screen Left Background Image - Only for 'full' vertical position */}
+              {activity.landing_config.splitScreenLeftBackgroundImageUrl && 
+               activity.landing_config.splitScreenLeftBackgroundVerticalPosition !== 'below' && (
+                <div 
+                  className="absolute inset-0"
+                  style={{ 
+                    backgroundImage: `url(${activity.landing_config.splitScreenLeftBackgroundImageUrl})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    opacity: (activity.landing_config.splitScreenLeftBackgroundOpacity ?? 100) / 100,
+                    zIndex: activity.landing_config.splitScreenLeftBackgroundPosition === 'above' ? 20 : 1,
+                  }}
+                />
+              )}
+
+              {/* Overlay for text readability - Only for 'full' vertical position */}
+              {activity.landing_config.splitScreenLeftBackgroundImageUrl && 
+               activity.landing_config.splitScreenLeftBackgroundVerticalPosition !== 'below' && (
+                <div 
+                  className="absolute inset-0" 
+                  style={{ 
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    zIndex: activity.landing_config.splitScreenLeftBackgroundPosition === 'above' ? 21 : 2,
+                  }}
+                />
+              )}
+
+              {/* Legacy fullscreen background support */}
+              {!activity.landing_config.splitScreenLeftBackgroundImageUrl && 
+               activity.landing_config.leftContentImagePosition === 'fullscreen' && 
+               activity.landing_config.leftContentImageUrl && (
+                <>
+                  <div 
+                    className="absolute inset-0"
+                    style={{ 
+                      backgroundImage: `url(${activity.landing_config.leftContentImageUrl})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      zIndex: 1,
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/30" style={{ zIndex: 2 }}></div>
+                </>
               )}
               
-              <div className={`relative z-10 flex flex-col items-center ${
-                activity.landing_config.leftContentImagePosition === 'bottom' ? 'justify-start' : 'justify-center'
-              } w-full`}>
-                {/* Image at top */}
-                {activity.landing_config.leftContentImagePosition === 'top' && activity.landing_config.leftContentImageUrl && (
+              <div className={`relative flex flex-col items-center justify-center w-full`}
+              style={{ zIndex: 10 }}
+              >
+                {/* Legacy: Image at top (when not using split screen background) */}
+                {!activity.landing_config.splitScreenLeftBackgroundImageUrl &&
+                 activity.landing_config.leftContentImagePosition === 'top' && 
+                 activity.landing_config.leftContentImageUrl && (
                   <img 
                     src={activity.landing_config.leftContentImageUrl} 
                     alt="Content" 
@@ -2644,8 +2892,27 @@ export default function TakeActivityPage() {
                   )}
                 </div>
                 
-                {/* Image at bottom */}
-                {activity.landing_config.leftContentImagePosition === 'bottom' && activity.landing_config.leftContentImageUrl && (
+                {/* Background image positioned below content */}
+                {activity.landing_config.splitScreenLeftBackgroundImageUrl && 
+                 activity.landing_config.splitScreenLeftBackgroundVerticalPosition === 'below' && (
+                  <div className="w-full max-w-md mt-8">
+                    <img 
+                      src={activity.landing_config.splitScreenLeftBackgroundImageUrl} 
+                      alt="Background" 
+                      className="w-full rounded-lg shadow-lg"
+                      style={{ 
+                        position: 'relative', 
+                        zIndex: 15,
+                        opacity: (activity.landing_config.splitScreenLeftBackgroundOpacity ?? 100) / 100
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Legacy: Image at bottom (when not using split screen background) */}
+                {!activity.landing_config.splitScreenLeftBackgroundImageUrl &&
+                 activity.landing_config.leftContentImagePosition === 'bottom' && 
+                 activity.landing_config.leftContentImageUrl && (
                   <img 
                     src={activity.landing_config.leftContentImageUrl} 
                     alt="Content" 
@@ -2660,10 +2927,14 @@ export default function TakeActivityPage() {
           <div 
             className={`w-full ${activity?.landing_config?.leftContentEnabled ? 'lg:w-1/2' : ''} order-1 lg:order-2 relative flex flex-col`}
             style={{
+              backgroundColor: activity?.landing_config?.leftContentEnabled 
+                ? (activity?.landing_config?.splitScreenRightBackgroundColor || '#F3F4F6')
+                : 'transparent',
               backgroundSize: 'cover',
               backgroundPosition: 'center',
               position: 'relative',
               zIndex: 1,
+              overflow: 'hidden',
               marginTop: activity?.landing_config?.bannerBackgroundColor ? `calc(-1 * (${activity.landing_config.bannerHeight || "120px"}))` : 
                         (activity?.landing_config?.logoUrl || activity?.landing_config?.pageTitle) ? '-70px' : 0,
               marginBottom: activity?.landing_config?.footerEnabled !== false && activity?.landing_config?.footerBackgroundColor ? `calc(-1 * (${activity.landing_config.footerHeight || "80px"}))` : 0,
@@ -2672,8 +2943,28 @@ export default function TakeActivityPage() {
               paddingBottom: activity?.landing_config?.footerEnabled !== false && activity?.landing_config?.footerBackgroundColor ? `calc(${activity.landing_config.footerHeight || "80px"} + 3rem)` : '3rem',
             }}
           >
-            {/* Background overlay that extends behind banner and footer */}
-            {activity?.landing_config?.loginBoxBackgroundImageUrl && (
+            {/* Split Screen Right Background Image (Priority) - Only for split screen */}
+            {activity?.landing_config?.leftContentEnabled && activity?.landing_config?.splitScreenRightBackgroundImageUrl && (
+              <div 
+                className="absolute"
+                style={{ 
+                  backgroundImage: `url(${activity.landing_config.splitScreenRightBackgroundImageUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                  opacity: (activity.landing_config.splitScreenRightBackgroundOpacity ?? 100) / 100,
+                  top: activity?.landing_config?.bannerBackgroundColor ? `calc(-1 * (${activity.landing_config.bannerHeight || "120px"}))` : 
+                       (activity?.landing_config?.logoUrl || activity?.landing_config?.pageTitle) ? '-70px' : 0,
+                  bottom: activity?.landing_config?.footerEnabled !== false && activity?.landing_config?.footerBackgroundColor ? `calc(-1 * (${activity.landing_config.footerHeight || "80px"}))` : 0,
+                  left: 0,
+                  right: 0,
+                  zIndex: 0,
+                }}
+              />
+            )}
+            
+            {/* Legacy Login Box Background Image (Fallback) - Only for split screen */}
+            {activity?.landing_config?.leftContentEnabled && !activity?.landing_config?.splitScreenRightBackgroundImageUrl && activity?.landing_config?.loginBoxBackgroundImageUrl && (
               <div 
                 className="absolute"
                 style={{ 
@@ -2689,8 +2980,9 @@ export default function TakeActivityPage() {
                 }}
               />
             )}
-            {/* Semi-transparent overlay when background image is present */}
-            {activity?.landing_config?.loginBoxBackgroundImageUrl && (
+            
+            {/* Semi-transparent overlay when background image is present - Only for split screen */}
+            {activity?.landing_config?.leftContentEnabled && (activity?.landing_config?.splitScreenRightBackgroundImageUrl || activity?.landing_config?.loginBoxBackgroundImageUrl) && (
               <div 
                 className="absolute"
                 style={{ 
@@ -2722,16 +3014,24 @@ export default function TakeActivityPage() {
                   className="border-b border-gray-200 text-white relative z-10 text-center"
                   style={{ backgroundColor: activity?.landing_config?.activityCardHeaderColor || "#3B82F6" }}
                 >
-                  {activity?.landing_config?.loginBoxBannerLogoUrl && (
+                  {activity?.landing_config?.loginBoxContentType === 'logo' && activity?.landing_config?.loginBoxLogoUrl ? (
                     <div className="flex justify-center mb-3">
                       <img 
-                        src={activity.landing_config.loginBoxBannerLogoUrl} 
+                        src={activity.landing_config.loginBoxLogoUrl} 
                         alt="Logo" 
-                        className="h-12 object-contain"
+                        className="h-16 object-contain"
                       />
                     </div>
-                  )}
-                  {activity?.landing_config?.loginBoxShowTitle !== false && (
+                  ) : activity?.landing_config?.loginBoxContentType === 'text' ? (
+                    <>
+                      {activity?.landing_config?.loginBoxCustomTitle && (
+                        <CardTitle className="text-xl font-bold">{activity.landing_config.loginBoxCustomTitle}</CardTitle>
+                      )}
+                      {activity?.landing_config?.loginBoxCustomSubtitle && (
+                        <p className="text-sm text-white/90 mt-2">{activity.landing_config.loginBoxCustomSubtitle}</p>
+                      )}
+                    </>
+                  ) : (
                     <>
                       <CardTitle className="text-xl font-bold">{activity.name}</CardTitle>
                       {activity.description && <p className="text-sm text-white/90 mt-2">{activity.description}</p>}
@@ -2784,15 +3084,30 @@ export default function TakeActivityPage() {
                   )}
 
                   {/* Token-based access banner */}
-                  {token && tokenValidated && (
-                    <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">Welcome, {participantData.name}!</p>
-                        <p className="text-xs text-gray-600 mt-1">Your information has been verified</p>
+                  {token && tokenValidated && (() => {
+                    // Check if there are additional fields to fill
+                    const formFields = activity?.registration_form_fields || [];
+                    const hasAdditionalFields = formFields.some((field: any) => {
+                      const fieldId = field.id || field.name;
+                      const isDefaultField = ['name', 'full_name', 'email', 'email_address'].includes(fieldId) || field.type === 'email';
+                      return !isDefaultField || !participantData[fieldId];
+                    });
+                    const needsLanguage = activity?.is_multilingual && Array.isArray(activity?.languages) && activity.languages.length > 1;
+                    
+                    return (
+                      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">Welcome, {participantData.name}!</p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {hasAdditionalFields || needsLanguage 
+                              ? "Please complete the details below to continue"
+                              : "Click continue to start the activity"}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Participant Information banner - Show for Registration, optional for Preview */}
                   {!isAnonymous && !isPreview && !token && (
@@ -2806,14 +3121,31 @@ export default function TakeActivityPage() {
                   )}
 
             {/* Form Fields - Display one per row - Hide only for anonymous */}
-            {!isAnonymous && (
-              <div className="space-y-4">
-                {formFields
-                  .sort((a, b) => a.order - b.order)
-                  .map((field, idx) => {
-                    // Check if field is pre-filled by token (name/email)
-                    const isPreFilled = token && tokenValidated && (field.id === 'name' || field.id === 'email');
-                    
+            {/* When token validated: Hide pre-filled name/email fields, only show additional fields */}
+            {!isAnonymous && (() => {
+              // Filter out pre-filled fields when token is validated
+              const fieldsToShow = formFields
+                .sort((a, b) => a.order - b.order)
+                .filter((field) => {
+                  // If token validated, hide name and email fields (they're pre-filled from DB)
+                  if (token && tokenValidated) {
+                    const fieldKey = field.id || (field as any).name || 'unknown';
+                    const isDefaultField = ['name', 'full_name', 'email', 'email_address'].includes(fieldKey) || field.type === 'email';
+                    if (isDefaultField && participantData[fieldKey]) {
+                      return false; // Hide this field
+                    }
+                  }
+                  return true;
+                });
+              
+              // If no fields to show after filtering, don't render the form section
+              if (fieldsToShow.length === 0) {
+                return null;
+              }
+              
+              return (
+                <div className="space-y-4">
+                  {fieldsToShow.map((field, idx) => {
                     return (
                       <div
                         key={field.id || `field-${idx}`}
@@ -2822,14 +3154,11 @@ export default function TakeActivityPage() {
                         <div className="space-y-2">
                           <Label htmlFor={field.id} className="text-sm font-medium text-gray-700">
                             {field.label}{" "}
-                            {!isPreview && (field.required || field.isMandatory) && !isPreFilled && (
+                            {!isPreview && (field.required || field.isMandatory) && (
                               <span className="text-red-500">*</span>
                             )}
                             {isPreview && (
                               <span className="text-gray-400 text-xs">(optional)</span>
-                            )}
-                            {isPreFilled && (
-                              <span className="text-green-600 text-xs">(verified)</span>
                             )}
                           </Label>
                           {renderFormField(field)}
@@ -2837,8 +3166,9 @@ export default function TakeActivityPage() {
                       </div>
                     );
                   })}
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {/* Anonymous mode: Show text and Start button */}
             {isAnonymous && (
@@ -2892,17 +3222,18 @@ export default function TakeActivityPage() {
         {/* Footer */}
         {(activity?.landing_config?.footerEnabled !== false) && (
           <div 
-            className="w-full px-4 md:px-8 flex items-center py-4 md:py-0 relative z-20"
+            className="w-full flex items-center py-4 md:py-0 relative z-20"
             style={{ 
               backgroundColor: activity?.landing_config?.footerBackgroundColor || "#F1F5F9",
               minHeight: activity?.landing_config?.footerHeight || "80px"
             }}
           >
-            <div className="max-w-7xl mx-auto w-full">
+            {/* Full width container with same padding as banner for consistency */}
+            <div className="w-full h-full relative">
               {/* Responsive layout - stacked on mobile, grid on desktop */}
-              <div className="flex flex-col md:grid md:grid-cols-3 items-center gap-3 md:gap-4 w-full">
+              <div className="flex flex-col md:grid md:grid-cols-3 items-center gap-3 md:gap-4 w-full h-full px-4">
                 {/* Left Section */}
-                <div className="flex justify-center md:justify-start w-full">
+                <div className="flex justify-center md:justify-start items-center w-full h-full">
                   {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'left' && (
                     <img 
                       src={activity.landing_config.footerLogoUrl} 
@@ -2925,7 +3256,7 @@ export default function TakeActivityPage() {
                 </div>
                 
                 {/* Center Section */}
-                <div className="flex justify-center w-full">
+                <div className="flex justify-center items-center w-full h-full">
                   {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'center' && (
                     <img 
                       src={activity.landing_config.footerLogoUrl} 
@@ -2948,7 +3279,7 @@ export default function TakeActivityPage() {
                 </div>
                 
                 {/* Right Section */}
-                <div className="flex justify-center md:justify-end w-full">
+                <div className="flex justify-center md:justify-end items-center w-full h-full pr-0">
                   {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'right' && (
                     <img 
                       src={activity.landing_config.footerLogoUrl} 
@@ -2993,9 +3324,32 @@ export default function TakeActivityPage() {
 
   return (
     <div 
-      className="min-h-screen"
-      style={{ backgroundColor: activity?.landing_config?.backgroundColor || "#F9FAFB" }}
+      className="min-h-screen relative"
+      style={{ 
+        backgroundColor: activity?.landing_config?.backgroundStyle === "solid" || !activity?.landing_config?.backgroundStyle
+          ? (activity?.landing_config?.backgroundColor || "#F9FAFB")
+          : activity?.landing_config?.backgroundStyle === "gradient"
+          ? undefined
+          : undefined,
+        backgroundImage: activity?.landing_config?.backgroundStyle === "gradient"
+          ? `linear-gradient(to bottom right, ${activity?.landing_config?.gradientFrom || "#F3F4F6"}, ${activity?.landing_config?.gradientTo || "#DBEAFE"})`
+          : undefined,
+      }}
     >
+      {/* Background Image with Opacity */}
+      {activity?.landing_config?.backgroundStyle === "image" && activity?.landing_config?.backgroundImageUrl && (
+        <div 
+          className="fixed inset-0 z-0"
+          style={{
+            backgroundImage: `url(${activity.landing_config.backgroundImageUrl})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundAttachment: "fixed",
+            opacity: (activity?.landing_config?.backgroundImageOpacity ?? 100) / 100,
+          }}
+        />
+      )}
+      
       {/* Top Banner - Conditional for inner pages */}
       {shouldShowBanner && activity?.landing_config && (
         <div 
@@ -3097,35 +3451,80 @@ export default function TakeActivityPage() {
         </div>
       )}
 
-      <div className="p-4 md:p-6 lg:p-8" style={{ marginTop: shouldShowBanner ? (activity?.landing_config?.bannerHeight || "120px") : 0 }}>
+      <div className="p-4 md:p-6 lg:p-8 relative z-10" style={{ marginTop: shouldShowBanner ? (activity?.landing_config?.bannerHeight || "120px") : 0 }}>
         <div className="max-w-5xl mx-auto space-y-4">
           {/* Ultra Modern Activity Header */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 shadow-2xl border border-white/10">
+          <div 
+            className="relative overflow-hidden rounded-3xl shadow-2xl border border-white/10"
+            style={{
+              background: activity?.landing_config?.contentHeaderBackgroundStyle === "solid"
+                ? (activity?.landing_config?.contentHeaderBackgroundColor || "#3B82F6")
+                : `linear-gradient(to bottom right, ${activity?.landing_config?.contentHeaderGradientFrom || "#3B82F6"}, ${activity?.landing_config?.contentHeaderGradientTo || "#7C3AED"})`,
+            }}
+          >
             {/* Animated background pattern */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.3),rgba(255,255,255,0))]" />
             
             {/* Content Container */}
             <div className="relative z-10 px-6 py-6 md:px-10 md:py-8">
-              {/* Top Row: Title + Type Badge */}
-              <div className="flex items-start justify-between gap-4 mb-6">
-                <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight">
-                  {activity.name}
-                </h1>
-                <div className="flex-shrink-0 px-4 py-1.5 bg-white/95 backdrop-blur-sm rounded-full shadow-lg">
-                  <span className="text-xs font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent uppercase tracking-wider">
-                    {activity.type}
-                  </span>
-                </div>
-              </div>
+              
+              {/* Content Header - Event Title & Description (Default) */}
+              {(!activity?.landing_config?.contentHeaderType || activity?.landing_config?.contentHeaderType === "event") && (
+                <>
+                  {/* Top Row: Title + Type Badge */}
+                  <div className="flex items-start justify-between gap-4 mb-6">
+                    <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight">
+                      {activity.name}
+                    </h1>
+                    <div className="flex-shrink-0 px-4 py-1.5 bg-white/95 backdrop-blur-sm rounded-full shadow-lg">
+                      <span className="text-xs font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent uppercase tracking-wider">
+                        {activity.type}
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Description */}
-              {activity.description && (
-                <p className="text-base text-blue-50/90 leading-relaxed mb-6 max-w-3xl">
-                  {activity.description}
-                </p>
+                  {/* Description */}
+                  {activity.description && (
+                    <p className="text-base text-blue-50/90 leading-relaxed mb-6 max-w-3xl">
+                      {activity.description}
+                    </p>
+                  )}
+                </>
+              )}
+              
+              {/* Content Header - Logo */}
+              {activity?.landing_config?.contentHeaderType === "logo" && activity?.landing_config?.contentHeaderLogoUrl && (
+                <div className="flex items-center justify-center mb-6">
+                  <img 
+                    src={activity.landing_config.contentHeaderLogoUrl} 
+                    alt="Header Logo" 
+                    className="object-contain"
+                    style={{
+                      maxHeight: activity?.landing_config?.contentHeaderLogoSize === "small" ? "80px"
+                        : activity?.landing_config?.contentHeaderLogoSize === "large" ? "160px"
+                        : "120px"
+                    }}
+                  />
+                </div>
+              )}
+              
+              {/* Content Header - Custom Text */}
+              {activity?.landing_config?.contentHeaderType === "custom" && (
+                <div className="mb-6">
+                  {activity?.landing_config?.contentHeaderCustomTitle && (
+                    <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight mb-3">
+                      {activity.landing_config.contentHeaderCustomTitle}
+                    </h1>
+                  )}
+                  {activity?.landing_config?.contentHeaderCustomSubtitle && (
+                    <p className="text-base text-blue-50/90 leading-relaxed max-w-3xl">
+                      {activity.landing_config.contentHeaderCustomSubtitle}
+                    </p>
+                  )}
+                </div>
               )}
 
-              {/* Info Grid */}
+              {/* Info Grid - Always show START DATE, END DATE, QUESTIONS */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {/* Start Date */}
                 {activity.start_date && (
@@ -3915,6 +4314,20 @@ export default function TakeActivityPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Notification Reminder Floating Button - Only show if reminders are enabled */}
+      {activity?.start_date && !submitted && activity?.allow_participant_reminders && (
+        <button
+          onClick={handleAddToCalendar}
+          className={`fixed z-40 flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-all duration-200 transform bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:shadow-xl hover:from-green-600 hover:to-emerald-600 hover:scale-105 cursor-pointer ${
+            activity?.contact_us_enabled ? 'bottom-20 right-6' : 'bottom-6 right-6'
+          }`}
+          title="Add to Calendar - Get Reminder"
+        >
+          <BellRing className="w-5 h-5 fill-current" />
+          <span className="hidden sm:inline text-sm font-medium">Get Reminder</span>
+        </button>
       )}
 
       {/* Contact Us Floating Button */}

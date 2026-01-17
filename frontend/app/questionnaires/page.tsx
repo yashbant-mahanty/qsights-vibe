@@ -22,6 +22,7 @@ import {
   Copy,
   Download,
   Filter,
+  Users,
 } from "lucide-react";
 import { questionnairesApi, type Questionnaire } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
@@ -199,29 +200,41 @@ export default function QuestionnairesPage() {
   // Mock data removed - using only real API data
 
   const displayQuestionnaires = questionnaires_display;
+  const publishedCount = displayQuestionnaires.filter((q) => q.status === "published").length;
+  const draftCount = displayQuestionnaires.filter((q) => q.status === "draft").length;
+  const archivedCount = displayQuestionnaires.filter((q) => q.status === "archived").length;
+  
+  // Calculate total responses across all questionnaires
+  const totalResponses = displayQuestionnaires.reduce((sum, q) => sum + (q.responses || 0), 0);
+  const authenticatedResponses = displayQuestionnaires.reduce((sum, q) => sum + (q.authenticatedResponses || 0), 0);
+  const guestResponses = displayQuestionnaires.reduce((sum, q) => sum + (q.guestResponses || 0), 0);
 
   const stats = [
     {
       title: "Total Questionnaires",
       value: displayQuestionnaires.length,
+      subtitle: `${publishedCount} active`,
       icon: FileText,
       variant: 'blue' as const,
     },
     {
       title: "Active",
-      value: displayQuestionnaires.filter((q) => q.status === "published").length,
+      value: publishedCount,
+      subtitle: displayQuestionnaires.length > 0 ? `${Math.round((publishedCount/displayQuestionnaires.length)*100)}% of total` : "0% of total",
       icon: CheckCircle,
       variant: 'green' as const,
     },
     {
-      title: "Draft",
-      value: displayQuestionnaires.filter((q) => q.status === "draft").length,
-      icon: Clock,
+      title: "Total Responses",
+      value: `${totalResponses} (${authenticatedResponses}/${guestResponses})`,
+      subtitle: "(Participant/Anonymous)",
+      icon: Users,
       variant: 'amber' as const,
     },
     {
       title: "Archived",
-      value: displayQuestionnaires.filter((q) => q.status === "archived").length,
+      value: archivedCount,
+      subtitle: displayQuestionnaires.length > 0 ? `${Math.round((archivedCount/displayQuestionnaires.length)*100)}% of total` : "0% of total",
       icon: XCircle,
       variant: 'teal' as const,
     },
@@ -236,6 +249,11 @@ export default function QuestionnairesPage() {
     const matchesType =
       selectedType === "all" || questionnaire.type === selectedType;
     return matchesSearch && matchesStatus && matchesType;
+  }).sort((a, b) => {
+    // Sort by latest first (createdDate)
+    const dateA = new Date(a.createdDate || 0).getTime();
+    const dateB = new Date(b.createdDate || 0).getTime();
+    return dateB - dateA;
   });
 
   const totalPages = Math.ceil(filteredQuestionnaires.length / itemsPerPage);
@@ -360,7 +378,9 @@ export default function QuestionnairesPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Questionnaires</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900">Questionnaires</h1>
+            </div>
             <p className="text-sm text-gray-500 mt-1">
               Manage surveys, assessments, and feedback forms
             </p>
@@ -392,6 +412,7 @@ export default function QuestionnairesPage() {
               key={index}
               title={stat.title}
               value={stat.value}
+              subtitle={stat.subtitle}
               icon={stat.icon}
               variant={stat.variant}
             />

@@ -81,9 +81,10 @@ export default function ActivityNotificationsPage() {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => router.push('/activities')}
-                className="group p-3 hover:bg-white rounded-xl transition-all duration-200 shadow-sm hover:shadow-md border border-gray-200"
+                className="group flex items-center space-x-2 px-4 py-2 hover:bg-white rounded-lg transition-all duration-200 shadow-sm hover:shadow-md border border-gray-200"
               >
-                <ArrowLeft className="w-5 h-5 text-gray-600 group-hover:text-qsights-blue transition-colors" />
+                <ArrowLeft className="w-4 h-4 text-gray-600 group-hover:text-qsights-blue transition-colors" />
+                <span className="text-gray-600 group-hover:text-qsights-blue transition-colors font-medium">Back</span>
               </button>
               <div>
                 <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">

@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ProgramController;
 use App\Http\Controllers\Api\ProgramRoleController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\QuestionnaireImportController;
+use App\Http\Controllers\Api\SendGridWebhookController;
 
 // Public Authentication Routes
 Route::post('/auth/validate-email', [AuthController::class, 'validateEmail']);
@@ -25,6 +26,9 @@ Route::post('/auth/reset-password', [App\Http\Controllers\Api\PasswordResetContr
 
 // Email-Embedded Response Submission (Public - No Auth Required)
 Route::get('/public/email-response', [App\Http\Controllers\Api\Public\EmailResponseController::class, 'submit']);
+
+// SendGrid Webhook (Public - No Auth Required, SendGrid will POST to this)
+Route::post('/webhooks/sendgrid', [SendGridWebhookController::class, 'handle']);
 
 // Protected Authentication Routes
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -196,6 +200,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 });
 
+// S3 Upload Routes
+Route::middleware(['auth:sanctum'])->prefix('uploads/s3')->group(function () {
+    Route::get('/config', [App\Http\Controllers\Api\S3UploadController::class, 'checkConfig']);
+    Route::post('/', [App\Http\Controllers\Api\S3UploadController::class, 'upload']);
+    Route::delete('/', [App\Http\Controllers\Api\S3UploadController::class, 'delete']);
+    Route::post('/presigned-url', [App\Http\Controllers\Api\S3UploadController::class, 'getPresignedUrl']);
+    Route::post('/view-url', [App\Http\Controllers\Api\S3UploadController::class, 'getViewUrl']);
+});
+
 // Questionnaire Routes
 Route::middleware(['auth:sanctum'])->group(function () {
 
@@ -301,15 +314,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::middleware(['role:super-admin'])->group(function () {
         Route::delete('/activities/{id}/force', [ActivityController::class, 'forceDestroy']);
         
-        // System Settings - Email Configuration
+        // System Settings
         Route::get('/system-settings', [App\Http\Controllers\Api\SystemSettingsController::class, 'index']);
         Route::post('/system-settings', [App\Http\Controllers\Api\SystemSettingsController::class, 'store']);
         Route::post('/system-settings/test-email', [App\Http\Controllers\Api\SystemSettingsController::class, 'testEmail']);
-        
-        // System Settings - AWS S3 Configuration
-        Route::get('/system-settings/s3', [App\Http\Controllers\Api\SystemSettingsController::class, 'getS3Config']);
-        Route::post('/system-settings/s3', [App\Http\Controllers\Api\SystemSettingsController::class, 'storeS3']);
-        Route::post('/system-settings/s3/test', [App\Http\Controllers\Api\SystemSettingsController::class, 'testS3']);
     });
 });
 
@@ -372,8 +380,16 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // New SendGrid notification routes
     Route::post('/notifications/send-emails', [App\Http\Controllers\Api\NotificationController::class, 'sendNotifications']);
+    
+    // OLD: Aggregated reports (kept for backward compatibility)
     Route::get('/notifications/reports', [App\Http\Controllers\Api\NotificationController::class, 'getAllReports']);
     Route::get('/notifications/reports/{activityId}', [App\Http\Controllers\Api\NotificationController::class, 'getReports']);
+    
+    // NEW: Detailed notification logs with participant info
+    Route::get('/notifications/logs', [App\Http\Controllers\Api\NotificationController::class, 'getNotificationLogs']);
+    Route::get('/notifications/logs/{activityId}', [App\Http\Controllers\Api\NotificationController::class, 'getNotificationLogsForActivity']);
+    
+    Route::get('/notifications/analytics', [App\Http\Controllers\Api\NotificationController::class, 'getAnalytics']);
     Route::get('/notifications/test', [App\Http\Controllers\Api\NotificationController::class, 'testEndpoint']);
     
     // Email-Embedded Survey routes
@@ -611,5 +627,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/', [App\Http\Controllers\Api\SystemSettingsController::class, 'index']);
         Route::post('/', [App\Http\Controllers\Api\SystemSettingsController::class, 'store']);
         Route::post('/test-email', [App\Http\Controllers\Api\SystemSettingsController::class, 'testEmail']);
+        Route::get('/s3', [App\Http\Controllers\Api\SystemSettingsController::class, 'getS3Config']);
+        Route::post('/s3', [App\Http\Controllers\Api\SystemSettingsController::class, 'saveS3Config']);
+        Route::post('/s3/test', [App\Http\Controllers\Api\SystemSettingsController::class, 'testS3Connection']);
+    });
+    
+    // Data Safety Settings (Super Admin only)
+    Route::middleware(['role:super-admin'])->prefix('data-safety')->group(function () {
+        Route::get('/settings', [App\Http\Controllers\Api\DataSafetyController::class, 'getSettings']);
+        Route::post('/settings', [App\Http\Controllers\Api\DataSafetyController::class, 'updateSettings']);
+        Route::get('/health', [App\Http\Controllers\Api\DataSafetyController::class, 'getHealthCheck']);
+        Route::get('/response-audit/stats', [App\Http\Controllers\Api\DataSafetyController::class, 'getResponseAuditStats']);
+        Route::get('/notifications/stats', [App\Http\Controllers\Api\DataSafetyController::class, 'getNotificationStats']);
     });
 });

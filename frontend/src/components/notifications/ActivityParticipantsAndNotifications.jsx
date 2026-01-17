@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, UserPlus, Trash2, Power, X, Upload, Download, Mail, Send, CheckSquare, Square, AlertCircle, CheckCircle2, Edit, Search, ChevronLeft, ChevronRight, Filter, FileText, Eye, Edit2, Users } from 'lucide-react';
+import { Loader2, UserPlus, Trash2, Power, X, Upload, Download, Mail, Send, CheckSquare, Square, AlertCircle, CheckCircle2, Edit, Search, ChevronLeft, ChevronRight, Filter, FileText, Eye, Edit2, Users, Inbox, MessageSquare, Info, Star, CheckCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -49,9 +49,30 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
   const [templatePreviewOpen, setTemplatePreviewOpen] = useState(false);
   const [editingTemplateType, setEditingTemplateType] = useState(null);
   const [templateContent, setTemplateContent] = useState({ subject: '', body: '' });
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [previewRendered, setPreviewRendered] = useState({ subject: '', body_html: '' });
 
   // Send notification modal search
   const [notificationSearchQuery, setNotificationSearchQuery] = useState('');
+
+  // Email-Embedded Survey states
+  const [emailEmbeddedModalOpen, setEmailEmbeddedModalOpen] = useState(false);
+  const [embeddedQuestions, setEmbeddedQuestions] = useState([]);
+  const [selectedEmbeddedQuestions, setSelectedEmbeddedQuestions] = useState([]);
+  const [embeddedRecipients, setEmbeddedRecipients] = useState([]);
+  const [embeddedSearchQuery, setEmbeddedSearchQuery] = useState('');
+  const [sendingEmbedded, setSendingEmbedded] = useState(false);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  
+  // Email-Embedded Survey email config states
+  const [embeddedEmailConfig, setEmbeddedEmailConfig] = useState({
+    subject: '',
+    fromName: '',
+    preheader: '',
+    headerText: '',
+    footerText: '',
+  });
 
   // Pagination and filtering states
   const [searchQuery, setSearchQuery] = useState('');
@@ -222,6 +243,176 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       setLoadingExisting(false);
     }
   }, [getAuthToken, participants]);
+
+  // Fetch template by type
+  const fetchTemplate = useCallback(async (templateType) => {
+    try {
+      setTemplateLoading(true);
+      const token = getAuthToken();
+      if (!token) return;
+      
+      const response = await fetch(`${API_URL}/activities/${activityId}/notification-templates/type/${templateType}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to fetch template');
+        // Use empty template if fetch fails
+        setTemplateContent({ subject: '', body: '' });
+        return;
+      }
+      
+      const result = await response.json();
+      const template = result.template;
+      
+      if (template) {
+        setTemplateContent({
+          subject: template.subject || '',
+          body: template.body_html || template.body || '',
+        });
+        console.log('✓ Template loaded:', templateType, template.subject);
+      } else {
+        setTemplateContent({ subject: '', body: '' });
+      }
+    } catch (err) {
+      console.error('Error fetching template:', err);
+      setTemplateContent({ subject: '', body: '' });
+    } finally {
+      setTemplateLoading(false);
+    }
+  }, [activityId, getAuthToken]);
+
+  // Save template
+  const handleSaveTemplate = useCallback(async () => {
+    if (!editingTemplateType) return;
+    
+    try {
+      setTemplateSaving(true);
+      const token = getAuthToken();
+      if (!token) {
+        toast({ title: "Error", description: "Not authenticated. Please refresh the page.", variant: "error" });
+        return;
+      }
+      
+      const payload = {
+        notification_type: editingTemplateType,
+        subject: templateContent.subject,
+        body_html: templateContent.body,
+        is_active: true,
+      };
+      
+      const response = await fetch(`${API_URL}/activities/${activityId}/notification-templates`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to save template');
+      }
+      
+      toast({ title: "Success!", description: "Template saved successfully!", variant: "success" });
+      setTemplateEditorOpen(false);
+      console.log('✓ Template saved:', editingTemplateType);
+    } catch (err) {
+      console.error('Error saving template:', err);
+      toast({ title: "Error", description: err.message || "Failed to save template", variant: "error" });
+    } finally {
+      setTemplateSaving(false);
+    }
+  }, [activityId, editingTemplateType, templateContent, getAuthToken]);
+
+  // Fetch rendered preview with QR code from backend
+  const fetchRenderedPreview = useCallback(async (templateType) => {
+    try {
+      setTemplateLoading(true);
+      const token = getAuthToken();
+      if (!token) return;
+      
+      // First get the template content
+      const templateResponse = await fetch(`${API_URL}/activities/${activityId}/notification-templates/type/${templateType}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!templateResponse.ok) {
+        console.error('Failed to fetch template for preview');
+        return;
+      }
+      
+      const templateResult = await templateResponse.json();
+      const template = templateResult.template;
+      
+      if (template) {
+        setTemplateContent({
+          subject: template.subject || '',
+          body: template.body_html || template.body || '',
+        });
+        
+        // Now call the preview endpoint to get rendered HTML with QR code
+        const previewResponse = await fetch(`${API_URL}/activities/${activityId}/notification-templates/preview`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            notification_type: templateType,
+            subject: template.subject || '',
+            body_html: template.body_html || template.body || '',
+          }),
+        });
+        
+        if (previewResponse.ok) {
+          const previewResult = await previewResponse.json();
+          setPreviewRendered({
+            subject: previewResult.preview?.subject || template.subject || '',
+            body_html: previewResult.preview?.body_html || template.body_html || '',
+          });
+          console.log('✓ Preview rendered with QR code');
+        } else {
+          // Fallback to template content if preview fails
+          setPreviewRendered({
+            subject: template.subject || '',
+            body_html: template.body_html || template.body || '',
+          });
+        }
+      } else {
+        setTemplateContent({ subject: '', body: '' });
+        setPreviewRendered({ subject: '', body_html: '' });
+      }
+    } catch (err) {
+      console.error('Error fetching rendered preview:', err);
+      setPreviewRendered({ subject: '', body_html: '' });
+    } finally {
+      setTemplateLoading(false);
+    }
+  }, [activityId, getAuthToken]);
+
+  // Load template when editor opens
+  useEffect(() => {
+    if (templateEditorOpen && editingTemplateType) {
+      fetchTemplate(editingTemplateType);
+    }
+  }, [templateEditorOpen, editingTemplateType, fetchTemplate]);
+
+  // Load rendered preview when preview opens
+  useEffect(() => {
+    if (templatePreviewOpen && editingTemplateType) {
+      fetchRenderedPreview(editingTemplateType);
+    }
+  }, [templatePreviewOpen, editingTemplateType, fetchRenderedPreview]);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -647,6 +838,204 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     }
   }, [activityId, notificationType, selectedForNotification, getAuthToken]);
 
+  // Email-Embedded Survey Functions
+  const fetchQuestionsForEmbedded = useCallback(async () => {
+    try {
+      setLoadingQuestions(true);
+      const token = getAuthToken();
+      if (!token) return;
+      
+      // Fetch questions from the activity's questionnaire
+      const response = await fetch(`${API_URL}/activities/${activityId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch activity');
+      const result = await response.json();
+      const activityData = result.data;
+      
+      if (activityData?.questionnaire_id) {
+        // Fetch the questionnaire with sections and questions
+        const qResponse = await fetch(`${API_URL}/questionnaires/${activityData.questionnaire_id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
+          },
+        });
+        
+        if (qResponse.ok) {
+          const qResult = await qResponse.json();
+          
+          // Questions are nested inside sections
+          // Flatten all questions from all sections
+          const allQuestions = [];
+          const sections = qResult.data?.sections || [];
+          
+          sections.forEach(section => {
+            const sectionQuestions = section.questions || [];
+            sectionQuestions.forEach(q => {
+              allQuestions.push({
+                ...q,
+                section_title: section.title,
+              });
+            });
+          });
+          
+          // Filter for questions that can be embedded
+          // Question types in DB: radio, checkbox, select, multiselect, rating, scale, yesno, text, etc.
+          const embeddableTypes = ['radio', 'single_select', 'yesno', 'rating', 'scale', 'select'];
+          const questions = allQuestions.filter(q => 
+            embeddableTypes.includes(q.type)
+          );
+          
+          console.log('Fetched questions:', allQuestions.length, 'Embeddable:', questions.length);
+          setEmbeddedQuestions(questions);
+        }
+      } else {
+        console.log('No questionnaire linked to activity');
+        setEmbeddedQuestions([]);
+      }
+    } catch (err) {
+      console.error('Error fetching questions:', err);
+      toast({ title: "Error", description: "Failed to load questions", variant: "error" });
+    } finally {
+      setLoadingQuestions(false);
+    }
+  }, [activityId, getAuthToken]);
+
+  const handleOpenEmailEmbedded = useCallback(() => {
+    setEmailEmbeddedModalOpen(true);
+    setSelectedEmbeddedQuestions([]);
+    setEmbeddedRecipients([]);
+    setEmbeddedSearchQuery('');
+    fetchQuestionsForEmbedded();
+  }, [fetchQuestionsForEmbedded]);
+
+  const handleToggleEmbeddedQuestion = useCallback((question) => {
+    setSelectedEmbeddedQuestions(prev =>
+      prev.some(q => q.id === question.id)
+        ? prev.filter(q => q.id !== question.id)
+        : [...prev, question]
+    );
+  }, []);
+
+  const handleSelectAllQuestions = useCallback(() => {
+    if (selectedEmbeddedQuestions.length === embeddedQuestions.length) {
+      setSelectedEmbeddedQuestions([]);
+    } else {
+      setSelectedEmbeddedQuestions([...embeddedQuestions]);
+    }
+  }, [embeddedQuestions, selectedEmbeddedQuestions]);
+
+  const handleToggleEmbeddedRecipient = useCallback((participantId) => {
+    setEmbeddedRecipients(prev =>
+      prev.includes(participantId)
+        ? prev.filter(id => id !== participantId)
+        : [...prev, participantId]
+    );
+  }, []);
+
+  const handleSelectAllEmbedded = useCallback(() => {
+    const activeParticipants = participants.filter(p => p.status === 'active');
+    if (embeddedRecipients.length === activeParticipants.length) {
+      setEmbeddedRecipients([]);
+    } else {
+      setEmbeddedRecipients(activeParticipants.map(p => p.id));
+    }
+  }, [participants, embeddedRecipients]);
+
+  const handleSendEmbeddedSurvey = useCallback(async () => {
+    if (selectedEmbeddedQuestions.length === 0) {
+      toast({ title: "Validation Error", description: "Please select at least one question", variant: "warning" });
+      return;
+    }
+    if (embeddedRecipients.length === 0) {
+      toast({ title: "Validation Error", description: "Please select at least one recipient", variant: "warning" });
+      return;
+    }
+
+    try {
+      setSendingEmbedded(true);
+      const token = getAuthToken();
+      
+      // Get participant emails
+      const selectedParticipants = participants.filter(p => embeddedRecipients.includes(p.id));
+      const emails = selectedParticipants.map(p => p.email);
+      
+      // Debug: Log the email config being sent
+      console.log('[Email-Embedded Survey] Email config state:', embeddedEmailConfig);
+      console.log('[Email-Embedded Survey] Email config to send:', {
+        subject: embeddedEmailConfig.subject || null,
+        from_name: embeddedEmailConfig.fromName || null,
+        preheader: embeddedEmailConfig.preheader || null,
+        header_text: embeddedEmailConfig.headerText || null,
+        footer_text: embeddedEmailConfig.footerText || null,
+      });
+      
+      // Send for each selected question
+      let totalSent = 0;
+      let totalFailed = 0;
+      
+      for (const question of selectedEmbeddedQuestions) {
+        const response = await fetch(`${API_URL}/email-embedded-survey/send`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            activity_id: activityId,
+            question_id: question.id,
+            emails: emails,
+            email_config: {
+              subject: embeddedEmailConfig.subject || null,
+              from_name: embeddedEmailConfig.fromName || null,
+              preheader: embeddedEmailConfig.preheader || null,
+              header_text: embeddedEmailConfig.headerText || null,
+              footer_text: embeddedEmailConfig.footerText || null,
+            },
+          }),
+        });
+
+        const result = await response.json();
+        
+        if (response.ok) {
+          totalSent += result.sent_count || emails.length;
+        } else {
+          totalFailed += emails.length;
+        }
+      }
+
+      if (totalFailed > 0) {
+        toast({ 
+          title: "Partially Sent", 
+          description: `Sent ${totalSent} emails. ${totalFailed} failed.`, 
+          variant: "warning" 
+        });
+      } else {
+        toast({ 
+          title: "Success!", 
+          description: `Email-embedded survey sent! ${selectedEmbeddedQuestions.length} question(s) to ${emails.length} recipient(s).`, 
+          variant: "success" 
+        });
+      }
+      
+      setEmailEmbeddedModalOpen(false);
+      setSelectedEmbeddedQuestions([]);
+      setEmbeddedRecipients([]);
+      setEmbeddedEmailConfig({ subject: '', fromName: '', preheader: '', headerText: '', footerText: '' });
+    } catch (err) {
+      console.error('Error sending email-embedded survey:', err);
+      toast({ title: "Error", description: err.message || "Failed to send survey", variant: "error" });
+    } finally {
+      setSendingEmbedded(false);
+    }
+  }, [activityId, selectedEmbeddedQuestions, embeddedRecipients, participants, getAuthToken, embeddedEmailConfig]);
+
   // Render form fields
   const renderFormFields = (isEdit = false) => {
     const fields = [];
@@ -716,14 +1105,27 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     <div className="space-y-6">
 
       <Tabs defaultValue="participants" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="participants" className="flex items-center gap-2">
-            <UserPlus className="w-4 h-4" />
-            Add Participants
+        <TabsList className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200 flex-wrap gap-1 mb-6">
+          <TabsTrigger 
+            value="participants" 
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-100 hover:text-gray-900"
+          >
+            <Users className="w-4 h-4 mr-2" />
+            Manage Participants
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="flex items-center gap-2">
-            <Mail className="w-4 h-4" />
-            Notification Setting
+          <TabsTrigger 
+            value="notifications" 
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-green-600 data-[state=active]:shadow-lg data-[state=active]:shadow-green-100 hover:text-gray-900"
+          >
+            <Mail className="w-4 h-4 mr-2" />
+            Standard Notifications
+          </TabsTrigger>
+          <TabsTrigger 
+            value="embedded" 
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+          >
+            <Inbox className="w-4 h-4 mr-2" />
+            Email-Embedded Survey
           </TabsTrigger>
         </TabsList>
 
@@ -1068,54 +1470,66 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
         <TabsContent value="notifications" className="mt-6">
           <Card className="p-6">
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Activity Notifications</h3>
-                <p className="text-sm text-gray-500">
-                  Send notifications to participants for this activity.
-                </p>
+              {/* Header with icon */}
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-100">
+                  <Mail className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Standard Notifications</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Send automated email notifications to participants at various stages of the activity.
+                  </p>
+                </div>
               </div>
 
+              {/* Notification Types Grid */}
               <div>
-                <Label className="text-sm font-medium mb-2 block">Select Notification Type</Label>
+                <Label className="text-sm font-medium mb-3 block text-gray-700">Select Notification Type</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {notificationTypes.map((type) => (
                     <div
                       key={type.value}
-                      className={`p-4 border-2 rounded-lg transition ${
+                      className={`p-4 border-2 rounded-xl transition-all duration-200 cursor-pointer hover:shadow-md ${
                         notificationType === type.value
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200'
+                          ? 'border-green-500 bg-gradient-to-br from-green-50 to-emerald-50 shadow-md'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
                       }`}
+                      onClick={() => setNotificationType(type.value)}
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <button
-                          onClick={() => setNotificationType(type.value)}
-                          className="font-medium text-sm text-left flex-1"
-                        >
+                        <span className={`font-semibold text-sm ${notificationType === type.value ? 'text-green-700' : 'text-gray-700'}`}>
                           {type.label}
-                        </button>
+                        </span>
+                        {notificationType === type.value && (
+                          <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                            <CheckCircle className="h-3 w-3 text-white" />
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setEditingTemplateType(type.value);
                             setTemplateEditorOpen(true);
                           }}
-                          className="flex-1 flex items-center justify-center gap-1 text-xs"
+                          className="flex-1 flex items-center justify-center gap-1 text-xs hover:bg-green-50 hover:text-green-700 hover:border-green-300"
                         >
                           <Edit2 className="h-3 w-3" />
-                          Edit Template
+                          Edit
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setEditingTemplateType(type.value);
                             setTemplatePreviewOpen(true);
                           }}
-                          className="flex-1 flex items-center justify-center gap-1 text-xs"
+                          className="flex-1 flex items-center justify-center gap-1 text-xs hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
                         >
                           <Eye className="h-3 w-3" />
                           Preview
@@ -1126,11 +1540,12 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              {/* Send Notification Button */}
+              <div className="flex justify-end pt-4 border-t border-gray-100">
                 <Button
                   onClick={handleOpenSendNotification}
                   disabled={participants.filter(p => p.status === 'active').length === 0}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg shadow-green-100"
                 >
                   <Send className="h-4 w-4" />
                   Send Notification
@@ -1138,9 +1553,97 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               </div>
 
               {participants.filter(p => p.status === 'active').length === 0 && (
-                <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
+                <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-xl bg-gray-50">
                   <Mail className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                  <p>No active participants available. Add participants first to send notifications.</p>
+                  <p className="font-medium">No active participants available</p>
+                  <p className="text-sm mt-1">Add participants first to send notifications.</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* Email-Embedded Survey Tab */}
+        <TabsContent value="embedded" className="mt-6">
+          <Card className="p-6">
+            <div className="space-y-6">
+              {/* Header with icon */}
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-100">
+                  <Inbox className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-gray-900">Email-Embedded Survey</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Embed survey questions directly in the email body. Recipients can answer by clicking buttons without leaving their inbox.
+                  </p>
+                </div>
+              </div>
+
+              {/* Features Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-gradient-to-br from-purple-50 to-white border border-purple-100 rounded-xl">
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
+                    <CheckCircle className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Single Choice</h4>
+                  <p className="text-xs text-gray-500">Radio buttons, dropdowns, and select options</p>
+                </div>
+                <div className="p-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl">
+                  <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mb-3">
+                    <CheckCircle className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Yes/No Questions</h4>
+                  <p className="text-xs text-gray-500">Simple binary choice questions</p>
+                </div>
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-white border border-blue-100 rounded-xl">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
+                    <Star className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Rating & Scale</h4>
+                  <p className="text-xs text-gray-500">Star ratings and numerical scales</p>
+                </div>
+              </div>
+
+              {/* How it works */}
+              <div className="bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-xl p-4">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Info className="h-4 w-4 text-gray-400" />
+                  How it works
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
+                    <p className="text-gray-600">Select one or more questions to embed in the email</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">2</div>
+                    <p className="text-gray-600">Recipients see questions with clickable answer buttons</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</div>
+                    <p className="text-gray-600">One-click response records their answer instantly</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Send Button */}
+              <div className="flex justify-end pt-4 border-t border-gray-100">
+                <Button
+                  onClick={handleOpenEmailEmbedded}
+                  disabled={participants.filter(p => p.status === 'active').length === 0}
+                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-100"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Create Email-Embedded Survey
+                </Button>
+              </div>
+
+              {participants.filter(p => p.status === 'active').length === 0 && (
+                <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-xl bg-gray-50">
+                  <Inbox className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                  <p className="font-medium">No active participants available</p>
+                  <p className="text-sm mt-1">Add participants first to send email-embedded surveys.</p>
                 </div>
               )}
             </div>
@@ -1153,8 +1656,13 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900">Add Participants</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-100">
+                  <UserPlus className="h-5 w-5 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Add Participants</h2>
+              </div>
               <button 
                 onClick={() => {
                   setAddNewModalOpen(false);
@@ -1168,39 +1676,37 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               </button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 px-6">
-              <button
-                onClick={() => setAddModalTab('create')}
-                className={`px-4 py-3 text-sm font-semibold transition-colors relative ${
-                  addModalTab === 'create'
-                    ? 'text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Create New
-                {addModalTab === 'create' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  setAddModalTab('existing');
-                  if (allExistingParticipants.length === 0) {
-                    fetchExistingParticipants();
-                  }
-                }}
-                className={`px-4 py-3 text-sm font-semibold transition-colors relative ${
-                  addModalTab === 'existing'
-                    ? 'text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Import from Existing
-                {addModalTab === 'existing' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
-                )}
-              </button>
+            {/* Advanced Tabs */}
+            <div className="px-6 pt-4">
+              <div className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200">
+                <button
+                  onClick={() => setAddModalTab('create')}
+                  className={`inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold transition-all ${
+                    addModalTab === 'create'
+                      ? 'bg-white text-blue-600 shadow-lg shadow-blue-100'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Create New
+                </button>
+                <button
+                  onClick={() => {
+                    setAddModalTab('existing');
+                    if (allExistingParticipants.length === 0) {
+                      fetchExistingParticipants();
+                    }
+                  }}
+                  className={`inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold transition-all ${
+                    addModalTab === 'existing'
+                      ? 'bg-white text-green-600 shadow-lg shadow-green-100'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  Import Existing
+                </button>
+              </div>
             </div>
 
             {/* Create New Tab */}
@@ -1218,7 +1724,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                   <Button variant="outline" onClick={() => setAddNewModalOpen(false)} className="flex-1 h-11">
                     Cancel
                   </Button>
-                  <Button onClick={handleAddNewParticipant} className="flex-1 h-11 bg-blue-600 hover:bg-blue-700">
+                  <Button onClick={handleAddNewParticipant} className="flex-1 h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-100">
                     Add Participant
                   </Button>
                 </div>
@@ -1641,6 +2147,14 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               </button>
             </div>
 
+            {templateLoading ? (
+              <div className="flex-1 flex items-center justify-center py-12">
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Loading template...</p>
+                </div>
+              </div>
+            ) : (
             <div className="flex-1 overflow-y-auto space-y-4 mb-4">
               {/* Subject Field */}
               <div>
@@ -1674,7 +2188,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Available placeholders: {'{{activity_name}}, {{participant_name}}, {{activity_start_date}}, {{activity_end_date}}, {{activity_description}}, {{program_name}}, {{organization_name}}'}
+                  Available placeholders: {'{{activity_name}}, {{participant_name}}, {{activity_start_date}}, {{activity_end_date}}, {{activity_description}}, {{program_name}}, {{organization_name}}, {{qr_code}}'}
                 </p>
               </div>
 
@@ -1688,10 +2202,12 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                   <li>• Use {'{{participant_name}}'} to personalize emails</li>
                   <li>• Include {'{{activity_name}}'} for activity reference</li>
                   <li>• Add dates with {'{{activity_start_date}}'} and {'{{activity_end_date}}'}</li>
+                  <li>• Add {'{{qr_code}}'} to include a scannable QR code linking to the event</li>
                   <li>• HTML tags like &lt;strong&gt;, &lt;em&gt;, &lt;br&gt; are supported</li>
                 </ul>
               </div>
             </div>
+            )}
 
             {/* Footer Actions */}
             <div className="flex items-center gap-2 pt-4 border-t">
@@ -1702,6 +2218,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                   setTemplatePreviewOpen(true);
                 }}
                 className="flex items-center gap-2"
+                disabled={templateLoading}
               >
                 <Eye className="h-4 w-4" />
                 Preview
@@ -1710,13 +2227,13 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               <Button variant="outline" onClick={() => setTemplateEditorOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={() => {
-                // TODO: Save template to backend
-                toast({ title: "Success!", description: "Template saved successfully!", variant: "success" });
-                setTemplateEditorOpen(false);
-              }}>
-                <FileText className="h-4 w-4 mr-2" />
-                Save Template
+              <Button onClick={handleSaveTemplate} disabled={templateSaving}>
+                {templateSaving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-2" />
+                )}
+                {templateSaving ? 'Saving...' : 'Save Template'}
               </Button>
             </div>
           </div>
@@ -1740,6 +2257,14 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               </button>
             </div>
 
+            {templateLoading ? (
+              <div className="flex-1 flex items-center justify-center py-12">
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Loading preview...</p>
+                </div>
+              </div>
+            ) : (
             <div className="flex-1 overflow-y-auto mb-4">
               {/* Preview Info */}
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
@@ -1754,14 +2279,16 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                 <div className="bg-gray-100 px-4 py-3 border-b">
                   <div className="text-xs text-gray-600 mb-1">Subject:</div>
                   <div className="font-semibold text-sm">
-                    {templateContent.subject || `You're invited to ${activityName || 'Demo Activity'}`}
+                    {previewRendered.subject || templateContent.subject || `You're invited to ${activityName || 'Demo Activity'}`}
                   </div>
                 </div>
 
-                {/* Email Body */}
+                {/* Email Body - Use rendered preview from backend */}
                 <div className="p-6 bg-white">
                   <div className="prose prose-sm max-w-none">
-                    {templateContent.body ? (
+                    {previewRendered.body_html ? (
+                      <div dangerouslySetInnerHTML={{ __html: previewRendered.body_html }} />
+                    ) : templateContent.body ? (
                       <div dangerouslySetInnerHTML={{ 
                         __html: templateContent.body
                           .replace(/\{\{activity_name\}\}/g, activityName || 'Demo Activity')
@@ -1795,6 +2322,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Footer Actions */}
             <div className="flex items-center gap-2 pt-4 border-t">
@@ -1813,6 +2341,332 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               <Button onClick={() => setTemplatePreviewOpen(false)}>
                 Close
               </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Email-Embedded Survey Modal */}
+      {emailEmbeddedModalOpen && mounted && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-t-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Inbox className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Email-Embedded Survey</h2>
+                  <p className="text-sm text-white/80">Send questions directly in email body</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEmailEmbeddedModalOpen(false)} 
+                className="text-white/70 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Step 1: Select Questions */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                    <h3 className="font-semibold text-gray-900">Select Questions</h3>
+                    {selectedEmbeddedQuestions.length > 0 && (
+                      <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
+                        {selectedEmbeddedQuestions.length} selected
+                      </span>
+                    )}
+                  </div>
+                  {embeddedQuestions.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleSelectAllQuestions}
+                      className="text-xs"
+                    >
+                      {selectedEmbeddedQuestions.length === embeddedQuestions.length ? 'Deselect All' : 'Select All'}
+                    </Button>
+                  )}
+                </div>
+                
+                {loadingQuestions ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+                    <span className="ml-2 text-gray-500">Loading questions...</span>
+                  </div>
+                ) : embeddedQuestions.length === 0 ? (
+                  <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                    <AlertCircle className="h-10 w-10 mx-auto text-gray-400 mb-2" />
+                    <p className="text-gray-500 font-medium">No embeddable questions found</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      This activity needs questions of type: Single Choice, Yes/No, or Rating
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-3 max-h-60 overflow-y-auto">
+                    {embeddedQuestions.map((question, index) => (
+                      <div
+                        key={question.id}
+                        onClick={() => handleToggleEmbeddedQuestion(question)}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          selectedEmbeddedQuestions.some(q => q.id === question.id)
+                            ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+                            : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${
+                            selectedEmbeddedQuestions.some(q => q.id === question.id)
+                              ? 'border-purple-600 bg-purple-600'
+                              : 'border-gray-300'
+                          }`}>
+                            {selectedEmbeddedQuestions.some(q => q.id === question.id) && (
+                              <CheckCircle2 className="h-3 w-3 text-white" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">Q{index + 1}. {question.title || question.question_text}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                                {(question.type || question.question_type || '').replace('_', ' ')}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                {question.options?.length || 0} options
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Select Recipients */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                    <h3 className="font-semibold text-gray-900">Select Recipients</h3>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSelectAllEmbedded}
+                    className="text-xs"
+                  >
+                    {embeddedRecipients.length === participants.filter(p => p.status === 'active').length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                </div>
+
+                {/* Search */}
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search participants..."
+                    value={embeddedSearchQuery}
+                    onChange={(e) => setEmbeddedSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+
+                {/* Participants List */}
+                <div className="border rounded-lg max-h-60 overflow-y-auto">
+                  {participants.filter(p => p.status === 'active').length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                      <p>No active participants</p>
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <tbody className="divide-y divide-gray-200">
+                        {participants
+                          .filter(p => p.status === 'active')
+                          .filter(p => 
+                            embeddedSearchQuery === '' ||
+                            p.name?.toLowerCase().includes(embeddedSearchQuery.toLowerCase()) ||
+                            p.email?.toLowerCase().includes(embeddedSearchQuery.toLowerCase())
+                          )
+                          .map((participant) => (
+                            <tr
+                              key={participant.id}
+                              onClick={() => handleToggleEmbeddedRecipient(participant.id)}
+                              className={`cursor-pointer hover:bg-gray-50 transition ${
+                                embeddedRecipients.includes(participant.id) ? 'bg-indigo-50' : ''
+                              }`}
+                            >
+                              <td className="px-4 py-3 w-12">
+                                <input
+                                  type="checkbox"
+                                  checked={embeddedRecipients.includes(participant.id)}
+                                  onChange={() => {}}
+                                  className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                                />
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center text-sm font-semibold">
+                                    {participant.name?.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium text-gray-900">{participant.name}</p>
+                                    <p className="text-sm text-gray-500">{participant.email}</p>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        }
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 3: Email Configuration */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</span>
+                  <h3 className="font-semibold text-gray-900">Email Configuration</h3>
+                  <span className="text-xs text-gray-500">(Optional)</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  {/* Subject Line */}
+                  <div className="md:col-span-2">
+                    <Label htmlFor="embedded-subject" className="text-sm font-medium text-gray-700">Email Subject</Label>
+                    <Input
+                      id="embedded-subject"
+                      value={embeddedEmailConfig.subject}
+                      onChange={(e) => setEmbeddedEmailConfig(prev => ({ ...prev, subject: e.target.value }))}
+                      placeholder="e.g., Quick Survey: We'd love your feedback!"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Leave empty for default: "Quick Survey from [Activity Name]"</p>
+                  </div>
+                  
+                  {/* From Name */}
+                  <div>
+                    <Label htmlFor="embedded-from-name" className="text-sm font-medium text-gray-700">From Name</Label>
+                    <Input
+                      id="embedded-from-name"
+                      value={embeddedEmailConfig.fromName}
+                      onChange={(e) => setEmbeddedEmailConfig(prev => ({ ...prev, fromName: e.target.value }))}
+                      placeholder="e.g., QSights Team"
+                      className="mt-1"
+                    />
+                  </div>
+                  
+                  {/* Preheader */}
+                  <div>
+                    <Label htmlFor="embedded-preheader" className="text-sm font-medium text-gray-700">Preheader Text</Label>
+                    <Input
+                      id="embedded-preheader"
+                      value={embeddedEmailConfig.preheader}
+                      onChange={(e) => setEmbeddedEmailConfig(prev => ({ ...prev, preheader: e.target.value }))}
+                      placeholder="Preview text shown in inbox"
+                      className="mt-1"
+                    />
+                  </div>
+                  
+                  {/* Header Text */}
+                  <div className="md:col-span-2">
+                    <Label htmlFor="embedded-header" className="text-sm font-medium text-gray-700">Header Message</Label>
+                    <Input
+                      id="embedded-header"
+                      value={embeddedEmailConfig.headerText}
+                      onChange={(e) => setEmbeddedEmailConfig(prev => ({ ...prev, headerText: e.target.value }))}
+                      placeholder="e.g., Hi {{name}}, please take a moment to answer this quick question:"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Use {'{{name}}'} to personalize with recipient's name</p>
+                  </div>
+                  
+                  {/* Footer Text */}
+                  <div className="md:col-span-2">
+                    <Label htmlFor="embedded-footer" className="text-sm font-medium text-gray-700">Footer Message</Label>
+                    <Input
+                      id="embedded-footer"
+                      value={embeddedEmailConfig.footerText}
+                      onChange={(e) => setEmbeddedEmailConfig(prev => ({ ...prev, footerText: e.target.value }))}
+                      placeholder="e.g., Thank you for your feedback!"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview */}
+              {selectedEmbeddedQuestions.length > 0 && (
+                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-4 border border-purple-200">
+                  <h4 className="font-semibold text-purple-900 mb-2 flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Email Preview ({selectedEmbeddedQuestions.length} question{selectedEmbeddedQuestions.length !== 1 ? 's' : ''})
+                  </h4>
+                  <div className="space-y-3 max-h-48 overflow-y-auto">
+                    {selectedEmbeddedQuestions.map((question, qIdx) => (
+                      <div key={question.id} className="bg-white rounded-lg p-4 shadow-sm">
+                        <p className="text-gray-800 font-medium mb-3">Q{qIdx + 1}. {question.title || question.question_text}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {(question.options || []).slice(0, 5).map((option, idx) => (
+                            <span 
+                              key={idx} 
+                              className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-xs font-medium"
+                            >
+                              {option.option_text || option.text || option.label || option}
+                            </span>
+                          ))}
+                          {(question.options || []).length > 5 && (
+                            <span className="px-3 py-1.5 bg-gray-200 text-gray-600 rounded-lg text-xs">
+                              +{question.options.length - 5} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-3">
+                    Each recipient will receive separate emails for each selected question.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50 rounded-b-xl">
+              <p className="text-sm text-gray-600">
+                {selectedEmbeddedQuestions.length} question{selectedEmbeddedQuestions.length !== 1 ? 's' : ''} • {embeddedRecipients.length} recipient{embeddedRecipients.length !== 1 ? 's' : ''}
+              </p>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" onClick={() => setEmailEmbeddedModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSendEmbeddedSurvey}
+                  disabled={selectedEmbeddedQuestions.length === 0 || embeddedRecipients.length === 0 || sendingEmbedded}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+                >
+                  {sendingEmbedded ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Send {selectedEmbeddedQuestions.length * embeddedRecipients.length} email{selectedEmbeddedQuestions.length * embeddedRecipients.length !== 1 ? 's' : ''}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bell, Check, CheckCheck, X } from "lucide-react";
+import { Bell, BellDot, Check, CheckCheck, X } from "lucide-react";
 import { notificationsApi, type Notification } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
@@ -149,6 +149,24 @@ export default function NotificationBell() {
     }
   }
 
+  // Clear all notifications permanently (deletes from database)
+  async function handleClearAll() {
+    try {
+      // Optimistically update UI first
+      setNotifications([]);
+      setUnreadCount(0);
+      
+      // Persist to backend - deletes all notifications for user
+      await notificationsApi.clearAll();
+      
+      // Notifications stay cleared across page refreshes
+    } catch (error) {
+      console.error('Error clearing all notifications:', error);
+      // Reload notifications on error
+      await fetchNotifications();
+    }
+  }
+
   function getNotificationIcon(type: Notification['type']) {
     switch (type) {
       case 'approval_request':
@@ -196,10 +214,18 @@ export default function NotificationBell() {
           setIsOpen(!isOpen);
           if (!isOpen) loadNotifications();
         }}
-        className="relative p-2 hover:bg-gray-100 rounded-full transition-colors"
+        className={`relative p-2 rounded-full transition-all duration-200 ${
+          unreadCount > 0 
+            ? 'bg-green-50 hover:bg-green-100' 
+            : 'hover:bg-gray-100'
+        }`}
         aria-label="Notifications"
       >
-        <Bell className="w-5 h-5 text-gray-700" />
+        {unreadCount > 0 ? (
+          <BellDot className="w-5 h-5 text-green-600" />
+        ) : (
+          <Bell className="w-5 h-5 text-gray-600" />
+        )}
         {unreadCount > 0 && (
           <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full min-w-[18px]">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -218,15 +244,28 @@ export default function NotificationBell() {
                 <p className="text-xs text-gray-500">{unreadCount} unread</p>
               )}
             </div>
-            {notifications.length > 0 && unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllRead}
-                className="text-xs text-qsights-blue hover:text-qsights-blue/80 font-medium flex items-center gap-1"
-              >
-                <CheckCheck className="w-3.5 h-3.5" />
-                Mark all read
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {notifications.length > 0 && unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="text-xs text-qsights-blue hover:text-qsights-blue/80 font-medium flex items-center gap-1"
+                  title="Mark all as read"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleClearAll}
+                  className="text-xs text-gray-600 hover:text-gray-900 font-medium flex items-center gap-1"
+                  title="Clear all notifications (UI only)"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Clear All
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Notifications List */}
@@ -238,7 +277,7 @@ export default function NotificationBell() {
             ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-4">
                 <Bell className="w-12 h-12 text-gray-300 mb-3" />
-                <p className="text-gray-500 text-sm font-medium">No new notifications</p>
+                <p className="text-gray-500 text-sm font-medium">No notifications</p>
                 <p className="text-gray-400 text-xs mt-1">You're all caught up!</p>
               </div>
             ) : (

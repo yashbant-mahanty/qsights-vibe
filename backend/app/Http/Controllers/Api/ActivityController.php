@@ -29,60 +29,49 @@ class ActivityController extends Controller
                 $query->where('participants.status', 'active')
                       ->whereNull('participants.deleted_at');
             },
-            // Response counts - ONLY from VALID participants (registered OR anonymous with proper type)
+            // Total response counts - from any valid participant
             'responses' => function ($query) {
                 $query->whereNotNull('participant_id')
                       ->whereHas('participant', function($q) {
                           $q->where('status', 'active')
-                            ->whereNull('deleted_at')
-                            ->where(function($subQ) {
-                                // Registered participants (not anonymous)
-                                $subQ->where(function($registered) {
-                                    $registered->where('is_guest', false)
-                                               ->where(function($notAnon) {
-                                                   $notAnon->whereNull('additional_data')
-                                                           ->orWhereRaw("(additional_data IS NOT NULL AND (additional_data->>'participant_type' IS NULL OR additional_data->>'participant_type' != 'anonymous'))");
-                                               });
-                                })
-                                // OR Anonymous participants (with proper type marking)
-                                ->orWhereRaw("additional_data IS NOT NULL AND additional_data->>'participant_type' = 'anonymous'");
-                            });
+                            ->whereNull('deleted_at');
                       });
             },
+            // Authenticated responses - from registered participants (is_guest=false)
             'responses as authenticated_responses_count' => function ($query) {
                 $query->whereHas('participant', function($q) {
                     $q->where('is_guest', false)
                       ->where('status', 'active')
-                      ->whereNull('deleted_at')
-                      ->where(function($notAnon) {
-                          $notAnon->whereNull('additional_data')
-                                  ->orWhereRaw("(additional_data IS NOT NULL AND (additional_data->>'participant_type' IS NULL OR additional_data->>'participant_type' != 'anonymous'))");
-                      });
+                      ->whereNull('deleted_at');
                 });
             },
+            // Guest/Anonymous responses - from participants marked as guest OR anonymous
             'responses as guest_responses_count' => function ($query) {
                 $query->whereHas('participant', function($q) {
                     $q->where('status', 'active')
                       ->whereNull('deleted_at')
-                      ->whereRaw("additional_data IS NOT NULL AND additional_data->>'participant_type' = 'anonymous'");
+                      ->where(function($guestQ) {
+                          // Either is_guest=true OR has participant_type=anonymous in additional_data
+                          $guestQ->where('is_guest', true)
+                                 ->orWhereRaw("additional_data IS NOT NULL AND additional_data->>'participant_type' = 'anonymous'");
+                      });
                 });
             },
-            // NEW: Active participants (registered users, not anonymous)
+            // Active participants (registered users, not guest)
             'participants as active_participants_count' => function ($query) {
                 $query->where('participants.is_guest', false)
                       ->where('participants.status', 'active')
-                      ->whereNull('participants.deleted_at')
-                      ->where(function($q) {
-                          // Exclude participants marked as anonymous (PostgreSQL syntax)
-                          $q->whereNull('participants.additional_data')
-                            ->orWhereRaw("(participants.additional_data IS NOT NULL AND (participants.additional_data->>'participant_type' IS NULL OR participants.additional_data->>'participant_type' != 'anonymous'))");
-                      });
+                      ->whereNull('participants.deleted_at');
             },
-            // NEW: Anonymous participants (from anonymous link)
+            // Anonymous participants (from anonymous link)
             'participants as anonymous_participants_count' => function ($query) {
                 $query->where('participants.status', 'active')
                       ->whereNull('participants.deleted_at')
-                      ->whereRaw("participants.additional_data IS NOT NULL AND participants.additional_data->>'participant_type' = 'anonymous'");
+                      ->where(function($anonQ) {
+                          // Either is_guest=true OR has participant_type=anonymous
+                          $anonQ->where('participants.is_guest', true)
+                                ->orWhereRaw("participants.additional_data IS NOT NULL AND participants.additional_data->>'participant_type' = 'anonymous'");
+                      });
             },
             // Keep legacy counts for compatibility
             'participants as inactive_participants_count' => function ($query) {
@@ -457,15 +446,33 @@ class ActivityController extends Controller
     }
 
     /**
-     * Soft delete the specified activity
+     * Soft delete the specified activity and cascade delete related data
      */
     public function destroy(string $id)
     {
         $activity = Activity::findOrFail($id);
+        
+        // Delete related data before soft-deleting the activity
+        // Delete responses (and their answers)
+        $activity->responses()->each(function ($response) {
+            // Delete response answers if they exist
+            if (method_exists($response, 'answers')) {
+                $response->answers()->delete();
+            }
+            $response->delete();
+        });
+        
+        // Delete notification templates
+        $activity->notificationTemplates()->delete();
+        
+        // Delete approval requests related to this activity
+        \App\Models\ActivityApprovalRequest::where('activity_id', $id)->delete();
+        
+        // Now soft delete the activity
         $activity->delete();
 
         return response()->json([
-            'message' => 'Activity deleted successfully'
+            'message' => 'Activity and all related data deleted successfully'
         ]);
     }
 
@@ -504,6 +511,24 @@ class ActivityController extends Controller
 
         return response()->json([
             'message' => 'Questionnaire assigned successfully',
+            'data' => $activity
+        ]);
+    }
+
+    /**
+     * Toggle participant reminders for an activity
+     */
+    public function toggleParticipantReminders(Request $request, string $id)
+    {
+        $validated = $request->validate([
+            'allow_participant_reminders' => 'required|boolean'
+        ]);
+
+        $activity = Activity::findOrFail($id);
+        $activity->update(['allow_participant_reminders' => $validated['allow_participant_reminders']]);
+
+        return response()->json([
+            'message' => 'Participant reminders setting updated successfully',
             'data' => $activity
         ]);
     }

@@ -27,7 +27,9 @@ import {
   Clock,
   Search,
   X,
+  Bell,
 } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   organizationsApi,
@@ -82,6 +84,14 @@ export default function DashboardPage() {
   const [activityEndDate, setActivityEndDate] = useState<string>("");
   const [activityTypeFilter, setActivityTypeFilter] = useState<string>("all");
   const [filteredActivityDetails, setFilteredActivityDetails] = useState<any[]>([]);
+
+  // Send Reminder states
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
+  const [reminderDate, setReminderDate] = useState<string>("");
+  const [reminderTime, setReminderTime] = useState<string>("");
+  const [reminderMessage, setReminderMessage] = useState<string>("");
+  const [sendingReminder, setSendingReminder] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -217,6 +227,86 @@ export default function DashboardPage() {
     setFilteredActivityDetails(filtered);
   };
 
+  // Send Reminder Functions
+  async function handleSendReminder() {
+    if (activities.length === 0) {
+      toast({
+        title: "No Events",
+        description: "No events available to send reminders for",
+        variant: "warning"
+      });
+      return;
+    }
+
+    // Set default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setReminderDate(tomorrow.toISOString().split('T')[0]);
+    setReminderTime("09:00");
+    setSelectedEventId(activities[0]?.id || "");
+    setReminderMessage(`Reminder: Please complete your pending activities.`);
+    setShowReminderDialog(true);
+  }
+
+  async function scheduleReminder() {
+    if (!selectedEventId || !reminderDate || !reminderTime) {
+      toast({
+        title: "Missing Information",
+        description: "Please select an event, date and time for the reminder",
+        variant: "error"
+      });
+      return;
+    }
+
+    setSendingReminder(true);
+
+    try {
+      const selectedEvent = activities.find((a: any) => a.id === parseInt(selectedEventId));
+      if (!selectedEvent) {
+        throw new Error("Event not found");
+      }
+
+      // Create Google Calendar event URL
+      const eventDate = new Date(`${reminderDate}T${reminderTime}`);
+      const endDate = new Date(eventDate.getTime() + 60 * 60 * 1000); // 1 hour later
+
+      const formatDateForGoogle = (date: Date) => {
+        return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      };
+
+      const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+        `Reminder: ${selectedEvent.title}`
+      )}&dates=${formatDateForGoogle(eventDate)}/${formatDateForGoogle(endDate)}&details=${encodeURIComponent(
+        reminderMessage || `Remember to complete the event: ${selectedEvent.title}`
+      )}&sf=true&output=xml`;
+
+      // Open Google Calendar
+      window.open(calendarUrl, '_blank');
+
+      toast({
+        title: "Reminder Scheduled!",
+        description: `Calendar reminder has been opened for ${selectedEvent.title}`,
+        variant: "success"
+      });
+
+      setShowReminderDialog(false);
+      setSelectedEventId("");
+      setReminderDate("");
+      setReminderTime("");
+      setReminderMessage("");
+
+    } catch (error) {
+      console.error('Error scheduling reminder:', error);
+      toast({
+        title: "Error",
+        description: "Failed to schedule reminder",
+        variant: "error"
+      });
+    } finally {
+      setSendingReminder(false);
+    }
+  }
+
   // Get statistics from dashboard API only (no mock data)
   const totalOrganizations = globalStats?.organizations || 0;
   const totalPrograms = globalStats?.programs || 0;
@@ -227,7 +317,10 @@ export default function DashboardPage() {
   const totalQuestionnaires = questionnaires.length;
   
   const totalResponses = globalStats?.responses || 0;
+  const authenticatedResponsesCount = globalStats?.authenticated_responses || 0;
+  const guestResponsesCount = globalStats?.guest_responses || 0;
   const engagementRate = Math.min(globalStats?.platform_engagement || 0, 100);
+  const completionRate = totalParticipants > 0 ? Math.round((totalResponses / totalParticipants) * 100) : 0;
 
   // Activity type counts from API only
   const surveyCount = globalStats?.activity_types?.surveys || 0;
@@ -286,19 +379,17 @@ export default function DashboardPage() {
     },
     {
       title: "Total Participants",
-      value: totalParticipants > 0 ? totalParticipants.toLocaleString() : "0",
+      value: totalParticipants > 0 ? `${totalParticipants.toLocaleString()} (${authenticatedParticipants}/${guestParticipants})` : "0",
       change: "",
-      showTooltip: totalParticipants > 0,
-      authenticatedCount: authenticatedParticipants,
-      guestCount: guestParticipants,
-      subtitle: totalParticipants > 0 ? `(${authenticatedParticipants}/${guestParticipants})` : undefined,
+      subtitle: "(Participant/Anonymous)",
       icon: Users,
       variant: 'green' as const,
     },
     {
       title: "Total Responses",
-      value: totalResponses > 0 ? totalResponses.toLocaleString() : "0",
+      value: totalResponses > 0 ? `${totalResponses.toLocaleString()} (${authenticatedResponsesCount}/${guestResponsesCount})` : "0",
       change: "",
+      subtitle: "(Participant/Anonymous)",
       icon: TrendingUp,
       variant: 'purple' as const,
     },
@@ -306,6 +397,7 @@ export default function DashboardPage() {
       title: "Engagement Rate",
       value: `${Math.round(engagementRate)}%`,
       change: "",
+      subtitle: "Overall engagement",
       icon: BarChart3,
       variant: 'cyan' as const,
     },
@@ -402,6 +494,13 @@ export default function DashboardPage() {
               <option value="90days">Last 90 days</option>
               <option value="1year">This year</option>
             </select>
+            <button 
+              onClick={handleSendReminder}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
+            >
+              <Bell className="w-4 h-4" />
+              Set Reminder
+            </button>
             <button 
               onClick={exportReport}
               className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90"
@@ -1136,6 +1235,117 @@ export default function DashboardPage() {
         )}
           </TabsContent>
         </Tabs>
+
+        {/* Send Reminder Dialog */}
+        {showReminderDialog && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-200">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Bell className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Set Reminder</h3>
+                      <p className="text-sm text-gray-500">Schedule a calendar reminder</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowReminderDialog(false)}
+                    className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Event Selection */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Select Event
+                  </label>
+                  <select
+                    value={selectedEventId}
+                    onChange={(e) => setSelectedEventId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {activities.map((activity: any) => (
+                      <option key={activity.id} value={activity.id}>
+                        {activity.name} ({activity.type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date and Time */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Date
+                    </label>
+                    <input
+                      type="date"
+                      value={reminderDate}
+                      onChange={(e) => setReminderDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Time
+                    </label>
+                    <input
+                      type="time"
+                      value={reminderTime}
+                      onChange={(e) => setReminderTime(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Message */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Reminder Message (Optional)
+                  </label>
+                  <textarea
+                    value={reminderMessage}
+                    onChange={(e) => setReminderMessage(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Add a custom message..."
+                  />
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-blue-800">
+                    <span className="font-semibold">📅 Note:</span> This will open Google Calendar where you can add the reminder to your calendar.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                <div className="flex items-center gap-3 justify-end">
+                  <button
+                    onClick={() => setShowReminderDialog(false)}
+                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={scheduleReminder}
+                    disabled={sendingReminder}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  >
+                    {sendingReminder ? "Opening Calendar..." : "Open Calendar"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );

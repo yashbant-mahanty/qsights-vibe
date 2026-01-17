@@ -1,0 +1,212 @@
+==========================================
+QSights Critical Fixes Deployment
+==========================================
+
+Fixes included:
+1. Question-wise Analysis - Display response data correctly
+2. Notification Bell - Color indicator for unread notifications
+3. Contact Us - UUID validation fix
+4. Reminders Button - Hide when not enabled
+
+[1;33mStep 1: Building frontend locally...[0m
+
+> qsights-frontend@1.0.0 build
+> next build
+
+  ▲ Next.js 14.2.35
+  - Environments: .env.local, .env.production
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+ ⚠ Using edge runtime on a page currently disables static generation for that page
+   Generating static pages (0/69) ...
+App settings GET error: TypeError: fetch failed
+    at node:internal/deps/undici/undici:13510:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async u (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/.next/server/app/api/app-settings/route.js:1:566)
+    at async /Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38411
+    at async e_.execute (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:27880)
+    at async e_.handle (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:39943)
+    at async exportAppRoute (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/export/routes/app-route.js:77:26)
+    at async exportPageImpl (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/export/worker.js:175:20)
+    at async Span.traceAsyncFn (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/trace/trace.js:154:20)
+    at async Object.exportPage (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/export/worker.js:237:20) {
+  [cause]: AggregateError [ECONNREFUSED]: 
+      at internalConnectMultiple (node:net:1134:18)
+      at afterConnectMultiple (node:net:1715:7)
+      at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+    code: 'ECONNREFUSED',
+    [errors]: [ [Error], [Error] ]
+  }
+}
+Get user error: B [Error]: Dynamic server usage: Route /api/auth/me couldn't be rendered statically because it used `request.cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at V (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:21778)
+    at Object.get (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:29465)
+    at i (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/.next/server/app/api/auth/me/route.js:1:524)
+    at /Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38417
+    at /Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854)
+    at /Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/server/lib/trace/tracer.js:122:103 {
+  description: "Route /api/auth/me couldn't be rendered statically because it used `request.cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+   Generating static pages (17/69) 
+Error fetching audit logs: n [Error]: Dynamic server usage: Route /api/system-settings/email/sendgrid/audit-logs couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error
+    at l (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/.next/server/chunks/9276.js:1:37220)
+    at f (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/.next/server/app/api/system-settings/email/sendgrid/audit-logs/route.js:1:3583)
+    at d (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/.next/server/app/api/system-settings/email/sendgrid/audit-logs/route.js:1:832)
+    at c (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/.next/server/app/api/system-settings/email/sendgrid/audit-logs/route.js:1:1086)
+    at /Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38417
+    at /Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/server/lib/trace/tracer.js:140:36
+    at NoopContextManager.with (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:7062)
+    at ContextAPI.with (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:518)
+    at NoopTracer.startActiveSpan (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18093)
+    at ProxyTracer.startActiveSpan (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/@opentelemetry/api/index.js:1:18854) {
+  description: "Route /api/system-settings/email/sendgrid/audit-logs couldn't be rendered statically because it used `cookies`. See more info here: https://nextjs.org/docs/messages/dynamic-server-error",
+  digest: 'DYNAMIC_SERVER_USAGE'
+}
+Error fetching theme settings: TypeError: fetch failed
+    at node:internal/deps/undici/undici:13510:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async p (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/.next/server/app/api/theme/settings/route.js:1:519)
+    at async /Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:38411
+    at async e_.execute (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:27880)
+    at async e_.handle (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:39943)
+    at async exportAppRoute (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/export/routes/app-route.js:77:26)
+    at async exportPageImpl (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/export/worker.js:175:20)
+    at async Span.traceAsyncFn (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/trace/trace.js:154:20)
+    at async Object.exportPage (/Users/yash/Documents/Projects/QSightsOrg2.0/frontend/node_modules/next/dist/export/worker.js:237:20) {
+  [cause]: Error: connect ECONNREFUSED 127.0.0.1:8000
+      at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+      at TCPConnectWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+    errno: -61,
+    code: 'ECONNREFUSED',
+    syscall: 'connect',
+    address: '127.0.0.1',
+    port: 8000
+  }
+}
+   Generating static pages (34/69) 
+   Generating static pages (51/69) 
+ ✓ Generating static pages (69/69)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                                   Size     First Load JS
+┌ ○ /                                                         150 kB          268 kB
+├ ○ /_not-found                                               880 B          88.7 kB
+├ ○ /account                                                  6.15 kB         133 kB
+├ ○ /activities                                               6.86 kB         131 kB
+├ ƒ /activities/[id]/edit                                     9.57 kB         143 kB
+├ ƒ /activities/[id]/landing-config                           18.4 kB         146 kB
+├ ƒ /activities/[id]/notification-logs                        6.39 kB         103 kB
+├ ƒ /activities/[id]/notifications                            15.9 kB         150 kB
+├ ƒ /activities/[id]/notifications/logs                       5.2 kB          101 kB
+├ ƒ /activities/[id]/preview                                  4.55 kB         108 kB
+├ ƒ /activities/[id]/results                                  11.6 kB         145 kB
+├ ƒ /activities/approvals/[id]                                6.7 kB          134 kB
+├ ○ /activities/create                                        9.01 kB         143 kB
+├ ○ /activities/preview                                       2.65 kB        98.9 kB
+├ ○ /activities/take                                          4.12 kB         103 kB
+├ ƒ /activities/take/[id]                                     25.7 kB         129 kB
+├ ○ /admin                                                    3.98 kB         125 kB
+├ ○ /analytics                                                8.13 kB         142 kB
+├ ƒ /api/account/change-password                              0 B                0 B
+├ ƒ /api/account/preferences                                  0 B                0 B
+├ ƒ /api/activities/[id]/notification-templates               0 B                0 B
+├ ƒ /api/activities/[id]/notification-templates/[templateId]  0 B                0 B
+├ ƒ /api/activities/[id]/notification-templates/preview       0 B                0 B
+├ ƒ /api/activities/[id]/participants                         0 B                0 B
+├ ƒ /api/activities/participant-counts                        0 B                0 B
+├ ƒ /api/app-settings                                         0 B                0 B
+├ ƒ /api/auth/forgot-password                                 0 B                0 B
+├ ƒ /api/auth/login                                           0 B                0 B
+├ ƒ /api/auth/logout                                          0 B                0 B
+├ ƒ /api/auth/me                                              0 B                0 B
+├ ƒ /api/auth/refresh                                         0 B                0 B
+├ ƒ /api/auth/reset-password                                  0 B                0 B
+├ ƒ /api/auth/verify-otp                                      0 B                0 B
+├ ○ /api/notification-templates/placeholders                  0 B                0 B
+├ ○ /api/notifications                                        0 B                0 B
+├ ƒ /api/notifications/send                                   0 B                0 B
+├ ƒ /api/notifications/send-bulk                              0 B                0 B
+├ ƒ /api/notifications/send-reminder                          0 B                0 B
+├ ƒ /api/profile/update                                       0 B                0 B
+├ ƒ /api/public/access-tokens/[token]/mark-used               0 B                0 B
+├ ƒ /api/public/access-tokens/[token]/validate                0 B                0 B
+├ ƒ /api/public/activity/[id]                                 0 B                0 B
+├ ƒ /api/public/activity/[id]/poll-answer                     0 B                0 B
+├ ƒ /api/public/activity/[id]/register                        0 B                0 B
+├ ƒ /api/public/activity/[id]/submit                          0 B                0 B
+├ ƒ /api/public/questionnaire/[id]                            0 B                0 B
+├ ƒ /api/sendgrid/send                                        0 B                0 B
+├ ƒ /api/system-settings/email/sendgrid                       0 B                0 B
+├ ƒ /api/system-settings/email/sendgrid/audit-logs            0 B                0 B
+├ ƒ /api/system-settings/email/sendgrid/test                  0 B                0 B
+├ ○ /api/theme/settings                                       0 B                0 B
+├ ƒ /apple-icon                                               0 B                0 B
+├ ○ /contact-sales                                            7.76 kB         117 kB
+├ ○ /contact-us                                               5.24 kB         115 kB
+├ ○ /dashboard                                                11.4 kB         139 kB
+├ ○ /evaluation-events                                        5.94 kB         127 kB
+├ ƒ /evaluation-events/[id]                                   4.52 kB         126 kB
+├ ○ /evaluation-events/create                                 4 kB            125 kB
+├ ○ /forgot-password                                          3.06 kB        99.6 kB
+├ ○ /group-heads                                              7.75 kB         129 kB
+├ ○ /group-heads/create                                       7.19 kB         128 kB
+├ ○ /help                                                     7.36 kB         135 kB
+├ ƒ /icon                                                     0 B                0 B
+├ ○ /notifications                                            2.53 kB         130 kB
+├ ○ /organizations                                            7.34 kB         129 kB
+├ ○ /organizations/create                                     5.83 kB         127 kB
+├ ○ /participant                                              2.79 kB         102 kB
+├ ○ /participants                                             8.97 kB         136 kB
+├ ○ /participants/create                                      6.31 kB         134 kB
+├ ○ /privacy-policy                                           4.32 kB         114 kB
+├ ○ /profile                                                  5.21 kB         132 kB
+├ ○ /program-admin                                            107 kB          227 kB
+├ ○ /program-admin/roles                                      20.4 kB         135 kB
+├ ○ /program-manager                                          4.9 kB          117 kB
+├ ○ /program-moderator                                        4.51 kB         117 kB
+├ ○ /programs                                                 10.1 kB         137 kB
+├ ○ /programs/create                                          7.49 kB         135 kB
+├ ○ /questionnaires                                           4.61 kB         135 kB
+├ ƒ /questionnaires/[id]                                      10.5 kB         170 kB
+├ ƒ /questionnaires/[id]/edit                                 3.48 kB         125 kB
+├ ƒ /questionnaires/[id]/preview                              1.91 kB         123 kB
+├ ○ /questionnaires/create                                    14.8 kB         169 kB
+├ ○ /reports                                                  5.59 kB         133 kB
+├ ○ /request-demo                                             7.06 kB         117 kB
+├ ○ /settings                                                 9.36 kB         143 kB
+├ ○ /settings/cms                                             7.9 kB          136 kB
+├ ○ /settings/contact-sales                                   3.43 kB         125 kB
+├ ○ /settings/demo-requests                                   3.07 kB         124 kB
+├ ○ /settings/event-contact-messages                          4.16 kB         125 kB
+├ ○ /settings/landing-pages                                   3.39 kB         125 kB
+├ ○ /settings/system                                          5.67 kB         133 kB
+├ ○ /settings/theme                                           8.24 kB         136 kB
+└ ○ /terms-of-service                                         4.4 kB          114 kB
++ First Load JS shared by all                                 87.8 kB
+  ├ chunks/2117-5d28eafdef72d3fe.js                           31.9 kB
+  ├ chunks/fd9d1056-ef1dfcdb1be5147d.js                       53.6 kB
+  └ other shared chunks (total)                               2.24 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+[0;32m✓ Build successful[0m
+
+[1;33mStep 2: Creating backup on production server...[0m
+[0;32m✓ Backup created at /var/www/qsights/backups/frontend_backup_20260115_182407[0m
+
+[1;33mStep 3: Deploying fixed files to production...[0m
+  - Deploying results page (Question-wise Analysis fix)...
+scp: dest open "/var/www/frontend/app/activities/[id]/results/page.tsx": Permission denied
+scp: failed to upload file /Users/yash/Documents/Projects/QSightsOrg2.0/frontend/app/activities/[id]/results/page.tsx to /var/www/frontend/app/activities/[id]/results/

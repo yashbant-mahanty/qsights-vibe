@@ -379,7 +379,7 @@ export default function LandingPage() {
 							<Link href="/request-demo">
 								<Button className="font-semibold">Request demo</Button>
 							</Link>
-							<Link href="/register">
+							<Link href="/request-demo">
 								<Button variant="outline" className="border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-semibold">Start free trial</Button>
 							</Link>
 						</div>

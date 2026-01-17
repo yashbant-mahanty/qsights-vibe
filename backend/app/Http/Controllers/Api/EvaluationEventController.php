@@ -46,7 +46,10 @@ class EvaluationEventController extends Controller
             });
         }
 
-        $events = $query->orderBy('created_at', 'desc')->paginate($request->get('per_page', 15));
+        $events = $query
+            ->orderBy('updated_at', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->paginate($request->get('per_page', 15));
 
         return response()->json($events);
     }
@@ -345,6 +348,9 @@ class EvaluationEventController extends Controller
                 }
             }
 
+            // Update event timestamp to reflect last activity
+            $event->touch();
+
             DB::commit();
 
             return response()->json([
@@ -436,6 +442,9 @@ class EvaluationEventController extends Controller
             $assignment->increment('reminder_count');
             $remindersSent++;
         }
+
+        // Update event timestamp to reflect last activity
+        $event->touch();
 
         return response()->json([
             'message' => "Reminders sent to {$remindersSent} evaluatees",

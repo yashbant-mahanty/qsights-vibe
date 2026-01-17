@@ -47,11 +47,45 @@ class Participant extends Model
 
         static::deleting(function ($participant) {
             if ($participant->isForceDeleting()) {
-                // Force delete pivot relationships
+                // Force delete all related data
+                $participant->responses()->forceDelete();
                 $participant->programs()->detach();
                 $participant->activities()->detach();
+                
+                // Delete from tables that might exist (use try-catch for safety)
+                try {
+                    \DB::table('notification_logs')->where('participant_id', $participant->id)->delete();
+                } catch (\Exception $e) {
+                    // Table doesn't exist or column missing
+                }
+                
+                try {
+                    \DB::table('activity_access_tokens')->where('participant_id', $participant->id)->delete();
+                } catch (\Exception $e) {
+                    // Table doesn't exist
+                }
+                
+                try {
+                    \DB::table('event_contact_messages')->where('participant_id', $participant->id)->update(['participant_id' => null]);
+                } catch (\Exception $e) {
+                    // Table doesn't exist
+                }
+                
+                try {
+                    \DB::table('evaluation_assignments')->where('evaluator_id', $participant->id)->delete();
+                } catch (\Exception $e) {
+                    // Table doesn't exist
+                }
+                
+                try {
+                    \DB::table('evaluation_assignments')->where('participant_id', $participant->id)->delete();
+                } catch (\Exception $e) {
+                    // Table doesn't exist
+                }
+            } else {
+                // Soft delete - cascade to related models
+                $participant->responses()->delete();
             }
-            // Soft deletes automatically handled by pivot table queries
         });
     }
 
@@ -89,6 +123,46 @@ class Participant extends Model
     public function responses()
     {
         return $this->hasMany(Response::class);
+    }
+
+    /**
+     * Get notification logs for this participant
+     */
+    public function notificationLogs()
+    {
+        return $this->hasMany(NotificationLog::class);
+    }
+
+    /**
+     * Get access tokens for this participant
+     */
+    public function accessTokens()
+    {
+        return $this->hasMany(ActivityAccessToken::class);
+    }
+
+    /**
+     * Get contact messages from this participant
+     */
+    public function contactMessages()
+    {
+        return $this->hasMany(EventContactMessage::class);
+    }
+
+    /**
+     * Get evaluation assignments where this participant is the evaluator
+     */
+    public function evaluatorAssignments()
+    {
+        return $this->hasMany(EvaluationAssignment::class, 'evaluator_id');
+    }
+
+    /**
+     * Get evaluation assignments where this participant is being evaluated
+     */
+    public function evaluationAssignments()
+    {
+        return $this->hasMany(EvaluationAssignment::class, 'participant_id');
     }
 
     /**

@@ -110,9 +110,10 @@ export default function ProfileSettingsPage() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.back()}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
+              <span className="text-sm font-medium">Back</span>
             </button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Profile Settings</h1>

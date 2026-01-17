@@ -6,6 +6,9 @@ use SendGrid\Mail\Mail;
 use App\Models\Notification;
 use App\Models\NotificationTemplate;
 use App\Models\Activity;
+use App\Models\SystemSetting;
+use App\Services\QrCodeService;
+use App\Services\NotificationLogService;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 
@@ -14,12 +17,63 @@ class EmailService
     protected $sendgrid;
     protected $fromEmail;
     protected $fromName;
+    protected $qrCodeService;
+    protected $notificationLogService;
 
-    public function __construct()
+    public function __construct(NotificationLogService $notificationLogService = null)
     {
+        $this->loadSendGridConfig();
+        $this->qrCodeService = new QrCodeService();
+        $this->notificationLogService = $notificationLogService ?? new NotificationLogService();
+    }
+
+    /**
+     * Load SendGrid configuration from System Settings (database) with env fallback
+     */
+    protected function loadSendGridConfig()
+    {
+        try {
+            // Try to load from database first (keys have 'email_' prefix in database)
+            $apiKey = SystemSetting::getValue('email_sendgrid_api_key');
+            $senderEmail = SystemSetting::getValue('email_sender_email');
+            $senderName = SystemSetting::getValue('email_sender_name');
+
+            if ($apiKey && $senderEmail) {
+                // Use database settings
+                $this->sendgrid = new \SendGrid($apiKey);
+                $this->fromEmail = $senderEmail;
+                $this->fromName = $senderName ?: 'QSights';
+                
+                \Log::debug('EmailService: Using SendGrid config from System Settings (database)', [
+                    'sender_email' => $this->fromEmail,
+                    'sender_name' => $this->fromName,
+                ]);
+                return;
+            }
+        } catch (\Exception $e) {
+            \Log::warning('EmailService: Failed to load SendGrid config from database, falling back to env', [
+                'error' => $e->getMessage()
+            ]);
+        }
+
+        // Fallback to environment variables
         $this->sendgrid = new \SendGrid(env('SENDGRID_API_KEY'));
-        $this->fromEmail = env('SENDGRID_FROM_EMAIL', 'info@qsights.com');
-        $this->fromName = env('SENDGRID_FROM_NAME', 'QSights');
+        $this->fromEmail = env('SENDGRID_FROM_EMAIL', env('MAIL_FROM_ADDRESS', 'info@qsights.com'));
+        $this->fromName = env('SENDGRID_FROM_NAME', env('MAIL_FROM_NAME', 'QSights'));
+        
+        \Log::debug('EmailService: Using SendGrid config from environment variables', [
+            'sender_email' => $this->fromEmail,
+            'sender_name' => $this->fromName,
+        ]);
+    }
+
+    /**
+     * Reload SendGrid configuration (useful after settings are updated)
+     */
+    public function reloadConfig()
+    {
+        $this->loadSendGridConfig();
+        return $this;
     }
 
     /**
@@ -35,6 +89,29 @@ class EmailService
      */
     public function send($to, $subject, $message, $metadata = [])
     {
+        // Create notification log entry (queued status)
+        $notificationLog = null;
+        try {
+            $notificationLog = $this->notificationLogService->createLog([
+                'user_id' => $metadata['user_id'] ?? null,
+                'participant_id' => $metadata['participant_id'] ?? null,
+                'anonymous_token' => $metadata['anonymous_token'] ?? null,
+                'recipient_email' => $to,
+                'event_id' => $metadata['activity_id'] ?? ($metadata['event_id'] ?? null),
+                'questionnaire_id' => $metadata['questionnaire_id'] ?? null,
+                'notification_type' => $metadata['event'] ?? 'email_sent',
+                'channel' => 'email',
+                'provider' => 'SendGrid',
+                'subject' => $subject,
+                'message' => $message,
+                'metadata' => $metadata,
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning('EmailService: Failed to create notification log (non-blocking)', [
+                'error' => $e->getMessage()
+            ]);
+        }
+
         try {
             $email = new Mail();
             $email->setFrom($this->fromEmail, $this->fromName);
@@ -42,17 +119,56 @@ class EmailService
             $email->addTo($to);
             $email->addContent("text/html", $message);
 
+            // Add custom args for webhook tracking (if metadata provided)
+            if (!empty($metadata['program_id'])) {
+                $email->addCustomArg('program_id', $metadata['program_id']);
+            }
+            if (!empty($metadata['program_name'])) {
+                $email->addCustomArg('program_name', $metadata['program_name']);
+            }
+            if (!empty($metadata['activity_id'])) {
+                $email->addCustomArg('activity_id', $metadata['activity_id']);
+            }
+            if (!empty($metadata['activity_name'])) {
+                $email->addCustomArg('activity_name', $metadata['activity_name']);
+            }
+            
+            // Add notification log ID for webhook correlation
+            if ($notificationLog) {
+                $email->addCustomArg('notification_log_id', $notificationLog->id);
+            }
+
             $response = $this->sendgrid->send($email);
+
+            // Extract SendGrid Message ID from response headers
+            $sendgridMessageId = null;
+            $headers = $response->headers();
+            if (isset($headers['X-Message-Id'])) {
+                $sendgridMessageId = is_array($headers['X-Message-Id']) ? $headers['X-Message-Id'][0] : $headers['X-Message-Id'];
+            }
 
             // Log detailed SendGrid response
             \Log::info('SendGrid API Response', [
                 'to' => $to,
                 'status_code' => $response->statusCode(),
-                'headers' => $response->headers(),
+                'message_id' => $sendgridMessageId,
+                'headers' => $headers,
                 'body' => $response->body(),
             ]);
 
-            // Log notification
+            // Update notification log with sent status
+            if ($notificationLog) {
+                try {
+                    $this->notificationLogService->markAsSent($notificationLog->id, $sendgridMessageId);
+                } catch (\Exception $e) {
+                    \Log::warning('EmailService: Failed to update notification log status', [
+                        'log_id' => $notificationLog->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            // Log notification with SendGrid message ID (existing table)
             $notification = Notification::create([
                 'id' => Str::uuid(),
                 'type' => 'email',
@@ -62,9 +178,12 @@ class EmailService
                 'subject' => $subject,
                 'message' => $message,
                 'status' => $response->statusCode() >= 200 && $response->statusCode() < 300 ? 'sent' : 'failed',
+                'sendgrid_message_id' => $sendgridMessageId,
                 'metadata' => array_merge($metadata, [
                     'sendgrid_status_code' => $response->statusCode(),
+                    'sendgrid_message_id' => $sendgridMessageId,
                     'sendgrid_response_body' => $response->body(),
+                    'notification_log_id' => $notificationLog ? $notificationLog->id : null,
                 ]),
                 'sent_at' => now(),
             ]);
@@ -73,9 +192,23 @@ class EmailService
                 'success' => $response->statusCode() >= 200 && $response->statusCode() < 300,
                 'status_code' => $response->statusCode(),
                 'notification_id' => $notification->id,
+                'notification_log_id' => $notificationLog ? $notificationLog->id : null,
+                'sendgrid_message_id' => $sendgridMessageId,
             ];
         } catch (\Exception $e) {
-            // Log failed notification
+            // Update notification log with failed status
+            if ($notificationLog) {
+                try {
+                    $this->notificationLogService->markAsFailed($notificationLog->id, $e->getMessage());
+                } catch (\Exception $logError) {
+                    \Log::warning('EmailService: Failed to mark notification log as failed', [
+                        'log_id' => $notificationLog->id,
+                        'error' => $logError->getMessage()
+                    ]);
+                }
+            }
+
+            // Log failed notification (existing table)
             $notification = Notification::create([
                 'id' => Str::uuid(),
                 'type' => 'email',
@@ -93,6 +226,7 @@ class EmailService
                 'success' => false,
                 'error' => $e->getMessage(),
                 'notification_id' => $notification->id,
+                'notification_log_id' => $notificationLog ? $notificationLog->id : null,
             ];
         }
     }
@@ -441,6 +575,9 @@ HTML;
             $daysUntilStart = max(0, Carbon::now()->diffInDays($activity->start_date, false));
         }
 
+        // Generate QR code for the activity
+        $qrCode = $this->qrCodeService->generateActivityQrCode($activity->id);
+
         return [
             'participant_name' => $participant->name ?? 'Participant',
             'participant_email' => $participant->email ?? '',
@@ -453,6 +590,7 @@ HTML;
             'program_description' => $activity->program->description ?? '',
             'organization_name' => $activity->program->organization->name ?? 'QSights',
             'activity_url' => env('APP_URL') . '/activities/' . $activity->id,
+            'qr_code' => $qrCode,
             'days_until_start' => $daysUntilStart,
             'current_date' => Carbon::now()->format('F j, Y'),
             'response_count' => $activity->responses()->count(),

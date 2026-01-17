@@ -58,6 +58,23 @@ class DashboardController extends Controller
               ->whereNull('deleted_at');
         })->count();
         
+        // Authenticated responses (from registered participants)
+        $authenticatedResponses = Response::whereHas('participant', function($q) {
+            $q->where('is_guest', false)
+              ->where('status', 'active')
+              ->whereNull('deleted_at');
+        })->count();
+        
+        // Guest/Anonymous responses
+        $guestResponses = Response::whereHas('participant', function($q) {
+            $q->where('status', 'active')
+              ->whereNull('deleted_at')
+              ->where(function($guestQ) {
+                  $guestQ->where('is_guest', true)
+                         ->orWhereRaw("additional_data IS NOT NULL AND additional_data->>'participant_type' = 'anonymous'");
+              });
+        })->count();
+        
         // Activity type breakdown (all statuses)
         $surveys = Activity::where('type', 'survey')
             ->whereNull('deleted_at')
@@ -109,6 +126,8 @@ class DashboardController extends Controller
             'inactive_participants' => $inactiveParticipants,
             'guest_participants' => $guestParticipants,
             'responses' => $totalResponses,
+            'authenticated_responses' => $authenticatedResponses,
+            'guest_responses' => $guestResponses,
             'activity_types' => [
                 'surveys' => $surveys,
                 'polls' => $polls,

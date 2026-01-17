@@ -37,6 +37,10 @@ export default function EventContactModal({
     setError("");
 
     // Validation
+    if (!activityId) {
+      setError("Unable to submit message - activity not loaded. Please refresh the page.");
+      return;
+    }
     if (!name.trim()) {
       setError("Please enter your name");
       return;
@@ -53,13 +57,39 @@ export default function EventContactModal({
     setIsSubmitting(true);
 
     try {
-      await eventContactMessagesApi.submit({
-        activity_id: activityId,
-        name: name.trim(),
-        email: email.trim(),
-        message: message.trim(),
-        participant_id: participantId || null,
+      // Ensure all inputs are strings and properly trimmed
+      const safeName = String(name || '').trim();
+      const safeEmail = String(email || '').trim();
+      const safeMessage = String(message || '').trim();
+      const safeActivityId = String(activityId || '').trim();
+      
+      // Ensure participant_id is either a valid UUID or not sent at all
+      const safeParticipantId = participantId ? String(participantId).trim() : null;
+      const isValidUUID = safeParticipantId && 
+        safeParticipantId.length > 0 && 
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(safeParticipantId);
+      
+      console.log('Submitting contact message:', {
+        activity_id: safeActivityId,
+        participant_id: safeParticipantId,
+        has_participant: !!isValidUUID,
+        is_valid_uuid: isValidUUID
       });
+      
+      // Build the payload, only include participant_id if it's valid
+      const payload: any = {
+        activity_id: safeActivityId,
+        name: safeName,
+        email: safeEmail,
+        message: safeMessage,
+      };
+      
+      // Only add participant_id if it's a valid UUID
+      if (isValidUUID) {
+        payload.participant_id = safeParticipantId;
+      }
+      
+      await eventContactMessagesApi.submit(payload);
 
       setSubmitted(true);
     } catch (err) {

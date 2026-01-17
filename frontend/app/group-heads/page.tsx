@@ -270,28 +270,37 @@ export default function GroupHeadsPage() {
     lastActive: new Date(gh.updated_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
   }));
 
+  const activeGroupHeadsCount = groupHeads_display.filter((g) => g.status === "active").length;
+  const inactiveGroupHeadsCount = groupHeads_display.filter((g) => g.status === "inactive").length;
+  const totalGHParticipants = groupHeads_display.reduce((sum, g) => sum + g.authenticatedParticipants + g.guestParticipants, 0);
+  const totalGHAuthParticipants = groupHeads_display.reduce((sum, g) => sum + g.authenticatedParticipants, 0);
+  const totalGHGuestParticipants = groupHeads_display.reduce((sum, g) => sum + g.guestParticipants, 0);
+
   const stats = [
     {
       title: "Total Group Heads",
       value: groupHeads_display.length,
+      subtitle: `${activeGroupHeadsCount} active`,
       icon: UserCog,
       variant: 'blue' as const,
     },
     {
       title: "Active",
-      value: groupHeads_display.filter((g) => g.status === "active").length,
+      value: activeGroupHeadsCount,
+      subtitle: groupHeads_display.length > 0 ? `${Math.round((activeGroupHeadsCount/groupHeads_display.length)*100)}% of total` : "0% of total",
       icon: CheckCircle,
       variant: 'green' as const,
     },
     {
       title: "Inactive",
-      value: groupHeads_display.filter((g) => g.status === "inactive").length,
+      value: inactiveGroupHeadsCount,
+      subtitle: groupHeads_display.length > 0 ? `${Math.round((inactiveGroupHeadsCount/groupHeads_display.length)*100)}% of total` : "0% of total",
       icon: XCircle,
       variant: 'red' as const,
     },
     {
       title: "Total Participants",
-      value: `${groupHeads_display.reduce((sum, g) => sum + g.authenticatedParticipants + g.guestParticipants, 0)} (${groupHeads_display.reduce((sum, g) => sum + g.authenticatedParticipants, 0)}/${groupHeads_display.reduce((sum, g) => sum + g.guestParticipants, 0)})`,
+      value: `${totalGHParticipants} (${totalGHAuthParticipants}/${totalGHGuestParticipants})`,
       subtitle: "(Participant/Anonymous)",
       icon: Users,
       variant: 'purple' as const,
@@ -314,6 +323,11 @@ export default function GroupHeadsPage() {
       selectedOrganization === "all" ||
       groupHead.organization === selectedOrganization;
     return matchesSearch && matchesStatus && matchesOrganization;
+  }).sort((a, b) => {
+    // Sort by latest first (joinedDate)
+    const dateA = new Date(a.joinedDate || 0).getTime();
+    const dateB = new Date(b.joinedDate || 0).getTime();
+    return dateB - dateA;
   });
 
   const totalPages = Math.ceil(filteredGroupHeads.length / itemsPerPage);

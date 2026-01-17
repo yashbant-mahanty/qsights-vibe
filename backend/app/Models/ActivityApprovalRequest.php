@@ -34,7 +34,6 @@ class ActivityApprovalRequest extends Model
         'number_of_participants',
         'questions_to_randomize',
         'allow_guests',
-        'contact_us_enabled',
         'is_multilingual',
         'languages',
         'settings',
@@ -48,6 +47,7 @@ class ActivityApprovalRequest extends Model
         'remarks',
         'reviewed_at',
         'created_activity_id',
+        'activity_id', // Link to existing draft activity
     ];
 
     protected $casts = [
@@ -61,7 +61,6 @@ class ActivityApprovalRequest extends Model
         'number_of_participants' => 'integer',
         'questions_to_randomize' => 'integer',
         'allow_guests' => 'boolean',
-        'contact_us_enabled' => 'boolean',
         'is_multilingual' => 'boolean',
         'languages' => 'array',
         'settings' => 'array',

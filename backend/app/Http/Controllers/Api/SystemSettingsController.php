@@ -8,14 +8,14 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
 use App\Models\SystemSetting;
 use App\Mail\TestEmail;
-use Aws\S3\S3Client;
-use Aws\Exception\AwsException;
 use Exception;
+use Aws\Exception\AwsException;
+use Aws\S3\S3Client;
 
 class SystemSettingsController extends Controller
 {
     /**
-     * Get system settings (email configuration)
+     * Get system settings
      */
     public function index()
     {
@@ -49,55 +49,6 @@ class SystemSettingsController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to load system settings: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get S3 configuration settings
-     */
-    public function getS3Config()
-    {
-        try {
-            $settings = SystemSetting::whereIn('key', [
-                's3_bucket',
-                's3_region',
-                's3_access_key_id',
-                's3_secret_access_key',
-                's3_cloudfront_url',
-            ])->get();
-            
-            $data = [
-                'aws_s3_bucket' => '',
-                'aws_region' => '',
-                'aws_access_key_id' => '',
-                'aws_secret_access_key' => '',
-                'aws_cloudfront_url' => '',
-            ];
-            
-            foreach ($settings as $setting) {
-                $keyMapping = [
-                    's3_bucket' => 'aws_s3_bucket',
-                    's3_region' => 'aws_region',
-                    's3_access_key_id' => 'aws_access_key_id',
-                    's3_secret_access_key' => 'aws_secret_access_key',
-                    's3_cloudfront_url' => 'aws_cloudfront_url',
-                ];
-                
-                if (isset($keyMapping[$setting->key])) {
-                    $data[$keyMapping[$setting->key]] = $setting->decrypted_value ?? $setting->value;
-                }
-            }
-            
-            return response()->json([
-                'status' => 'success',
-                'data' => $data
-            ]);
-        } catch (Exception $e) {
-            \Log::error('Failed to load S3 settings: ' . $e->getMessage());
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to load S3 settings: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -283,17 +234,77 @@ class SystemSettingsController extends Controller
     }
 
     /**
-     * Store S3 configuration settings
+     * Get S3 configuration settings
      */
-    public function storeS3(Request $request)
+    public function getS3Config()
+    {
+        try {
+            $settings = SystemSetting::whereIn('key', [
+                's3_bucket',
+                's3_folder',
+                's3_region',
+                's3_access_key',
+                's3_secret_key',
+                's3_url',
+                's3_cloudfront_url',
+            ])->get();
+            
+            $data = [
+                'aws_s3_bucket' => '',
+                'aws_s3_folder' => '',
+                'aws_region' => 'ap-southeast-1',
+                'aws_access_key_id' => '',
+                'aws_secret_access_key' => '',
+                'aws_s3_url' => '',
+                'aws_cloudfront_url' => '',
+            ];
+            
+            foreach ($settings as $setting) {
+                // Map database keys to frontend keys
+                $frontendKey = match($setting->key) {
+                    's3_bucket' => 'aws_s3_bucket',
+                    's3_folder' => 'aws_s3_folder',
+                    's3_region' => 'aws_region',
+                    's3_access_key' => 'aws_access_key_id',
+                    's3_secret_key' => 'aws_secret_access_key',
+                    's3_url' => 'aws_s3_url',
+                    's3_cloudfront_url' => 'aws_cloudfront_url',
+                    default => null
+                };
+                
+                if ($frontendKey) {
+                    // Get decrypted value if encrypted
+                    $data[$frontendKey] = $setting->decrypted_value ?? $setting->value;
+                }
+            }
+            
+            return response()->json([
+                'status' => 'success',
+                'data' => $data
+            ]);
+        } catch (Exception $e) {
+            \Log::error('Failed to load S3 settings: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to load S3 settings: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Save S3 configuration settings
+     */
+    public function saveS3Config(Request $request)
     {
         try {
             $validator = Validator::make($request->all(), [
-                'aws_s3_bucket' => 'required|string|max:255',
-                'aws_region' => 'required|string|max:50',
-                'aws_access_key_id' => 'required|string|min:16|max:128',
-                'aws_secret_access_key' => 'required|string|min:20|max:128',
-                'aws_cloudfront_url' => 'nullable|url|max:255',
+                'aws_s3_bucket' => 'required|string',
+                'aws_s3_folder' => 'nullable|string',
+                'aws_region' => 'required|string',
+                'aws_access_key_id' => 'required|string',
+                'aws_secret_access_key' => 'required|string',
+                'aws_s3_url' => 'nullable|url',
+                'aws_cloudfront_url' => 'nullable|url',
             ]);
 
             if ($validator->fails()) {
@@ -308,27 +319,37 @@ class SystemSettingsController extends Controller
                 's3_bucket' => [
                     'value' => $request->aws_s3_bucket,
                     'is_encrypted' => false,
-                    'description' => 'AWS S3 Bucket Name',
+                    'description' => 'S3 bucket name for file storage',
+                ],
+                's3_folder' => [
+                    'value' => $request->aws_s3_folder ?? '',
+                    'is_encrypted' => false,
+                    'description' => 'S3 folder/prefix for uploads',
                 ],
                 's3_region' => [
                     'value' => $request->aws_region,
                     'is_encrypted' => false,
-                    'description' => 'AWS Region',
+                    'description' => 'AWS region where S3 bucket is located',
                 ],
-                's3_access_key_id' => [
+                's3_access_key' => [
                     'value' => $request->aws_access_key_id,
                     'is_encrypted' => true,
-                    'description' => 'AWS Access Key ID',
+                    'description' => 'AWS IAM access key with S3 permissions',
                 ],
-                's3_secret_access_key' => [
+                's3_secret_key' => [
                     'value' => $request->aws_secret_access_key,
                     'is_encrypted' => true,
-                    'description' => 'AWS Secret Access Key',
+                    'description' => 'AWS IAM secret key',
+                ],
+                's3_url' => [
+                    'value' => $request->aws_s3_url ?? '',
+                    'is_encrypted' => false,
+                    'description' => 'S3 base URL for public access',
                 ],
                 's3_cloudfront_url' => [
                     'value' => $request->aws_cloudfront_url ?? '',
                     'is_encrypted' => false,
-                    'description' => 'CloudFront Distribution URL',
+                    'description' => 'CloudFront CDN URL for better performance',
                 ],
             ];
 
@@ -356,7 +377,7 @@ class SystemSettingsController extends Controller
     /**
      * Test S3 connection
      */
-    public function testS3(Request $request)
+    public function testS3Connection(Request $request)
     {
         try {
             $validator = Validator::make($request->all(), [
@@ -375,7 +396,7 @@ class SystemSettingsController extends Controller
             }
 
             $config = $request->config;
-
+            
             // Create S3 client
             $s3Client = new S3Client([
                 'region' => $config['aws_region'],
@@ -386,52 +407,72 @@ class SystemSettingsController extends Controller
                 ],
             ]);
 
-            // Test connection by listing bucket contents (just head request)
-            $result = $s3Client->headBucket([
+            // Test: Check if bucket exists and is accessible
+            try {
+                $s3Client->headBucket([
+                    'Bucket' => $config['aws_s3_bucket']
+                ]);
+            } catch (AwsException $e) {
+                if ($e->getAwsErrorCode() === 'NotFound') {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'S3 bucket not found: ' . $config['aws_s3_bucket']
+                    ], 404);
+                } elseif ($e->getAwsErrorCode() === 'Forbidden') {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Access denied to S3 bucket. Check IAM permissions.'
+                    ], 403);
+                } else {
+                    throw $e;
+                }
+            }
+
+            // Test: Upload a small test file
+            $testContent = 'QSights S3 Configuration Test - ' . now()->toDateTimeString();
+            $testKey = ($config['aws_s3_folder'] ?? '') . '/test-uploads/config-test-' . time() . '.txt';
+            
+            $result = $s3Client->putObject([
                 'Bucket' => $config['aws_s3_bucket'],
+                'Key' => $testKey,
+                'Body' => $testContent,
+                'ContentType' => 'text/plain',
             ]);
 
-            // If we get here, the connection was successful
+            // Test: Delete the test file
+            $s3Client->deleteObject([
+                'Bucket' => $config['aws_s3_bucket'],
+                'Key' => $testKey,
+            ]);
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'S3 connection successful! Bucket "' . $config['aws_s3_bucket'] . '" is accessible.',
-                'bucket' => $config['aws_s3_bucket'],
-                'region' => $config['aws_region'],
+                'message' => 'S3 connection test successful! Bucket is accessible and writable.',
+                'details' => [
+                    'bucket' => $config['aws_s3_bucket'],
+                    'region' => $config['aws_region'],
+                    'test_file' => $testKey,
+                ]
             ]);
 
         } catch (AwsException $e) {
-            $errorCode = $e->getAwsErrorCode();
-            $errorMessage = $e->getAwsErrorMessage() ?? $e->getMessage();
-            
             \Log::error('S3 connection test failed', [
-                'error_code' => $errorCode,
-                'error_message' => $errorMessage,
-            ]);
-
-            $friendlyMessage = match ($errorCode) {
-                'NoSuchBucket' => 'Bucket does not exist. Please check the bucket name.',
-                'AccessDenied' => 'Access denied. Please check your AWS credentials and bucket permissions.',
-                'InvalidAccessKeyId' => 'Invalid AWS Access Key ID. Please check your credentials.',
-                'SignatureDoesNotMatch' => 'Invalid AWS Secret Access Key. Please check your credentials.',
-                'InvalidBucketName' => 'Invalid bucket name format. Bucket names must be 3-63 characters.',
-                default => 'S3 connection failed: ' . $errorMessage,
-            };
-
-            return response()->json([
-                'status' => 'error',
-                'message' => $friendlyMessage,
-                'error_code' => $errorCode,
-            ], 400);
-
-        } catch (Exception $e) {
-            \Log::error('Failed to test S3 connection', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'aws_error_code' => $e->getAwsErrorCode(),
             ]);
             
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to test S3 connection: ' . $e->getMessage()
+                'message' => 'S3 connection test failed: ' . $e->getMessage()
+            ], 500);
+        } catch (Exception $e) {
+            \Log::error('S3 connection test failed', [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'S3 connection test failed: ' . $e->getMessage()
             ], 500);
         }
     }

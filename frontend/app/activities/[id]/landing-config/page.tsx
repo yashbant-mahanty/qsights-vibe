@@ -33,10 +33,11 @@ interface LandingPageConfig {
   logoUrl: string;
   logoSize: string; // small, medium, large
   
-  // Page Title
-  pageTitle: string;
-  pageTitleColor: string;
-  pageTitleSize: string;
+  // Banner Title (appears in banner area)
+  bannerTitle: string;
+  bannerTitleColor: string;
+  bannerTitleSize: string;
+  bannerTitlePosition: string; // left, center, right
   
   // Top Banner
   bannerEnabled: boolean; // Enable/disable banner display
@@ -46,6 +47,7 @@ interface LandingPageConfig {
   bannerBackgroundColor: string;
   bannerText: string;
   bannerTextColor: string;
+  bannerTextSize: string; // small, medium, large, xlarge
   bannerTextPosition: string;
   bannerShowOnInnerPages: boolean;
   
@@ -70,6 +72,20 @@ interface LandingPageConfig {
   gradientFrom: string;
   gradientTo: string;
   
+  // Post-Landing Content Header
+  contentHeaderType: string; // "event" (show title/description), "logo", "custom"
+  contentHeaderLogoUrl: string;
+  contentHeaderLogoSize: string; // small, medium, large
+  contentHeaderBackgroundStyle: string; // solid, gradient
+  contentHeaderBackgroundColor: string;
+  contentHeaderGradientFrom: string;
+  contentHeaderGradientTo: string;
+  contentHeaderCustomTitle: string;
+  contentHeaderCustomSubtitle: string;
+  
+  // Background Image Opacity
+  backgroundImageOpacity: number;
+  
   // Left Content Block
   leftContentEnabled: boolean;
   leftContentTitle: string;
@@ -79,6 +95,21 @@ interface LandingPageConfig {
   leftContentImageUrl: string;
   leftContentImagePosition: string;
   leftContentBackgroundColor: string;
+  
+  // Split Screen Background Images
+  splitScreenLeftBackgroundImageUrl: string;
+  splitScreenLeftBackgroundPosition: string; // behind, above, below
+  splitScreenLeftBackgroundVerticalPosition: string; // above, below (relative to title/description)
+  splitScreenLeftBackgroundOpacity: number;
+  splitScreenLeftBackgroundColor: string;
+  splitScreenRightBackgroundImageUrl: string;
+  splitScreenRightBackgroundOpacity: number;
+  splitScreenRightBackgroundColor: string;
+  
+  // Full Page Background Image (for non-split templates)
+  fullPageBackgroundImageUrl: string;
+  fullPageBackgroundOpacity: number;
+  fullPageBackgroundColor: string;
   
   // Features/Benefits Section
   featuresEnabled: boolean;
@@ -102,6 +133,14 @@ interface LandingPageConfig {
   loginBoxBackgroundOpacity: number; // Opacity of background image (0-100)
   loginButtonColor: string;
   loginButtonText: string;
+  
+  // Login Box Logo/Text Configuration
+  loginBoxContentType: string; // "logo" | "text" | "event" (logo, custom text, or event name/description)
+  loginBoxLogoUrl: string;
+  loginBoxLogoHorizontalPosition: string; // left, center, right
+  loginBoxLogoVerticalPosition: string; // top, bottom
+  loginBoxCustomTitle: string;
+  loginBoxCustomSubtitle: string;
   
   // Thank You Page
   thankYouTitle: string;
@@ -162,9 +201,10 @@ interface LandingPageConfig {
 const defaultConfig: LandingPageConfig = {
   logoUrl: "",
   logoSize: "medium",
-  pageTitle: "Welcome",
-  pageTitleColor: "#1F2937",
-  pageTitleSize: "large",
+  bannerTitle: "Welcome",
+  bannerTitleColor: "#1F2937",
+  bannerTitleSize: "large",
+  bannerTitlePosition: "center",
   bannerImageUrl: "",
   bannerImagePosition: "center",
   bannerHeight: "200px",
@@ -188,6 +228,16 @@ const defaultConfig: LandingPageConfig = {
   backgroundStyle: "solid",
   gradientFrom: "#F3F4F6",
   gradientTo: "#DBEAFE",
+  contentHeaderType: "event", // Default to showing event title/description
+  contentHeaderLogoUrl: "",
+  contentHeaderLogoSize: "medium",
+  contentHeaderBackgroundStyle: "gradient",
+  contentHeaderBackgroundColor: "#3B82F6",
+  contentHeaderGradientFrom: "#3B82F6",
+  contentHeaderGradientTo: "#7C3AED",
+  contentHeaderCustomTitle: "",
+  contentHeaderCustomSubtitle: "",
+  backgroundImageOpacity: 100,
   leftContentEnabled: true,
   leftContentTitle: "Professional Survey Platform",
   leftContentTitleColor: "#1F2937",
@@ -196,6 +246,15 @@ const defaultConfig: LandingPageConfig = {
   leftContentImageUrl: "",
   leftContentImagePosition: "top",
   leftContentBackgroundColor: "#FFFFFF",
+  splitScreenLeftBackgroundImageUrl: "",
+  splitScreenLeftBackgroundPosition: "behind",
+  splitScreenLeftBackgroundVerticalPosition: "full",
+  splitScreenLeftBackgroundOpacity: 100,
+  splitScreenLeftBackgroundColor: "#FFFFFF",
+  splitScreenRightBackgroundImageUrl: "",
+  splitScreenRightBackgroundOpacity: 100,
+  splitScreenRightBackgroundColor: "#F3F4F6",
+  fullPageBackgroundImageUrl: "",
   featuresEnabled: true,
   features: [
     { icon: "check", title: "Easy to Use", description: "Simple and intuitive interface", color: "#10B981" },
@@ -215,6 +274,12 @@ const defaultConfig: LandingPageConfig = {
   loginBoxBackgroundOpacity: 50,
   loginButtonColor: "#3B82F6",
   loginButtonText: "Sign In",
+  loginBoxContentType: "event",
+  loginBoxLogoUrl: "",
+  loginBoxLogoHorizontalPosition: "center",
+  loginBoxLogoVerticalPosition: "top",
+  loginBoxCustomTitle: "",
+  loginBoxCustomSubtitle: "",
   logoPosition: "left",
   thankYouTitle: "Thank you!",
   thankYouMessage: "Your response has been submitted",
@@ -640,29 +705,31 @@ export default function LandingPageConfigPage() {
         </div>
 
         {/* Configuration Content */}
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div className="space-y-6">
-            {/* Landing Page Tab */}
-            {activeTab === "landing-page" && (
-              <>
-                {/* Tab Info */}
-                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h3 className="text-sm font-semibold text-blue-900 mb-1">Design for Landing Page</h3>
-                  <p className="text-sm text-blue-700">Configure all aspects of the participant's first landing and login experience, including branding, layout, and interactive elements.</p>
-                </div>
+        <div>
+          {/* Landing Page Tab */}
+          {activeTab === "landing-page" && (
+            <>
+              {/* Tab Info - Full Width */}
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-blue-900 mb-1">Design for Landing Page</h3>
+                <p className="text-sm text-blue-700">Configure all aspects of the participant's first landing and login experience, including branding, layout, and interactive elements.</p>
+              </div>
 
-                {/* Live Preview & Templates */}
-                {templates.length > 0 && (
-                  <Card className="mb-6">
-                    <CardHeader>
-                      <CardTitle>Predefined Templates</CardTitle>
-            <p className="text-sm text-gray-500">
-              Choose a template to quickly set up your landing page. Click on any template to apply it.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {templates.map((template: any, index: number) => (
+              {/* Predefined Templates and Live Preview in 2 columns */}
+              <div className="grid lg:grid-cols-2 gap-6 mb-6">
+                {/* Left: Predefined Templates */}
+                <div>
+                  {templates.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Predefined Templates</CardTitle>
+                        <p className="text-sm text-gray-500">
+                          Choose a template to quickly set up your landing page. Click on any template to apply it.
+                        </p>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 gap-4">
+                          {templates.map((template: any, index: number) => (
                 <div
                   key={index}
                   className={`relative border-2 rounded-lg overflow-hidden cursor-pointer hover:shadow-xl transition-all group ${
@@ -781,152 +848,125 @@ export default function LandingPageConfigPage() {
           </CardContent>
         </Card>
       )}
+    </div>
 
+    {/* Right: Live Preview */}
+    <div>
+      <Card className="border-2 border-gray-200 lg:sticky lg:top-6">
+        <CardHeader className="bg-gray-50">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-gray-700">Live Preview</CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePreview}
+              className="text-xs"
+            >
+              <Eye className="w-3 h-3 mr-1" />
+              Full Screen
+            </Button>
+          </div>
+          <div className="flex items-center gap-1 mt-3 p-1 bg-gray-200 rounded-lg">
+            <button
+              onClick={() => setPreviewDevice("desktop")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                previewDevice === "desktop"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              Desktop
+            </button>
+            <button
+              onClick={() => setPreviewDevice("tablet")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                previewDevice === "tablet"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <Tablet className="w-3.5 h-3.5" />
+              Tablet
+            </button>
+            <button
+              onClick={() => setPreviewDevice("mobile")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                previewDevice === "mobile"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              Mobile
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div 
+            className="bg-gray-100 relative overflow-hidden flex justify-center"
+            style={{ 
+              height: previewDevice === "mobile" ? "500px" : previewDevice === "tablet" ? "450px" : "400px",
+              padding: previewDevice !== "desktop" ? "16px" : "0"
+            }}
+          >
+            {previewDevice === "desktop" ? (
+              <div
+                style={{
+                  width: "100%",
+                  height: "400px",
+                  overflow: "hidden",
+                  position: "relative",
+                }}
+              >
+                <iframe
+                  src={`/activities/take/${activityId}?preview=true`}
+                  className="border-0"
+                  title="Landing Page Preview"
+                  style={{ 
+                    transform: 'scale(0.4)',
+                    transformOrigin: 'top left',
+                    width: '250%',
+                    height: '1000px',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                  }}
+                />
+              </div>
+            ) : (
+              <div
+                style={{
+                  width: previewDevice === "mobile" ? "375px" : "768px",
+                  height: previewDevice === "mobile" ? "467px" : "400px",
+                  border: "8px solid #1F2937",
+                  borderRadius: "24px",
+                  overflow: "hidden",
+                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+                }}
+              >
+                <iframe
+                  src={`/activities/take/${activityId}?preview=true`}
+                  className="w-full h-full border-0"
+                  title="Landing Page Preview"
+                />
+              </div>
+            )}
+          </div>
+          <div className="p-3 bg-gray-50 border-t text-center">
+            <p className="text-xs text-gray-500">Preview updates when you click Save Configuration</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  </div>
+
+  {/* Configuration Sections in 2 columns */}
+  <div className="grid lg:grid-cols-2 gap-6">
 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <ImageIcon className="w-5 h-5" />
-                      <span>Logo Configuration</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label>Logo Image</Label>
-                      <p className="text-xs text-gray-500 mt-1">Upload a file or enter an image URL (e.g., S3 bucket URL)</p>
-                      <div className="mt-2 space-y-3">
-                        {config.logoUrl && (
-                          <div className="flex items-center justify-center p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                            <img src={config.logoUrl} alt="Logo" className="h-20 max-w-full object-contain" />
-                          </div>
-                        )}
-                        
-                        {/* URL Input */}
-                        <div>
-                          <Label className="text-xs text-gray-600">Image URL</Label>
-                          <div className="flex gap-2 mt-1">
-                            <Input
-                              type="url"
-                              value={config.logoUrl || ""}
-                              onChange={(e) => updateConfig("logoUrl", e.target.value)}
-                              placeholder="https://example.com/logo.png"
-                              className="flex-1"
-                            />
-                            {config.logoUrl && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => updateConfig("logoUrl", "")}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-400 mt-1">Example: https://bq-common.s3.ap-south-1.amazonaws.com/logos/logo.png</p>
-                        </div>
-                        
-                        {/* File Upload (Future: will upload to S3) */}
-                        <div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload("logoUrl", file);
-                            }}
-                            className="hidden"
-                            id="logo-upload"
-                          />
-                          <label htmlFor="logo-upload">
-                            <Button variant="outline" className="cursor-pointer w-full" asChild>
-                              <span>
-                                <Upload className="w-4 h-4 mr-2" />
-                                Or Upload File (Temporary)
-                              </span>
-                            </Button>
-                          </label>
-                          <p className="text-xs text-gray-400 mt-1">Note: File uploads are temporary. Use URL for permanent storage.</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Logo Size</Label>
-                      <select
-                        value={config.logoSize}
-                        onChange={(e) => updateConfig("logoSize", e.target.value)}
-                        className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      >
-                        <option value="small">Small</option>
-                        <option value="medium">Medium</option>
-                        <option value="large">Large</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label>Logo Position in Banner</Label>
-                      <select
-                        value={config.logoPosition || "left"}
-                        onChange={(e) => updateConfig("logoPosition", e.target.value)}
-                        className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      >
-                        <option value="left">Left</option>
-                        <option value="center">Center</option>
-                        <option value="right">Right</option>
-                      </select>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Page Title</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label>Title Text</Label>
-                      <Input
-                        value={config.pageTitle}
-                        onChange={(e) => updateConfig("pageTitle", e.target.value)}
-                        placeholder="Welcome to Our Survey"
-                        className="mt-2"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Title Color</Label>
-                        <div className="flex items-center space-x-2 mt-2">
-                          <input
-                            type="color"
-                            value={config.pageTitleColor}
-                            onChange={(e) => updateConfig("pageTitleColor", e.target.value)}
-                            className="h-10 w-20"
-                          />
-                          <Input
-                            value={config.pageTitleColor}
-                            onChange={(e) => updateConfig("pageTitleColor", e.target.value)}
-                            placeholder="#000000"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Title Size</Label>
-                        <select
-                          value={config.pageTitleSize}
-                          onChange={(e) => updateConfig("pageTitleSize", e.target.value)}
-                          className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        >
-                          <option value="small">Small</option>
-                          <option value="medium">Medium</option>
-                          <option value="large">Large</option>
-                          <option value="xlarge">Extra Large</option>
-                        </select>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle>Top Banner</CardTitle>
+                      <CardTitle>Top Banner Configuration</CardTitle>
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -937,168 +977,337 @@ export default function LandingPageConfigPage() {
                         <span className="text-sm text-gray-600">Enable</span>
                       </label>
                     </div>
+                    <p className="text-sm text-gray-500 mt-1">Configure logo and banner text displayed at the top</p>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label>Banner Image</Label>
-                      <p className="text-xs text-gray-500 mt-1">Enter an image URL or upload a file</p>
-                      <div className="mt-2 space-y-3">
-                        {config.bannerImageUrl && (
-                          <div className="relative">
-                            <img
-                              src={config.bannerImageUrl}
-                              alt="Banner"
-                              className="w-full h-32 object-cover rounded-lg"
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="absolute top-2 right-2"
-                              onClick={() => updateConfig("bannerImageUrl", "")}
-                              disabled={config.bannerEnabled === false}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
+                  <CardContent className="space-y-6">
+                    {/* Logo Section */}
+                    <div className="space-y-4">
+                      <h4 className="font-semibold text-sm text-gray-900">Logo</h4>
+                      <div>
+                        <Label>Logo Image</Label>
+                        <p className="text-xs text-gray-500 mt-1">Upload a file or enter an image URL (e.g., S3 bucket URL)</p>
+                        <div className="mt-2 space-y-3">
+                          {config.logoUrl && (
+                            <div className="flex items-center justify-center p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                              <img src={config.logoUrl} alt="Logo" className="h-20 max-w-full object-contain" />
+                            </div>
+                          )}
+                          
+                          <div>
+                            <Label className="text-xs text-gray-600">Image URL</Label>
+                            <div className="flex gap-2 mt-1">
+                              <Input
+                                type="url"
+                                value={config.logoUrl || ""}
+                                onChange={(e) => updateConfig("logoUrl", e.target.value)}
+                                placeholder="https://example.com/logo.png"
+                                className="flex-1"
+                              />
+                              {config.logoUrl && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateConfig("logoUrl", "")}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">Example: https://bq-common.s3.ap-south-1.amazonaws.com/logos/logo.png</p>
                           </div>
-                        )}
-                        
-                        {/* URL Input */}
-                        <div>
-                          <Label className="text-xs text-gray-600">Image URL</Label>
-                          <div className="flex gap-2 mt-1">
-                            <Input
-                              type="url"
-                              value={config.bannerImageUrl || ""}
-                              onChange={(e) => updateConfig("bannerImageUrl", e.target.value)}
-                              placeholder="https://example.com/banner.jpg"
-                              className="flex-1"
-                              disabled={config.bannerEnabled === false}
+                          
+                          <div>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleImageUpload("logoUrl", file);
+                              }}
+                              className="hidden"
+                              id="logo-upload"
                             />
-                            {config.bannerImageUrl && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => updateConfig("bannerImageUrl", "")}
-                                disabled={config.bannerEnabled === false}
-                              >
-                                <X className="w-4 h-4" />
+                            <label htmlFor="logo-upload">
+                              <Button variant="outline" className="cursor-pointer w-full" asChild>
+                                <span>
+                                  <Upload className="w-4 h-4 mr-2" />
+                                  Or Upload File (Temporary)
+                                </span>
                               </Button>
-                            )}
+                            </label>
+                            <p className="text-xs text-gray-400 mt-1">Note: File uploads are temporary. Use URL for permanent storage.</p>
                           </div>
                         </div>
-                        
-                        {/* File Upload */}
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload("bannerImageUrl", file);
-                            }}
-                            className="hidden"
-                            id="banner-upload"
+                          <Label>Logo Size</Label>
+                          <select
+                            value={config.logoSize}
+                            onChange={(e) => updateConfig("logoSize", e.target.value)}
+                            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          >
+                            <option value="small">Small</option>
+                            <option value="medium">Medium</option>
+                            <option value="large">Large</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label>Logo Position</Label>
+                          <select
+                            value={config.logoPosition || "left"}
+                            onChange={(e) => updateConfig("logoPosition", e.target.value)}
+                            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          >
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-6">
+                      <h4 className="font-semibold text-sm text-gray-900 mb-4">Banner Text / Title</h4>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Banner Text</Label>
+                          <Input
+                            value={config.bannerText}
+                            onChange={(e) => updateConfig("bannerText", e.target.value)}
+                            placeholder="Welcome to Our Survey"
+                            className="mt-2"
                           />
-                          <label htmlFor="banner-upload">
-                            <Button variant="outline" className="w-full cursor-pointer" asChild>
-                              <span>
-                                <Upload className="w-4 h-4 mr-2" />
-                                Or Upload File (Temporary)
-                              </span>
-                            </Button>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <Label>Text Color</Label>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <input
+                                type="color"
+                                value={config.bannerTextColor}
+                                onChange={(e) => updateConfig("bannerTextColor", e.target.value)}
+                                className="h-10 w-20"
+                              />
+                              <Input
+                                value={config.bannerTextColor}
+                                onChange={(e) => updateConfig("bannerTextColor", e.target.value)}
+                                placeholder="#FFFFFF"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Text Size</Label>
+                            <select
+                              value={config.bannerTextSize || "medium"}
+                              onChange={(e) => updateConfig("bannerTextSize", e.target.value)}
+                              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                              <option value="small">Small</option>
+                              <option value="medium">Medium</option>
+                              <option value="large">Large</option>
+                              <option value="xlarge">Extra Large</option>
+                            </select>
+                          </div>
+                          <div>
+                            <Label>Text Position</Label>
+                            <select
+                              value={config.bannerTextPosition || "left"}
+                              onChange={(e) => updateConfig("bannerTextPosition", e.target.value)}
+                              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                              <option value="left">Left</option>
+                              <option value="center">Center</option>
+                              <option value="right">Right</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label>Banner Image</Label>
+                          <p className="text-xs text-gray-500 mt-1">Optional background image for the banner</p>
+                          <div className="mt-2 space-y-3">
+                            {config.bannerImageUrl && (
+                              <div className="relative">
+                                <img
+                                  src={config.bannerImageUrl}
+                                  alt="Banner"
+                                  className="w-full h-32 object-cover rounded-lg"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="absolute top-2 right-2"
+                                  onClick={() => updateConfig("bannerImageUrl", "")}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            <div>
+                              <Label className="text-xs text-gray-600">Image URL</Label>
+                              <div className="flex gap-2 mt-1">
+                                <Input
+                                  type="url"
+                                  value={config.bannerImageUrl || ""}
+                                  onChange={(e) => updateConfig("bannerImageUrl", e.target.value)}
+                                  placeholder="https://example.com/banner.jpg"
+                                  className="flex-1"
+                                />
+                                {config.bannerImageUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateConfig("bannerImageUrl", "")}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleImageUpload("bannerImageUrl", file);
+                                }}
+                                className="hidden"
+                                id="banner-upload"
+                              />
+                              <label htmlFor="banner-upload">
+                                <Button variant="outline" className="w-full cursor-pointer" asChild>
+                                  <span>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload Banner Image
+                                  </span>
+                                </Button>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Banner Height</Label>
+                            <Input
+                              value={config.bannerHeight}
+                              onChange={(e) => updateConfig("bannerHeight", e.target.value)}
+                              placeholder="200px"
+                              className="mt-2"
+                            />
+                          </div>
+                          <div>
+                            <Label>Background Color</Label>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <input
+                                type="color"
+                                value={config.bannerBackgroundColor}
+                                onChange={(e) => updateConfig("bannerBackgroundColor", e.target.value)}
+                                className="h-10 w-20"
+                              />
+                              <Input
+                                value={config.bannerBackgroundColor}
+                                onChange={(e) => updateConfig("bannerBackgroundColor", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label>Banner Image Position</Label>
+                          <select
+                            value={config.bannerImagePosition || "center"}
+                            onChange={(e) => updateConfig("bannerImagePosition", e.target.value)}
+                            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          >
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                          </select>
+                        </div>
+
+                        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <label className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={config.bannerShowOnInnerPages || false}
+                              onChange={(e) => updateConfig("bannerShowOnInnerPages", e.target.checked)}
+                              className="w-4 h-4 text-blue-600"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">Show banner on inner pages</span>
+                              <p className="text-xs text-gray-600 mt-0.5">Enable this to display the banner on survey/assessment/poll pages (not just landing page)</p>
+                            </div>
                           </label>
                         </div>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Left Content Panel</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Content displayed on the left side panel (split screen template)</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     <div>
-                      <Label>Banner Image Position</Label>
-                      <select
-                        value={config.bannerImagePosition || "center"}
-                        onChange={(e) => updateConfig("bannerImagePosition", e.target.value)}
-                        className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      >
-                        <option value="left">Left</option>
-                        <option value="center">Center</option>
-                        <option value="right">Right</option>
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Banner Height</Label>
-                        <Input
-                          value={config.bannerHeight}
-                          onChange={(e) => updateConfig("bannerHeight", e.target.value)}
-                          placeholder="200px"
-                          className="mt-2"
-                        />
-                      </div>
-                      <div>
-                        <Label>Background Color</Label>
-                        <div className="flex items-center space-x-2 mt-2">
-                          <input
-                            type="color"
-                            value={config.bannerBackgroundColor}
-                            onChange={(e) => updateConfig("bannerBackgroundColor", e.target.value)}
-                            className="h-10 w-20"
-                          />
-                          <Input
-                            value={config.bannerBackgroundColor}
-                            onChange={(e) => updateConfig("bannerBackgroundColor", e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Banner Text</Label>
+                      <Label>Title</Label>
                       <Input
-                        value={config.bannerText}
-                        onChange={(e) => updateConfig("bannerText", e.target.value)}
-                        placeholder="Optional banner text"
+                        value={config.leftContentTitle}
+                        onChange={(e) => updateConfig("leftContentTitle", e.target.value)}
+                        placeholder="Event title (from event details)"
                         className="mt-2"
                       />
+                      <p className="text-xs text-gray-500 mt-1">Defaults to event title</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Banner Text Color</Label>
-                        <div className="flex items-center space-x-2 mt-2">
-                          <input
-                            type="color"
-                            value={config.bannerTextColor}
-                            onChange={(e) => updateConfig("bannerTextColor", e.target.value)}
-                            className="h-10 w-20"
-                          />
-                          <Input
-                            value={config.bannerTextColor}
-                            onChange={(e) => updateConfig("bannerTextColor", e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Banner Text Position</Label>
-                        <select
-                          value={config.bannerTextPosition || "left"}
-                          onChange={(e) => updateConfig("bannerTextPosition", e.target.value)}
-                          className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        >
-                          <option value="left">Left</option>
-                          <option value="center">Center</option>
-                          <option value="right">Right</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <label className="flex items-center space-x-3 cursor-pointer">
+                    <div>
+                      <Label>Title Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
                         <input
-                          type="checkbox"
-                          checked={config.bannerShowOnInnerPages || false}
-                          onChange={(e) => updateConfig("bannerShowOnInnerPages", e.target.checked)}
-                          className="w-4 h-4 text-blue-600"
+                          type="color"
+                          value={config.leftContentTitleColor}
+                          onChange={(e) => updateConfig("leftContentTitleColor", e.target.value)}
+                          className="h-10 w-20"
                         />
-                        <div>
-                          <span className="text-sm font-medium text-gray-900">Show banner on inner pages</span>
-                          <p className="text-xs text-gray-600 mt-0.5">Enable this to display the banner on survey/assessment/poll pages (not just landing page)</p>
-                        </div>
-                      </label>
+                        <Input
+                          value={config.leftContentTitleColor}
+                          onChange={(e) => updateConfig("leftContentTitleColor", e.target.value)}
+                          placeholder="#1F2937"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Description</Label>
+                      <textarea
+                        value={config.leftContentDescription}
+                        onChange={(e) => updateConfig("leftContentDescription", e.target.value)}
+                        placeholder="Event description (from event details)"
+                        className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg min-h-[100px]"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Defaults to event description</p>
+                    </div>
+                    <div>
+                      <Label>Description Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.leftContentDescriptionColor}
+                          onChange={(e) => updateConfig("leftContentDescriptionColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.leftContentDescriptionColor}
+                          onChange={(e) => updateConfig("leftContentDescriptionColor", e.target.value)}
+                          placeholder="#6B7280"
+                        />
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1261,17 +1470,599 @@ export default function LandingPageConfigPage() {
                     </div>
                   </CardContent>
                 </Card>
-              </>
-            )}
 
-            {/* Post Landing Page Tab */}
-            {activeTab === "post-landing" && (
-              <>
-                {/* Tab Info */}
+                {/* Set Background Image - All Templates */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Set Background Image</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Configure background images based on template selection
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-8">
+                    {/* Split Screen Template - Left and Right Background Images */}
+                    <div className={`space-y-6 p-4 rounded-lg border-2 ${config.loginBoxAlignment === "right" ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-gray-50"}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900">Split Screen Template Background</h3>
+                          <p className="text-xs text-gray-600 mt-0.5">For templates with login box on right side</p>
+                        </div>
+                        {config.loginBoxAlignment === "right" && (
+                          <span className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded-full">Currently Active</span>
+                        )}
+                      </div>
+
+                      <div className="space-y-6">
+                        {/* Left Side Background */}
+                        <div>
+                          <Label>Left Side Background Color</Label>
+                          <p className="text-xs text-gray-500 mt-1">Background color for left content panel</p>
+                          <div className="flex items-center space-x-2 mt-2">
+                            <input
+                              type="color"
+                              value={config.splitScreenLeftBackgroundColor || "#FFFFFF"}
+                              onChange={(e) => updateConfig("splitScreenLeftBackgroundColor", e.target.value)}
+                              className="h-10 w-20"
+                            />
+                            <Input
+                              value={config.splitScreenLeftBackgroundColor || "#FFFFFF"}
+                              onChange={(e) => updateConfig("splitScreenLeftBackgroundColor", e.target.value)}
+                              placeholder="#FFFFFF"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Left Side Background Image */}
+                        <div>
+                          <Label>Left Side Background Image (Optional)</Label>
+                          <p className="text-xs text-gray-500 mt-1">Full-height background image for left content panel</p>
+                          <div className="mt-2 space-y-3">
+                            {config.splitScreenLeftBackgroundImageUrl && (
+                              <div className="relative">
+                                <img
+                                  src={config.splitScreenLeftBackgroundImageUrl}
+                                  alt="Left Background"
+                                  className="w-full h-48 object-cover rounded-lg"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="absolute top-2 right-2"
+                                  onClick={() => updateConfig("splitScreenLeftBackgroundImageUrl", "")}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            <div>
+                              <Label className="text-xs text-gray-600">Image URL</Label>
+                              <div className="flex gap-2 mt-1">
+                                <Input
+                                  type="url"
+                                  value={config.splitScreenLeftBackgroundImageUrl || ""}
+                                  onChange={(e) => updateConfig("splitScreenLeftBackgroundImageUrl", e.target.value)}
+                                  placeholder="https://example.com/left-background.jpg"
+                                  className="flex-1"
+                                />
+                                {config.splitScreenLeftBackgroundImageUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateConfig("splitScreenLeftBackgroundImageUrl", "")}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleImageUpload("splitScreenLeftBackgroundImageUrl", file);
+                                }}
+                                className="hidden"
+                                id="split-left-bg-upload"
+                              />
+                              <label htmlFor="split-left-bg-upload">
+                                <Button variant="outline" className="w-full cursor-pointer" asChild>
+                                  <span>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload Left Background Image
+                                  </span>
+                                </Button>
+                              </label>
+                            </div>
+
+                            {config.splitScreenLeftBackgroundImageUrl && (
+                              <>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <Label>Image Layer Position</Label>
+                                    <p className="text-xs text-gray-500 mt-1">Z-index relative to content</p>
+                                    <select
+                                      value={config.splitScreenLeftBackgroundPosition || "behind"}
+                                      onChange={(e) => updateConfig("splitScreenLeftBackgroundPosition", e.target.value)}
+                                      className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    >
+                                      <option value="behind">Behind Content</option>
+                                      <option value="above">Above Content</option>
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <Label>Vertical Position</Label>
+                                    <p className="text-xs text-gray-500 mt-1">Relative to title & description</p>
+                                    <select
+                                      value={config.splitScreenLeftBackgroundVerticalPosition || "full"}
+                                      onChange={(e) => updateConfig("splitScreenLeftBackgroundVerticalPosition", e.target.value)}
+                                      className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                    >
+                                      <option value="below">Below (After Description)</option>
+                                      <option value="full">Full as Background</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                
+                                <div>
+                                  <Label>Image Opacity</Label>
+                                  <p className="text-xs text-gray-500 mt-1">Adjust transparency (0-100%)</p>
+                                  <div className="flex items-center gap-3 mt-2">
+                                    <input
+                                      type="range"
+                                      min="0"
+                                      max="100"
+                                      value={config.splitScreenLeftBackgroundOpacity ?? 100}
+                                      onChange={(e) => updateConfig("splitScreenLeftBackgroundOpacity", parseInt(e.target.value))}
+                                      className="flex-1"
+                                    />
+                                    <span className="text-sm font-medium text-gray-700 w-12 text-right">{config.splitScreenLeftBackgroundOpacity ?? 100}%</span>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right Side Background */}
+                        <div>
+                          <Label>Right Side Background Color</Label>
+                          <p className="text-xs text-gray-500 mt-1">Background color for right login panel</p>
+                          <div className="flex items-center space-x-2 mt-2">
+                            <input
+                              type="color"
+                              value={config.splitScreenRightBackgroundColor || "#F3F4F6"}
+                              onChange={(e) => updateConfig("splitScreenRightBackgroundColor", e.target.value)}
+                              className="h-10 w-20"
+                            />
+                            <Input
+                              value={config.splitScreenRightBackgroundColor || "#F3F4F6"}
+                              onChange={(e) => updateConfig("splitScreenRightBackgroundColor", e.target.value)}
+                              placeholder="#F3F4F6"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Right Side Background Image */}
+                        <div>
+                          <Label>Right Side Background Image (Optional)</Label>
+                          <p className="text-xs text-gray-500 mt-1">Full-height background image for right login panel</p>
+                          <div className="mt-2 space-y-3">
+                            {config.splitScreenRightBackgroundImageUrl && (
+                              <div className="relative">
+                                <img
+                                  src={config.splitScreenRightBackgroundImageUrl}
+                                  alt="Right Background"
+                                  className="w-full h-48 object-cover rounded-lg"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="absolute top-2 right-2"
+                                  onClick={() => updateConfig("splitScreenRightBackgroundImageUrl", "")}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            <div>
+                              <Label className="text-xs text-gray-600">Image URL</Label>
+                              <div className="flex gap-2 mt-1">
+                                <Input
+                                  type="url"
+                                  value={config.splitScreenRightBackgroundImageUrl || ""}
+                                  onChange={(e) => updateConfig("splitScreenRightBackgroundImageUrl", e.target.value)}
+                                  placeholder="https://example.com/right-background.jpg"
+                                  className="flex-1"
+                                />
+                                {config.splitScreenRightBackgroundImageUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateConfig("splitScreenRightBackgroundImageUrl", "")}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleImageUpload("splitScreenRightBackgroundImageUrl", file);
+                                }}
+                                className="hidden"
+                                id="split-right-bg-upload"
+                              />
+                              <label htmlFor="split-right-bg-upload">
+                                <Button variant="outline" className="w-full cursor-pointer" asChild>
+                                  <span>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload Right Background Image
+                                  </span>
+                                </Button>
+                              </label>
+                            </div>
+                            
+                            {config.splitScreenRightBackgroundImageUrl && (
+                              <div>
+                                <Label>Image Opacity</Label>
+                                <p className="text-xs text-gray-500 mt-1">Adjust transparency (0-100%)</p>
+                                <div className="flex items-center gap-3 mt-2">
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={config.splitScreenRightBackgroundOpacity ?? 100}
+                                    onChange={(e) => updateConfig("splitScreenRightBackgroundOpacity", parseInt(e.target.value))}
+                                    className="flex-1"
+                                  />
+                                  <span className="text-sm font-medium text-gray-700 w-12 text-right">{config.splitScreenRightBackgroundOpacity ?? 100}%</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-blue-100 border border-blue-200 rounded-lg">
+                          <p className="text-sm text-blue-900 font-medium mb-1">💡 Split Screen Tips</p>
+                          <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                            <li>Images cover full height from header to footer</li>
+                            <li>Use high-resolution images (min 1920px wide)</li>
+                            <li>Left image vertical position controls alignment relative to event title</li>
+                            <li>Right image: behind login form</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Other Templates - Full Page Background */}
+                    <div className={`space-y-6 p-4 rounded-lg border-2 ${config.loginBoxAlignment !== "right" ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-gray-50"}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900">Other Templates Background</h3>
+                          <p className="text-xs text-gray-600 mt-0.5">For centered login, modern, gradient, and minimal templates</p>
+                        </div>
+                        {config.loginBoxAlignment !== "right" && (
+                          <span className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded-full">Currently Active</span>
+                        )}
+                      </div>
+
+                      <div className="space-y-6">
+                        {/* Full Page Background Color */}
+                        <div>
+                          <Label>Full Page Background Color</Label>
+                          <p className="text-xs text-gray-500 mt-1">Background color for the entire page</p>
+                          <div className="flex items-center space-x-2 mt-2">
+                            <input
+                              type="color"
+                              value={config.fullPageBackgroundColor || "#F9FAFB"}
+                              onChange={(e) => updateConfig("fullPageBackgroundColor", e.target.value)}
+                              className="h-10 w-20"
+                            />
+                            <Input
+                              value={config.fullPageBackgroundColor || "#F9FAFB"}
+                              onChange={(e) => updateConfig("fullPageBackgroundColor", e.target.value)}
+                              placeholder="#F9FAFB"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Full Page Background Image for Other Templates */}
+                        <div>
+                          <Label>Full Page Background Image (Optional)</Label>
+                          <p className="text-xs text-gray-500 mt-1">Background image covering entire page from top banner to footer</p>
+                          <div className="mt-2 space-y-3">
+                            {config.fullPageBackgroundImageUrl && (
+                              <div className="relative">
+                                <img
+                                  src={config.fullPageBackgroundImageUrl}
+                                  alt="Full Page Background"
+                                  className="w-full h-48 object-cover rounded-lg"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="absolute top-2 right-2"
+                                  onClick={() => updateConfig("fullPageBackgroundImageUrl", "")}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            <div>
+                              <Label className="text-xs text-gray-600">Image URL</Label>
+                              <div className="flex gap-2 mt-1">
+                                <Input
+                                  type="url"
+                                  value={config.fullPageBackgroundImageUrl || ""}
+                                  onChange={(e) => updateConfig("fullPageBackgroundImageUrl", e.target.value)}
+                                  placeholder="https://example.com/background.jpg"
+                                  className="flex-1"
+                                />
+                                {config.fullPageBackgroundImageUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateConfig("fullPageBackgroundImageUrl", "")}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleImageUpload("fullPageBackgroundImageUrl", file);
+                                }}
+                                className="hidden"
+                                id="full-page-bg-upload"
+                              />
+                              <label htmlFor="full-page-bg-upload">
+                                <Button variant="outline" className="w-full cursor-pointer" asChild>
+                                  <span>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload Background Image
+                                  </span>
+                                </Button>
+                              </label>
+                            </div>
+                            
+                            {config.fullPageBackgroundImageUrl && (
+                              <div>
+                                <Label>Image Opacity</Label>
+                                <p className="text-xs text-gray-500 mt-1">Adjust transparency (0-100%)</p>
+                                <div className="flex items-center gap-3 mt-2">
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={config.fullPageBackgroundOpacity ?? 100}
+                                    onChange={(e) => updateConfig("fullPageBackgroundOpacity", parseInt(e.target.value))}
+                                    className="flex-1"
+                                  />
+                                  <span className="text-sm font-medium text-gray-700 w-12 text-right">{config.fullPageBackgroundOpacity ?? 100}%</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-blue-100 border border-blue-200 rounded-lg">
+                          <p className="text-sm text-blue-900 font-medium mb-1">💡 Full Page Background Tips</p>
+                          <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                            <li>Image covers entire page from header to footer</li>
+                            <li>Use high-resolution images (min 1920px wide)</li>
+                            <li>Displays behind all content with CSS cover</li>
+                            <li>Header and footer remain visible over background</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Login Box Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Login Box Configuration</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Customize logo or text displayed in the login box</p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <Label>Content Type</Label>
+                      <select
+                        value={config.loginBoxContentType || "event"}
+                        onChange={(e) => updateConfig("loginBoxContentType", e.target.value)}
+                        className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      >
+                        <option value="event">Event Name & Description</option>
+                        <option value="logo">Logo</option>
+                        <option value="text">Custom Text</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">Choose what to display in the login box</p>
+                    </div>
+
+                    <div>
+                      <Label>Login Box Header Background Color</Label>
+                      <p className="text-xs text-gray-500 mt-1">Background color for the header area where logo/text is displayed</p>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.activityCardHeaderColor || "#3B82F6"}
+                          onChange={(e) => updateConfig("activityCardHeaderColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.activityCardHeaderColor || "#3B82F6"}
+                          onChange={(e) => updateConfig("activityCardHeaderColor", e.target.value)}
+                          placeholder="#3B82F6"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Logo Configuration */}
+                    {config.loginBoxContentType === "logo" && (
+                      <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                        <h4 className="font-medium text-sm">Logo Settings</h4>
+                        
+                        <div>
+                          <Label>Logo Image</Label>
+                          {config.loginBoxLogoUrl && (
+                            <div className="relative mt-2 mb-3">
+                              <img
+                                src={config.loginBoxLogoUrl}
+                                alt="Login Box Logo"
+                                className="w-32 h-32 object-contain rounded-lg border"
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="absolute top-2 right-2"
+                                onClick={() => updateConfig("loginBoxLogoUrl", "")}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
+                          
+                          <div className="mt-2">
+                            <Label className="text-xs text-gray-600">Image URL</Label>
+                            <div className="flex gap-2 mt-1">
+                              <Input
+                                type="url"
+                                value={config.loginBoxLogoUrl || ""}
+                                onChange={(e) => updateConfig("loginBoxLogoUrl", e.target.value)}
+                                placeholder="https://example.com/logo.png"
+                                className="flex-1"
+                              />
+                              {config.loginBoxLogoUrl && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateConfig("loginBoxLogoUrl", "")}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="mt-3">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleImageUpload("loginBoxLogoUrl", file);
+                              }}
+                              className="hidden"
+                              id="login-box-logo-upload"
+                            />
+                            <label htmlFor="login-box-logo-upload">
+                              <Button variant="outline" className="w-full cursor-pointer" asChild>
+                                <span>
+                                  <Upload className="w-4 h-4 mr-2" />
+                                  Upload Logo
+                                </span>
+                              </Button>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Horizontal Position</Label>
+                            <select
+                              value={config.loginBoxLogoHorizontalPosition || "center"}
+                              onChange={(e) => updateConfig("loginBoxLogoHorizontalPosition", e.target.value)}
+                              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                              <option value="left">Left</option>
+                              <option value="center">Center</option>
+                              <option value="right">Right</option>
+                            </select>
+                          </div>
+                          <div>
+                            <Label>Vertical Position</Label>
+                            <select
+                              value={config.loginBoxLogoVerticalPosition || "top"}
+                              onChange={(e) => updateConfig("loginBoxLogoVerticalPosition", e.target.value)}
+                              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                              <option value="top">Top</option>
+                              <option value="bottom">Bottom</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Custom Text Configuration */}
+                    {config.loginBoxContentType === "text" && (
+                      <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                        <h4 className="font-medium text-sm">Custom Text Settings</h4>
+                        
+                        <div>
+                          <Label>Title</Label>
+                          <Input
+                            value={config.loginBoxCustomTitle || ""}
+                            onChange={(e) => updateConfig("loginBoxCustomTitle", e.target.value)}
+                            placeholder="Enter custom title"
+                            className="mt-2"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label>Subtitle</Label>
+                          <textarea
+                            value={config.loginBoxCustomSubtitle || ""}
+                            onChange={(e) => updateConfig("loginBoxCustomSubtitle", e.target.value)}
+                            placeholder="Enter custom subtitle/description"
+                            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg min-h-[80px]"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {config.loginBoxContentType === "event" && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-900">
+                          <strong>Event Name & Description</strong> will be displayed from the event details.
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+
+          {/* Post Landing Page Tab */}
+          {activeTab === "post-landing" && (
+            <>
+              {/* Tab Info */}
                 <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
                   <h3 className="text-sm font-semibold text-purple-900 mb-1">Post Landing Page</h3>
                   <p className="text-sm text-purple-700">Configure the page shown after participants log in but before they start the activity. This includes background styling and layout controls.</p>
                 </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
 
                 {/* Header / Top Banner */}
                 <Card>
@@ -1586,7 +2377,240 @@ export default function LandingPageConfigPage() {
                               </Button>
                             </label>
                           </div>
+                          
+                          {/* Image Opacity */}
+                          <div className="mt-4">
+                            <Label>Image Opacity</Label>
+                            <p className="text-xs text-gray-500 mt-1">Adjust background image transparency (0-100%)</p>
+                            <div className="flex items-center gap-3 mt-2">
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={config.backgroundImageOpacity ?? 100}
+                                onChange={(e) => updateConfig("backgroundImageOpacity", parseInt(e.target.value))}
+                                className="flex-1"
+                              />
+                              <span className="text-sm font-medium text-gray-700 w-12 text-right">
+                                {config.backgroundImageOpacity ?? 100}%
+                              </span>
+                            </div>
+                          </div>
                         </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Content Header Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Content Header</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Configure what displays in the activity header section</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Header Content Type</Label>
+                      <select
+                        value={config.contentHeaderType || "event"}
+                        onChange={(e) => updateConfig("contentHeaderType", e.target.value)}
+                        className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      >
+                        <option value="event">Event Title & Description</option>
+                        <option value="logo">Logo</option>
+                        <option value="custom">Custom Text</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-2">Choose what to display in the header section with START DATE, END DATE, and QUESTIONS</p>
+                    </div>
+
+                    {config.contentHeaderType === "logo" && (
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Logo Image</Label>
+                          <p className="text-xs text-gray-500 mt-1">Upload a file or enter an image URL</p>
+                          <div className="mt-2 space-y-3">
+                            {config.contentHeaderLogoUrl && (
+                              <div className="relative">
+                                <img
+                                  src={config.contentHeaderLogoUrl}
+                                  alt="Content Header Logo"
+                                  className="w-full h-32 object-contain rounded-lg bg-gray-50"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="absolute top-2 right-2"
+                                  onClick={() => updateConfig("contentHeaderLogoUrl", "")}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            {/* URL Input */}
+                            <div>
+                              <Label className="text-xs text-gray-600">Logo URL</Label>
+                              <div className="flex gap-2 mt-1">
+                                <Input
+                                  type="url"
+                                  value={config.contentHeaderLogoUrl || ""}
+                                  onChange={(e) => updateConfig("contentHeaderLogoUrl", e.target.value)}
+                                  placeholder="https://example.com/logo.png"
+                                  className="flex-1"
+                                />
+                                {config.contentHeaderLogoUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateConfig("contentHeaderLogoUrl", "")}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* File Upload */}
+                            <div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleImageUpload("contentHeaderLogoUrl", file);
+                                }}
+                                className="hidden"
+                                id="content-header-logo-upload"
+                              />
+                              <label htmlFor="content-header-logo-upload">
+                                <Button variant="outline" className="w-full cursor-pointer" asChild>
+                                  <span>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload Logo
+                                  </span>
+                                </Button>
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Logo Size */}
+                        <div>
+                          <Label>Logo Size</Label>
+                          <select
+                            value={config.contentHeaderLogoSize || "medium"}
+                            onChange={(e) => updateConfig("contentHeaderLogoSize", e.target.value)}
+                            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          >
+                            <option value="small">Small (80px height)</option>
+                            <option value="medium">Medium (120px height)</option>
+                            <option value="large">Large (160px height)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Header Background Styling - for all header types */}
+                    <div className="border-t border-gray-200 pt-4 mt-4">
+                      <Label className="text-base font-semibold">Header Background</Label>
+                      <p className="text-xs text-gray-500 mt-1">Configure background color for the content header section</p>
+                      
+                      <div className="mt-3">
+                        <Label>Background Style</Label>
+                        <select
+                          value={config.contentHeaderBackgroundStyle || "gradient"}
+                          onChange={(e) => updateConfig("contentHeaderBackgroundStyle", e.target.value)}
+                          className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        >
+                          <option value="solid">Solid Color</option>
+                          <option value="gradient">Gradient</option>
+                        </select>
+                      </div>
+
+                      {config.contentHeaderBackgroundStyle === "solid" && (
+                        <div className="mt-3">
+                          <Label>Background Color</Label>
+                          <div className="flex items-center space-x-2 mt-2">
+                            <input
+                              type="color"
+                              value={config.contentHeaderBackgroundColor || "#3B82F6"}
+                              onChange={(e) => updateConfig("contentHeaderBackgroundColor", e.target.value)}
+                              className="h-10 w-20"
+                            />
+                            <Input
+                              value={config.contentHeaderBackgroundColor || "#3B82F6"}
+                              onChange={(e) => updateConfig("contentHeaderBackgroundColor", e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {(config.contentHeaderBackgroundStyle === "gradient" || !config.contentHeaderBackgroundStyle) && (
+                        <div className="grid grid-cols-2 gap-4 mt-3">
+                          <div>
+                            <Label>Gradient From</Label>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <input
+                                type="color"
+                                value={config.contentHeaderGradientFrom || "#3B82F6"}
+                                onChange={(e) => updateConfig("contentHeaderGradientFrom", e.target.value)}
+                                className="h-10 w-20"
+                              />
+                              <Input
+                                value={config.contentHeaderGradientFrom || "#3B82F6"}
+                                onChange={(e) => updateConfig("contentHeaderGradientFrom", e.target.value)}
+                                className="flex-1"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Gradient To</Label>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <input
+                                type="color"
+                                value={config.contentHeaderGradientTo || "#7C3AED"}
+                                onChange={(e) => updateConfig("contentHeaderGradientTo", e.target.value)}
+                                className="h-10 w-20"
+                              />
+                              <Input
+                                value={config.contentHeaderGradientTo || "#7C3AED"}
+                                onChange={(e) => updateConfig("contentHeaderGradientTo", e.target.value)}
+                                className="flex-1"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {config.contentHeaderType === "custom" && (
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Custom Title</Label>
+                          <Input
+                            value={config.contentHeaderCustomTitle || ""}
+                            onChange={(e) => updateConfig("contentHeaderCustomTitle", e.target.value)}
+                            placeholder="Enter custom title"
+                            className="mt-2"
+                          />
+                        </div>
+                        <div>
+                          <Label>Custom Subtitle</Label>
+                          <Input
+                            value={config.contentHeaderCustomSubtitle || ""}
+                            onChange={(e) => updateConfig("contentHeaderCustomSubtitle", e.target.value)}
+                            placeholder="Enter custom subtitle/description"
+                            className="mt-2"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {config.contentHeaderType === "event" && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-900">
+                          <strong>Event Title & Description</strong> will be automatically displayed from the activity details.
+                        </p>
                       </div>
                     )}
                   </CardContent>
@@ -1754,18 +2778,20 @@ export default function LandingPageConfigPage() {
                     </div>
                   </CardContent>
                 </Card>
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            {/* Thank You Page Tab */}
-            {activeTab === "thank-you" && (
-              <>
-                {/* Tab Info */}
-                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <h3 className="text-sm font-semibold text-green-900 mb-1">Thank You Page</h3>
-                  <p className="text-sm text-green-700">Configure the completion message shown after participants successfully submit their responses. This applies globally to Surveys, Polls, and Evaluations.</p>
-                </div>
+          {/* Thank You Page Tab */}
+          {activeTab === "thank-you" && (
+            <>
+              {/* Tab Info */}
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-green-900 mb-1">Thank You Page</h3>
+                <p className="text-sm text-green-700">Configure the completion message shown after participants successfully submit their responses. This applies globally to Surveys, Polls, and Evaluations.</p>
+              </div>
 
+              <div className="grid lg:grid-cols-2 gap-6">
                 {/* Thank You Page Configuration */}
                 <Card>
                   <CardHeader>
@@ -1833,20 +2859,32 @@ export default function LandingPageConfigPage() {
                     </div>
                   </CardContent>
                 </Card>
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            {/* CSS & Fonts Tab */}
-            {activeTab === "css-fonts" && (
-              <>
-                {/* Tab Info */}
-                <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Code className="w-4 h-4 text-purple-700" />
-                    <h3 className="text-sm font-semibold text-purple-900">CSS & Fonts - Advanced Styling</h3>
-                  </div>
-                  <p className="text-sm text-purple-700">Centralized styling control for participant & anonymous event pages. These settings only affect presentation — no content or logic changes.</p>
-                </div>
+          {/* CSS & Fonts Tab */}
+          {activeTab === "css-fonts" && (
+            <>
+              <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-purple-900 mb-1">CSS & Fonts</h3>
+                <p className="text-sm text-purple-700">Customize typography and add custom CSS for advanced styling.</p>
+              </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Typography Settings */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Code className="w-4 h-4 text-purple-700" />
+                      <CardTitle>CSS & Fonts</CardTitle>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">Advanced styling control for your landing pages</p>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-600">Use the options below to customize typography, fonts, and add custom CSS for advanced styling.</p>
+                  </CardContent>
+                </Card>
 
                 {/* Theme Presets */}
                 <Card>
@@ -2377,120 +3415,9 @@ h1, h2, h3 {
                     </div>
                   </CardContent>
                 </Card>
-              </>
-            )}
-          </div>
-
-          {/* Preview Panel */}
-          <div className="lg:sticky lg:top-6">
-            <Card className="border-2 border-gray-200">
-              <CardHeader className="bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium text-gray-700">Live Preview</CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handlePreview}
-                    className="text-xs"
-                  >
-                    <Eye className="w-3 h-3 mr-1" />
-                    Full Screen
-                  </Button>
-                </div>
-                {/* Device Preview Toggle */}
-                <div className="flex items-center gap-1 mt-3 p-1 bg-gray-200 rounded-lg">
-                  <button
-                    onClick={() => setPreviewDevice("desktop")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                      previewDevice === "desktop"
-                        ? "bg-white text-gray-900 shadow-sm"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    <Monitor className="w-3.5 h-3.5" />
-                    Desktop
-                  </button>
-                  <button
-                    onClick={() => setPreviewDevice("tablet")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                      previewDevice === "tablet"
-                        ? "bg-white text-gray-900 shadow-sm"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    <Tablet className="w-3.5 h-3.5" />
-                    Tablet
-                  </button>
-                  <button
-                    onClick={() => setPreviewDevice("mobile")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                      previewDevice === "mobile"
-                        ? "bg-white text-gray-900 shadow-sm"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    Mobile
-                  </button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div 
-                  className="bg-gray-100 relative overflow-hidden flex justify-center"
-                  style={{ 
-                    height: previewDevice === "mobile" ? "700px" : previewDevice === "tablet" ? "650px" : "600px",
-                    padding: previewDevice !== "desktop" ? "16px" : "0"
-                  }}
-                >
-                  {previewDevice === "desktop" ? (
-                    <div
-                      style={{
-                        width: "100%",
-                        height: "600px",
-                        overflow: "hidden",
-                        position: "relative",
-                      }}
-                    >
-                      <iframe
-                        src={`/activities/take/${activityId}?preview=true`}
-                        className="border-0"
-                        title="Landing Page Preview"
-                        style={{ 
-                          transform: 'scale(0.5)',
-                          transformOrigin: 'top left',
-                          width: '200%',
-                          height: '1200px',
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        width: previewDevice === "mobile" ? "375px" : "768px",
-                        height: previewDevice === "mobile" ? "667px" : "600px",
-                        border: "8px solid #1F2937",
-                        borderRadius: "24px",
-                        overflow: "hidden",
-                        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-                      }}
-                    >
-                      <iframe
-                        src={`/activities/take/${activityId}?preview=true`}
-                        className="w-full h-full border-0"
-                        title="Landing Page Preview"
-                      />
-                    </div>
-                  )}
-                </div>
-                <div className="p-3 bg-gray-50 border-t text-center">
-                  <p className="text-xs text-gray-500">Preview updates when you click Save Configuration</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </RoleBasedLayout>

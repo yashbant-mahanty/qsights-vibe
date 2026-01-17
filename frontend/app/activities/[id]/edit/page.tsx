@@ -53,8 +53,8 @@ const defaultMandatoryRegistrationFields: FormField[] = [
     id: "email",
     name: "email",
     type: "email",
-    label: "Email Address",
-    placeholder: "Enter your email address",
+    label: "Communication Email ID",
+    placeholder: "Enter your communication email ID",
     required: true,
     order: 1,
     isMandatory: true,
@@ -141,6 +141,7 @@ export default function EditActivityPage() {
   const [saving, setSaving] = useState(false);
   const [questionnaireLanguages, setQuestionnaireLanguages] = useState<string[]>(["EN"]);
   const [activityLoaded, setActivityLoaded] = useState(false);
+  const [activityStatus, setActivityStatus] = useState<string>("draft"); // Track activity status
 
   useEffect(() => {
     loadInitialData();
@@ -326,6 +327,9 @@ export default function EditActivityPage() {
     try {
       setLoading(true);
       const activity = await activitiesApi.getById(activityId);
+      
+      // Store the activity status for later use
+      setActivityStatus(activity.status || "draft");
       
       // Helper function to extract just the date part (YYYY-MM-DD) from ISO strings
       const parseDate = (dateString: string | null | undefined): string => {
@@ -533,10 +537,54 @@ export default function EditActivityPage() {
 
       // Check if user needs approval (program-admin, program-manager)
       const requiresApproval = currentUser && ['program-admin', 'program-manager'].includes(currentUser.role);
+      
+      // Check if activity is already approved (status = live) - no new approval needed
+      const isAlreadyApproved = activityStatus === 'live';
 
-      if (requiresApproval) {
-        // Submit approval request instead of updating activity directly
+      if (requiresApproval && !isAlreadyApproved) {
+        // For draft activity being published by program-admin: update activity then create approval
+        const activityPayload = {
+          name: activityData.title,
+          description: activityData.description,
+          type: activityData.type as "survey" | "poll" | "assessment",
+          program_id: activityData.programId,
+          organization_id: selectedProgram.organization_id,
+          start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
+          end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
+          questionnaire_id: selectedQuestionnaires[0],
+          allow_guests: activityData.allowGuests,
+          contact_us_enabled: activityData.contactUsEnabled,
+          is_multilingual: activityData.isMultilingual,
+          languages: activityData.selectedLanguages,
+          registration_form_fields: normalizedRegistrationFields,
+          time_limit_enabled: activityData.timeLimitEnabled,
+          time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
+          pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
+          max_retakes: activityData.type === 'assessment' ? activityData.maxRetakes ?? undefined : undefined,
+          settings: {
+            display_mode: activityData.displayMode || 'all',
+            enable_per_question_language_switch: activityData.enablePerQuestionLanguageSwitch
+          },
+          // Additional Details fields
+          sender_email: activityData.senderEmail || undefined,
+          manager_name: activityData.managerName || undefined,
+          manager_email: activityData.managerEmail || undefined,
+          project_code: activityData.projectCode || undefined,
+          configuration_date: activityData.configurationDate || undefined,
+          configuration_price: activityData.configurationPrice ? parseFloat(activityData.configurationPrice) : undefined,
+          subscription_price: activityData.subscriptionPrice ? parseFloat(activityData.subscriptionPrice) : undefined,
+          subscription_frequency: activityData.subscriptionFrequency || undefined,
+          tax_percentage: activityData.taxPercentage ? parseFloat(activityData.taxPercentage) : undefined,
+          number_of_participants: activityData.numberOfParticipants ? parseInt(activityData.numberOfParticipants) : undefined,
+          questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
+        };
+
+        // Update the activity first
+        await activitiesApi.update(activityId, activityPayload);
+        
+        // Create approval request with activity_id linking to the existing activity
         const approvalPayload = {
+          activity_id: activityId, // Link to existing activity
           name: activityData.title,
           sender_email: activityData.senderEmail || undefined,
           description: activityData.description,
@@ -544,8 +592,9 @@ export default function EditActivityPage() {
           program_id: activityData.programId,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0], // Primary questionnaire
+          questionnaire_id: selectedQuestionnaires[0],
           allow_guests: activityData.allowGuests,
+          contact_us_enabled: activityData.contactUsEnabled,
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
@@ -573,9 +622,39 @@ export default function EditActivityPage() {
         await activityApprovalsApi.create(approvalPayload);
         toast({ 
           title: "Approval Request Submitted!", 
-          description: "Your changes have been submitted for Super Admin approval. You'll be notified once reviewed.", 
+          description: "Your event has been updated and submitted for Super Admin approval. You'll be notified once reviewed.", 
           variant: "success" 
         });
+        router.push("/activities");
+      } else if (requiresApproval && isAlreadyApproved) {
+        // Already approved activity: program-admin can update directly without new approval
+        const activityPayload = {
+          name: activityData.title,
+          description: activityData.description,
+          type: activityData.type as "survey" | "poll" | "assessment",
+          program_id: activityData.programId,
+          organization_id: selectedProgram.organization_id,
+          start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
+          end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
+          questionnaire_id: selectedQuestionnaires[0],
+          allow_guests: activityData.allowGuests,
+          contact_us_enabled: activityData.contactUsEnabled,
+          is_multilingual: activityData.isMultilingual,
+          languages: activityData.selectedLanguages,
+          registration_form_fields: normalizedRegistrationFields,
+          time_limit_enabled: activityData.timeLimitEnabled,
+          time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
+          pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
+          max_retakes: activityData.type === 'assessment' ? activityData.maxRetakes ?? undefined : undefined,
+          settings: {
+            display_mode: activityData.displayMode || 'all',
+            enable_per_question_language_switch: activityData.enablePerQuestionLanguageSwitch
+          },
+          // Note: Additional Details fields are NOT updated for program-admin when already approved
+        };
+
+        await activitiesApi.update(activityId, activityPayload);
+        toast({ title: "Success!", description: "Event updated successfully!", variant: "success" });
         router.push("/activities");
       } else {
         // Super-admin and admin can update directly
@@ -616,14 +695,14 @@ export default function EditActivityPage() {
         };
 
         await activitiesApi.update(activityId, activityPayload);
-        toast({ title: "Success!", description: "Activity updated successfully!", variant: "success" });
+        toast({ title: "Success!", description: "Event updated successfully!", variant: "success" });
         router.push("/activities");
       }
     } catch (err) {
-      console.error("Failed to update activity:", err);
+      console.error("Failed to update event:", err);
       toast({ 
         title: "Error", 
-        description: "Failed to update activity: " + (err instanceof Error ? err.message : "Unknown error"),
+        description: "Failed to update event: " + (err instanceof Error ? err.message : "Unknown error"),
         variant: "error"
       });
     } finally {
@@ -632,8 +711,9 @@ export default function EditActivityPage() {
   };
 
   const handleSaveDraft = async () => {
+    // Save Draft: NO approval required - directly updates activity
     if (!activityData.title.trim()) {
-      toast({ title: "Validation Error", description: "Please enter an activity title", variant: "warning" });
+      toast({ title: "Validation Error", description: "Please enter an event title", variant: "warning" });
       return;
     }
 
@@ -654,61 +734,11 @@ export default function EditActivityPage() {
         return;
       }
 
-      // Check if user needs approval (program-admin, program-manager)
-      const requiresApproval = currentUser && ['program-admin', 'program-manager'].includes(currentUser.role);
-
-      if (requiresApproval) {
-        // Submit approval request
-        const approvalPayload = {
-          name: activityData.title,
-          description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
-          program_id: activityData.programId,
-          start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
-          end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0] || undefined,
-          allow_guests: activityData.allowGuests,
-          contact_us_enabled: activityData.contactUsEnabled,
-          is_multilingual: activityData.isMultilingual,
-          languages: activityData.selectedLanguages,
-          registration_form_fields: normalizedRegistrationFields,
-          time_limit_enabled: activityData.timeLimitEnabled,
-          time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
-          pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
-          max_retakes: activityData.type === 'assessment' ? activityData.maxRetakes ?? undefined : undefined,
-          settings: {
-            display_mode: activityData.displayMode || 'all',
-            enable_per_question_language_switch: activityData.enablePerQuestionLanguageSwitch
-          },
-          // Additional Details fields
-          sender_email: activityData.senderEmail || undefined,
-          manager_name: activityData.managerName || undefined,
-          manager_email: activityData.managerEmail || undefined,
-          project_code: activityData.projectCode || undefined,
-          configuration_date: activityData.configurationDate || undefined,
-          configuration_price: activityData.configurationPrice ? parseFloat(activityData.configurationPrice) : undefined,
-          subscription_price: activityData.subscriptionPrice ? parseFloat(activityData.subscriptionPrice) : undefined,
-          subscription_frequency: activityData.subscriptionFrequency || undefined,
-          tax_percentage: activityData.taxPercentage ? parseFloat(activityData.taxPercentage) : undefined,
-          number_of_participants: activityData.numberOfParticipants ? parseInt(activityData.numberOfParticipants) : undefined,
-          questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
-        };
-
-        await activityApprovalsApi.create(approvalPayload);
-        toast({ 
-          title: "Approval Request Submitted!", 
-          description: "Your event has been submitted for Super Admin approval.", 
-          variant: "success" 
-        });
-        router.push("/activities");
-        return;
-      }
-
+      // Save Draft: Always updates activity directly (no approval)
       const activityPayload = {
         name: activityData.title,
         description: activityData.description,
         type: activityData.type as "survey" | "poll" | "assessment",
-        status: "draft" as const,
         program_id: activityData.programId,
         organization_id: selectedProgram.organization_id,
         start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
@@ -741,8 +771,8 @@ export default function EditActivityPage() {
         questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
       };
 
-      await activitiesApi.create(activityPayload);
-      toast({ title: "Success!", description: "Activity saved as draft!", variant: "success" });
+      await activitiesApi.update(activityId, activityPayload);
+      toast({ title: "Success!", description: "Event saved as draft!", variant: "success" });
       router.push("/activities");
     } catch (err) {
       console.error("Failed to save draft:", err);
@@ -776,16 +806,17 @@ export default function EditActivityPage() {
         <div className="flex items-center gap-4">
           <a
             href="/activities"
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="group flex items-center gap-2 px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+            <ArrowLeft className="w-4 h-4 text-gray-600" />
+            <span className="text-sm font-medium text-gray-600">Back</span>
           </a>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Create Event
+              Edit Event
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Set up a new survey, poll, or assessment
+              Modify event settings and configuration
             </p>
           </div>
         </div>
@@ -987,6 +1018,12 @@ export default function EditActivityPage() {
                 <CardTitle className="text-lg font-bold flex items-center gap-2">
                   <Settings className="w-5 h-5 text-qsights-blue" />
                   Additional Details
+                  {/* Lock indicator for program-admin when already approved */}
+                  {currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live' && (
+                    <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+                      🔒 Locked (Already Approved)
+                    </span>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6 space-y-4">
@@ -1003,6 +1040,7 @@ export default function EditActivityPage() {
                     value={activityData.senderEmail}
                     onChange={handleInputChange}
                     className="w-full"
+                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                   />
                 </div>
 
@@ -1020,6 +1058,7 @@ export default function EditActivityPage() {
                       value={activityData.managerName}
                       onChange={handleInputChange}
                       className="w-full"
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                     />
                   </div>
 
@@ -1036,6 +1075,7 @@ export default function EditActivityPage() {
                       value={activityData.managerEmail}
                       onChange={handleInputChange}
                       className="w-full"
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                     />
                   </div>
                 </div>
@@ -1053,6 +1093,7 @@ export default function EditActivityPage() {
                     value={activityData.projectCode}
                     onChange={handleInputChange}
                     className="w-full"
+                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                   />
                 </div>
 
@@ -1070,6 +1111,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                     />
                   </div>
 
@@ -1089,6 +1131,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                     />
                   </div>
                 </div>
@@ -1110,6 +1153,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                     />
                   </div>
 
@@ -1125,6 +1169,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
                       required
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                     >
                       <option value="">Select frequency</option>
                       <option value="one-time">One-time</option>
@@ -1153,6 +1198,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                     />
                   </div>
 
@@ -1171,6 +1217,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                     />
                   </div>
                 </div>
@@ -1189,6 +1236,7 @@ export default function EditActivityPage() {
                     value={activityData.questionsToRandomize}
                     onChange={handleInputChange}
                     className="w-full"
+                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
                   />
                   <p className="text-xs text-gray-500">
                     Randomly select and display this many questions from the questionnaire pool
@@ -1841,7 +1889,7 @@ export default function EditActivityPage() {
                   className="w-full px-4 py-2.5 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {saving ? "Updating..." : "Update Activity"}
+                  {saving ? "Updating..." : "Update Event"}
                 </button>
                 <button
                   onClick={handlePreview}
@@ -1849,7 +1897,7 @@ export default function EditActivityPage() {
                   className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Eye className="w-4 h-4" />
-                  Preview Activity
+                  Preview Event
                 </button>
                 <button
                   onClick={handleSaveDraft}

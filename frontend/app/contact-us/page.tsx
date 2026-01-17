@@ -196,7 +196,7 @@ export default function ContactUsPage() {
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
                       <Mail className="w-4 h-4 text-blue-600" />
-                      Email Address <span className="text-red-500">*</span>
+                      Communication Email ID <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="email"

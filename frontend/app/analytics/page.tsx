@@ -76,6 +76,7 @@ export default function AdvancedAnalyticsPage() {
   const [activities, setActivities] = useState<any[]>([]);
   const [participants, setParticipants] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<EmailNotification[]>([]);
+  const [webhookStats, setWebhookStats] = useState<any>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -149,31 +150,45 @@ export default function AdvancedAnalyticsPage() {
         partsData = parts;
       }
 
-      // Load real notification reports from API
+      // Load real notification logs from API (NEW with participant details)
       try {
-        console.log('🔍 Loading all notification reports...');
-        const notifData = await notificationsApi.getAllReports();
-        console.log('✅ Notification reports loaded:', notifData);
-        console.log('Total reports:', notifData.data?.length || 0);
+        console.log('🔍 Loading all notification logs...');
+        const notifData = await notificationsApi.getAllLogs();
+        console.log('✅ Notification logs loaded:', notifData);
+        console.log('Total logs:', notifData.data?.length || 0);
         
-        // Transform notification reports to match expected format
-        const transformedNotifications = (notifData.data || []).flatMap((report: any) => 
-          Array(report.total_recipients).fill(null).map((_, idx) => ({
-            id: `${report.id}-${idx}`,
-            activity_id: report.activity_id,
-            activity_name: report.activity?.name || 'Unknown Activity',
-            participant_email: report.failed_emails?.[idx] || `participant-${idx}@example.com`,
-            participant_name: `Participant ${idx + 1}`,
-            status: idx < report.sent_count ? 'sent' : 'failed',
-            sent_at: report.created_at,
-            delivered_at: idx < report.sent_count ? report.created_at : null,
-            opened_at: null,
-            read_at: null,
-            click_count: 0,
-          }))
-        );
+        // Use the notification logs directly - they already have participant names
+        const transformedNotifications = (notifData.data || []).map((log: any) => ({
+          id: log.id,
+          activity_id: log.activity_id,
+          activity_name: log.activity_name,
+          participant_email: log.participant_email,
+          participant_name: log.participant_name,
+          status: log.status,
+          sent_at: log.sent_at,
+          delivered_at: log.delivered_at,
+          opened_at: log.opened_at,
+          read_at: log.read_at || log.clicked_at,
+          click_count: log.clicked_at ? 1 : 0,
+        }));
         console.log('Transformed notifications count:', transformedNotifications.length);
         setNotifications(transformedNotifications);
+        
+        // Also load analytics summary
+        try {
+          const analyticsData = await notificationsApi.getAnalytics();
+          if (analyticsData?.data?.summary) {
+            const webhookSummary = {
+              delivered: analyticsData.data.summary.delivered || 0,
+              opened: analyticsData.data.summary.opened || 0,
+              clicked: analyticsData.data.summary.read || 0,
+            };
+            console.log('📊 Webhook tracking data:', webhookSummary);
+            setWebhookStats(webhookSummary);
+          }
+        } catch (err) {
+          console.warn('⚠️ Could not load webhook analytics:', err);
+        }
       } catch (err) {
         console.error('❌ Failed to load notifications:', err);
         setNotifications([]);
@@ -210,7 +225,12 @@ export default function AdvancedAnalyticsPage() {
       );
     }
 
-    return filtered;
+    // Sort by latest first (updated_at or created_at)
+    return filtered.sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
   };
 
   const filteredActivities = getFilteredActivities();
@@ -245,6 +265,8 @@ export default function AdvancedAnalyticsPage() {
     activeParticipants: totalRegisteredParticipants, // Registered/Active participants
     anonymousParticipants: totalAnonymousParticipants, // Anonymous participants
     totalResponses: filteredActivities.reduce((sum, a) => sum + (a.responses_count || 0), 0),
+    authenticatedResponses: filteredActivities.reduce((sum, a) => sum + (a.authenticated_responses_count || 0), 0),
+    guestResponses: filteredActivities.reduce((sum, a) => sum + (a.guest_responses_count || 0), 0),
     averageCompletion: filteredActivities.length > 0
       ? Math.round(filteredActivities.reduce((sum, a) => {
           const registered = a.active_participants_count || 0;
@@ -257,8 +279,19 @@ export default function AdvancedAnalyticsPage() {
       : 0,
   };
 
-  // Notification stats
-  const notificationStats = {
+  // Notification stats - use webhook data if available
+  const notificationStats = webhookStats ? {
+    sent: filteredNotifications.length,
+    delivered: webhookStats.delivered || 0,
+    opened: webhookStats.opened || 0,
+    read: webhookStats.clicked || 0,
+    deliveryRate: filteredNotifications.length > 0
+      ? ((webhookStats.delivered / filteredNotifications.length) * 100).toFixed(1)
+      : 0,
+    openRate: webhookStats.delivered > 0
+      ? ((webhookStats.opened / webhookStats.delivered) * 100).toFixed(1)
+      : 0,
+  } : {
     sent: filteredNotifications.length,
     delivered: filteredNotifications.filter(n => ['delivered', 'opened', 'read'].includes(n.status)).length,
     opened: filteredNotifications.filter(n => ['opened', 'read'].includes(n.status)).length,
@@ -698,6 +731,7 @@ export default function AdvancedAnalyticsPage() {
                 <GradientStatCard
                   title="Total Events"
                   value={stats.totalActivities}
+                  subtitle={`${stats.liveActivities} live`}
                   icon={Activity}
                   variant="blue"
                 />
@@ -705,6 +739,7 @@ export default function AdvancedAnalyticsPage() {
                 <GradientStatCard
                   title="Live Events"
                   value={stats.liveActivities}
+                  subtitle={stats.totalActivities > 0 ? `${Math.round((stats.liveActivities/stats.totalActivities)*100)}% of total` : "0% of total"}
                   icon={TrendingUp}
                   variant="green"
                 />
@@ -712,7 +747,7 @@ export default function AdvancedAnalyticsPage() {
                 <GradientStatCard
                   title="Total Participants"
                   value={stats.totalParticipants}
-                  subtitle={`(${stats.activeParticipants} / ${stats.anonymousParticipants})`}
+                  subtitle={`(${stats.activeParticipants}/${stats.anonymousParticipants}) (Participant/Anonymous)`}
                   icon={Users}
                   variant="purple"
                 />
@@ -720,13 +755,15 @@ export default function AdvancedAnalyticsPage() {
                 <GradientStatCard
                   title="Active Participants"
                   value={stats.activeParticipants}
+                  subtitle={stats.totalParticipants > 0 ? `${Math.round((stats.activeParticipants/stats.totalParticipants)*100)}% of total` : "0% of total"}
                   icon={Users}
                   variant="indigo"
                 />
 
                 <GradientStatCard
                   title="Total Responses"
-                  value={stats.totalResponses}
+                  value={`${stats.totalResponses} (${stats.authenticatedResponses}/${stats.guestResponses})`}
+                  subtitle="(Participant/Anonymous)"
                   icon={FileText}
                   variant="orange"
                 />
@@ -734,6 +771,7 @@ export default function AdvancedAnalyticsPage() {
                 <GradientStatCard
                   title="Avg Completion"
                   value={`${stats.averageCompletion}%`}
+                  subtitle="completion rate"
                   icon={TrendingUp}
                   variant="pink"
                 />

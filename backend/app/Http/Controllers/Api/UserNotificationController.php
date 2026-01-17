@@ -76,6 +76,19 @@ class UserNotificationController extends Controller
     }
 
     /**
+     * Clear all notifications (delete them permanently).
+     */
+    public function clearAll()
+    {
+        $deleted = UserNotification::forUser(Auth::id())->delete();
+
+        return response()->json([
+            'message' => 'All notifications cleared successfully',
+            'deleted_count' => $deleted
+        ]);
+    }
+
+    /**
      * Delete a notification.
      */
     public function destroy(string $id)

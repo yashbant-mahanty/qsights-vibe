@@ -181,6 +181,8 @@ export default function ReportsPage() {
   
   // Calculate statistics from real data (Active + Anonymous, excluding Preview)
   const totalResponses = filteredActivities.reduce((sum, a) => sum + (a.responses_count || 0), 0);
+  const authenticatedResponses = filteredActivities.reduce((sum, a) => sum + (a.authenticated_responses_count || 0), 0);
+  const guestResponses = filteredActivities.reduce((sum, a) => sum + (a.guest_responses_count || 0), 0);
   const totalActiveParticipants = filteredActivities.reduce((sum, a) => sum + ((a.active_participants_count || 0) + (a.anonymous_participants_count || 0)), 0);
   const totalParticipantsResponded = filteredActivities.reduce((sum, a) => sum + (a.participants_responded_count || 0), 0);
   const completionRate = totalActiveParticipants > 0 ? Math.round((totalParticipantsResponded / totalActiveParticipants) * 100) : 0;
@@ -188,25 +190,29 @@ export default function ReportsPage() {
   const stats = [
     {
       title: "Total Responses",
-      value: totalResponses.toString(),
+      value: `${totalResponses} (${authenticatedResponses}/${guestResponses})`,
+      subtitle: "(Participant/Anonymous)",
       icon: FileText,
       variant: "blue" as const,
     },
     {
       title: "Active Participants",
       value: totalParticipantsResponded.toString(),
+      subtitle: `${totalActiveParticipants} total invited`,
       icon: Users,
       variant: "green" as const,
     },
     {
       title: "Completion Rate",
       value: `${completionRate}%`,
+      subtitle: "Overall completion",
       icon: TrendingUp,
       variant: "purple" as const,
     },
     {
       title: "Avg. Response Time",
       value: "0m",
+      subtitle: "Per response",
       icon: Clock,
       variant: "orange" as const,
     },

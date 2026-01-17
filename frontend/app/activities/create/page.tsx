@@ -52,8 +52,8 @@ const defaultMandatoryRegistrationFields: FormField[] = [
     id: "email",
     name: "email",
     type: "email",
-    label: "Email Address",
-    placeholder: "Enter your email address",
+    label: "Communication Email ID",
+    placeholder: "Enter your communication email ID",
     required: true,
     order: 1,
     isMandatory: true,
@@ -454,8 +454,50 @@ export default function CreateActivityPage() {
       const requiresApproval = currentUser && ['program-admin', 'program-manager'].includes(currentUser.role);
 
       if (requiresApproval) {
-        // Submit approval request instead of creating activity
+        // For program-admin: First create the activity as draft, then create approval request with activity_id
+        const activityPayload = {
+          name: activityData.title,
+          description: activityData.description,
+          type: activityData.type as "survey" | "poll" | "assessment",
+          status: "draft" as const, // Created as draft, will become live upon approval
+          program_id: activityData.programId,
+          organization_id: selectedProgram.organization_id,
+          start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
+          end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
+          questionnaire_id: selectedQuestionnaires[0],
+          allow_guests: activityData.allowGuests,
+          contact_us_enabled: activityData.contactUsEnabled,
+          is_multilingual: activityData.isMultilingual,
+          languages: activityData.selectedLanguages,
+          registration_form_fields: normalizedRegistrationFields,
+          time_limit_enabled: activityData.timeLimitEnabled,
+          time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
+          pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
+          max_retakes: activityData.type === 'assessment' ? activityData.maxRetakes ?? undefined : undefined,
+          settings: {
+            display_mode: activityData.displayMode || 'all',
+            enable_per_question_language_switch: activityData.enablePerQuestionLanguageSwitch
+          },
+          // Additional Details fields
+          sender_email: activityData.senderEmail || undefined,
+          manager_name: activityData.managerName || undefined,
+          manager_email: activityData.managerEmail || undefined,
+          project_code: activityData.projectCode || undefined,
+          configuration_date: activityData.configurationDate || undefined,
+          configuration_price: activityData.configurationPrice ? parseFloat(activityData.configurationPrice) : undefined,
+          subscription_price: activityData.subscriptionPrice ? parseFloat(activityData.subscriptionPrice) : undefined,
+          subscription_frequency: activityData.subscriptionFrequency || undefined,
+          tax_percentage: activityData.taxPercentage ? parseFloat(activityData.taxPercentage) : undefined,
+          number_of_participants: activityData.numberOfParticipants ? parseInt(activityData.numberOfParticipants) : undefined,
+          questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
+        };
+
+        // Step 1: Create the activity as draft first
+        const createdActivity = await activitiesApi.create(activityPayload);
+        
+        // Step 2: Create approval request with activity_id linking to the draft
         const approvalPayload = {
+          activity_id: createdActivity.id, // Link to existing draft activity
           name: activityData.title,
           sender_email: activityData.senderEmail || undefined,
           description: activityData.description,
@@ -463,7 +505,7 @@ export default function CreateActivityPage() {
           program_id: activityData.programId,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0], // Primary questionnaire
+          questionnaire_id: selectedQuestionnaires[0],
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
           is_multilingual: activityData.isMultilingual,
@@ -493,12 +535,12 @@ export default function CreateActivityPage() {
         await activityApprovalsApi.create(approvalPayload);
         toast({ 
           title: "Approval Request Submitted!", 
-          description: "Your event has been submitted for Super Admin approval. You'll be notified once reviewed.", 
+          description: "Your event has been created as draft and submitted for Super Admin approval. You'll be notified once reviewed.", 
           variant: "success" 
         });
         router.push("/activities");
       } else {
-        // Super-admin and admin can create directly
+        // Super-admin and admin can create directly as live
         const activityPayload = {
           name: activityData.title,
           description: activityData.description,
@@ -537,14 +579,14 @@ export default function CreateActivityPage() {
         };
 
         await activitiesApi.create(activityPayload);
-        toast({ title: "Success!", description: "Activity published successfully!", variant: "success" });
+        toast({ title: "Success!", description: "Event published successfully!", variant: "success" });
         router.push("/activities");
       }
     } catch (err) {
-      console.error("Failed to publish activity:", err);
+      console.error("Failed to publish event:", err);
       toast({ 
         title: "Error", 
-        description: "Failed to publish activity: " + (err instanceof Error ? err.message : "Unknown error"),
+        description: "Failed to publish event: " + (err instanceof Error ? err.message : "Unknown error"),
         variant: "error"
       });
     } finally {
@@ -553,6 +595,7 @@ export default function CreateActivityPage() {
   };
 
   const handleSaveDraft = async () => {
+    // Save Draft: NO approval required - directly creates activity as draft
     if (!activityData.title.trim()) {
       toast({ title: "Validation Error", description: "Please enter an event title", variant: "warning" });
       return;
@@ -575,56 +618,7 @@ export default function CreateActivityPage() {
         return;
       }
 
-      // Check if user needs approval (program-admin, program-manager)
-      const requiresApproval = currentUser && ['program-admin', 'program-manager'].includes(currentUser.role);
-
-      if (requiresApproval) {
-        // Submit approval request
-        const approvalPayload = {
-          name: activityData.title,
-          description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
-          program_id: activityData.programId,
-          start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
-          end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0] || undefined,
-          allow_guests: activityData.allowGuests,
-          contact_us_enabled: activityData.contactUsEnabled,
-          is_multilingual: activityData.isMultilingual,
-          languages: activityData.selectedLanguages,
-          registration_form_fields: normalizedRegistrationFields,
-          time_limit_enabled: activityData.timeLimitEnabled,
-          time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
-          pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
-          max_retakes: activityData.type === 'assessment' ? activityData.maxRetakes ?? undefined : undefined,
-          settings: {
-            display_mode: activityData.displayMode || 'all',
-            enable_per_question_language_switch: activityData.enablePerQuestionLanguageSwitch
-          },
-          // Additional Details fields
-          sender_email: activityData.senderEmail || undefined,
-          manager_name: activityData.managerName || undefined,
-          manager_email: activityData.managerEmail || undefined,
-          project_code: activityData.projectCode || undefined,
-          configuration_date: activityData.configurationDate || undefined,
-          configuration_price: activityData.configurationPrice ? parseFloat(activityData.configurationPrice) : undefined,
-          subscription_price: activityData.subscriptionPrice ? parseFloat(activityData.subscriptionPrice) : undefined,
-          subscription_frequency: activityData.subscriptionFrequency || undefined,
-          tax_percentage: activityData.taxPercentage ? parseFloat(activityData.taxPercentage) : undefined,
-          number_of_participants: activityData.numberOfParticipants ? parseInt(activityData.numberOfParticipants) : undefined,
-          questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
-        };
-
-        await activityApprovalsApi.create(approvalPayload);
-        toast({ 
-          title: "Approval Request Submitted!", 
-          description: "Your event has been submitted for Super Admin approval.", 
-          variant: "success" 
-        });
-        router.push("/activities");
-        return;
-      }
-
+      // Save Draft: Always creates activity directly as draft (no approval)
       const activityPayload = {
         name: activityData.title,
         description: activityData.description,
@@ -663,7 +657,7 @@ export default function CreateActivityPage() {
       };
 
       await activitiesApi.create(activityPayload);
-      toast({ title: "Success!", description: "Activity saved as draft!", variant: "success" });
+      toast({ title: "Success!", description: "Event saved as draft!", variant: "success" });
       router.push("/activities");
     } catch (err) {
       console.error("Failed to save draft:", err);
@@ -697,9 +691,10 @@ export default function CreateActivityPage() {
         <div className="flex items-center gap-4">
           <a
             href="/activities"
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="group flex items-center gap-2 px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+            <ArrowLeft className="w-4 h-4 text-gray-600" />
+            <span className="text-sm font-medium text-gray-600">Back</span>
           </a>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
@@ -1764,7 +1759,7 @@ export default function CreateActivityPage() {
                   className="w-full px-4 py-2.5 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {saving ? "Publishing..." : "Publish Activity"}
+                  {saving ? "Publishing..." : "Publish Event"}
                 </button>
                 <button
                   onClick={handlePreview}
@@ -1772,7 +1767,7 @@ export default function CreateActivityPage() {
                   className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Eye className="w-4 h-4" />
-                  Preview Activity
+                  Preview Event
                 </button>
                 <button
                   onClick={handleSaveDraft}

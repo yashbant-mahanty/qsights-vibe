@@ -29,10 +29,15 @@ import {
   Link2,
   UserPlus,
   ExternalLink,
+  Bell,
+  BellRing,
+  X,
+  QrCode,
 } from "lucide-react";
-import { activitiesApi, type Activity } from "@/lib/api";
+import { activitiesApi, type Activity, fetchWithAuth } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import { toast } from "@/components/ui/toast";
+import { QRCodeModal } from "@/components/ui/qr-code-modal";
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -47,6 +52,7 @@ export default function ActivitiesPage() {
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; activityId: string | null; activityName: string | null }>({ isOpen: false, activityId: null, activityName: null });
   const [linksDropdown, setLinksDropdown] = useState<{ activityId: string | null; links: any | null; loading: boolean }>({ activityId: null, links: null, loading: false });
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  const [qrModal, setQrModal] = useState<{ isOpen: boolean; url: string; title: string; subtitle: string; color: string }>({ isOpen: false, url: '', title: '', subtitle: '', color: 'blue' });
 
   useEffect(() => {
     loadActivities();
@@ -88,6 +94,15 @@ export default function ActivitiesPage() {
       setLoading(true);
       setError(null);
       const data = await activitiesApi.getAll();
+      console.log('[ACTIVITIES] Raw API response:', data);
+      console.log('[ACTIVITIES] First activity counts:', data[0] ? {
+        id: data[0].id,
+        name: data[0].name,
+        responses_count: data[0].responses_count,
+        authenticated_responses_count: data[0].authenticated_responses_count,
+        guest_responses_count: data[0].guest_responses_count,
+        participants_count: data[0].participants_count
+      } : 'No activities');
       // Sort by updated_at or created_at descending (newest first)
       const sortedData = [...data].sort((a, b) => {
         const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
@@ -246,6 +261,57 @@ export default function ActivitiesPage() {
     }
   };
 
+  const toggleParticipantReminders = async (activityId: string, currentValue: boolean) => {
+    try {
+      console.log('[TOGGLE] START - activityId:', activityId, 'currentValue:', currentValue);
+      
+      // Optimistically update the local state immediately
+      setActivities(prevActivities => {
+        console.log('[TOGGLE] Before map - activities count:', prevActivities.length);
+        const updated = prevActivities.map(activity => {
+          const isMatch = activity.id.toString() === activityId;
+          if (isMatch) {
+            console.log('[TOGGLE] FOUND MATCH!');
+            console.log('[TOGGLE] - activity.id:', activity.id);
+            console.log('[TOGGLE] - current allow_participant_reminders:', activity.allow_participant_reminders);
+            console.log('[TOGGLE] - will change to:', !currentValue);
+            return { ...activity, allow_participant_reminders: !currentValue };
+          }
+          return activity;
+        });
+        console.log('[TOGGLE] After map - checking updated activity...');
+        const updatedActivity = updated.find(a => a.id.toString() === activityId);
+        console.log('[TOGGLE] Updated activity allow_participant_reminders:', updatedActivity?.allow_participant_reminders);
+        return updated;
+      });
+
+      // Update on server
+      await fetchWithAuth(`/activities/${activityId}/toggle-reminders`, {
+        method: 'PATCH',
+        body: JSON.stringify({ allow_participant_reminders: !currentValue })
+      });
+
+      console.log('[TOGGLE] Server update successful');
+
+      toast({ 
+        title: "Success!", 
+        description: `Participant reminders ${!currentValue ? 'enabled' : 'disabled'}`, 
+        variant: "success" 
+      });
+    } catch (err) {
+      console.error('Failed to toggle reminders:', err);
+      // Revert the optimistic update on error
+      setActivities(prevActivities => 
+        prevActivities.map(activity => 
+          activity.id.toString() === activityId 
+            ? { ...activity, allow_participant_reminders: currentValue }
+            : activity
+        )
+      );
+      toast({ title: "Error", description: "Failed to toggle reminders", variant: "error" });
+    }
+  };
+
   const activities_display = activities.map(a => {
     const participants = a.participants_count || 0;
     const authenticatedParticipants = a.authenticated_participants_count || 0;
@@ -260,9 +326,9 @@ export default function ActivitiesPage() {
     
     return {
       id: a.id,
-      title: a.name,
-      code: String(a.id).padStart(8, '0'),
-      type: a.type,
+      title: a.name || "",
+      code: a.id ? String(a.id).substring(0, 8) : "",
+      type: a.type || "",
       program: a.program?.name || "N/A",
       programId: a.program_id || null,
       questionnaires: a.questionnaire_id ? 1 : 0,
@@ -272,12 +338,13 @@ export default function ActivitiesPage() {
       responses,
       authenticatedResponses,
       guestResponses,
-      status: a.status,
+      status: a.status || "",
       startDate: a.start_date ? new Date(a.start_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : "N/A",
       endDate: a.end_date ? new Date(a.end_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : "N/A",
       progress,
       languages: a.languages && a.languages.length > 0 ? a.languages : ["EN"],
       allowGuests: a.allow_guests || false,
+      allow_participant_reminders: a.allow_participant_reminders || false,
     };
   });
 
@@ -286,28 +353,37 @@ export default function ActivitiesPage() {
   const scheduledActivities = activities.filter(a => a.status === 'upcoming').length;
   const completedActivities = activities.filter(a => a.status === 'closed' || a.status === 'archived').length;
 
+  // Calculate participant counts across all activities
+  const totalEventParticipants = activities.reduce((sum, a) => sum + (a.responses_count || 0), 0);
+  const authenticatedEventParticipants = activities.reduce((sum, a) => sum + (a.authenticated_responses_count || 0), 0);
+  const anonymousEventParticipants = activities.reduce((sum, a) => sum + (a.guest_responses_count || 0), 0);
+
   const stats = [
     {
       title: "Total Events",
       value: totalActivities.toString(),
+      subtitle: `${activeActivities} active`,
       icon: FileText,
       variant: 'blue' as const,
     },
     {
       title: "Active",
       value: activeActivities.toString(),
+      subtitle: totalActivities > 0 ? `${Math.round((activeActivities/totalActivities)*100)}% of total` : "0% of total",
       icon: CheckCircle,
       variant: 'green' as const,
     },
     {
-      title: "Scheduled",
-      value: scheduledActivities.toString(),
-      icon: Clock,
+      title: "Total Responses",
+      value: `${totalEventParticipants} (${authenticatedEventParticipants}/${anonymousEventParticipants})`,
+      subtitle: "(Participant/Anonymous)",
+      icon: Users,
       variant: 'yellow' as const,
     },
     {
       title: "Completed",
       value: completedActivities.toString(),
+      subtitle: totalActivities > 0 ? `${Math.round((completedActivities/totalActivities)*100)}% completion` : "0% completion",
       icon: TrendingUp,
       variant: 'purple' as const,
     },
@@ -510,6 +586,7 @@ export default function ActivitiesPage() {
               key={index}
               title={stat.title}
               value={stat.value}
+              subtitle={stat.subtitle}
               icon={stat.icon}
               variant={stat.variant}
             />
@@ -716,9 +793,21 @@ export default function ActivitiesPage() {
                           {/* Links Dropdown */}
                           <div className="relative links-dropdown-container">
                             <button
-                              onClick={(e) => { e.stopPropagation(); handleShowLinks(activity.id.toString()); }}
-                              className={`p-1.5 rounded transition-colors ${linksDropdown.activityId === activity.id.toString() ? 'bg-green-100 text-green-600' : 'text-green-600 hover:bg-green-50'}`}
-                              title="Get Links"
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                if (activity.status !== 'draft') {
+                                  handleShowLinks(activity.id.toString()); 
+                                }
+                              }}
+                              className={`p-1.5 rounded transition-colors ${
+                                activity.status === 'draft' 
+                                  ? 'text-gray-300 cursor-not-allowed' 
+                                  : linksDropdown.activityId === activity.id.toString() 
+                                    ? 'bg-green-100 text-green-600' 
+                                    : 'text-green-600 hover:bg-green-50'
+                              }`}
+                              title={activity.status === 'draft' ? 'Get Links (Not available for draft events)' : 'Get Links'}
+                              disabled={activity.status === 'draft'}
                             >
                               <Link2 className="w-4 h-4" />
                             </button>
@@ -758,6 +847,13 @@ export default function ActivitiesPage() {
                                               className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-gray-600 truncate"
                                             />
                                             <button
+                                              onClick={() => setQrModal({ isOpen: true, url: linksDropdown.links.registration.url, title: 'Registration QR', subtitle: 'Scan to register & take survey', color: 'blue' })}
+                                              className="p-1.5 rounded text-blue-600 hover:bg-blue-100 transition-colors"
+                                              title="View QR Code"
+                                            >
+                                              <QrCode className="w-4 h-4" />
+                                            </button>
+                                            <button
                                               onClick={() => copyToClipboard(linksDropdown.links.registration.url, 'Registration Link')}
                                               className={`px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 ${
                                                 copiedLink === 'Registration Link' 
@@ -791,6 +887,13 @@ export default function ActivitiesPage() {
                                               value={linksDropdown.links.preview.url} 
                                               className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-gray-600 truncate"
                                             />
+                                            <button
+                                              onClick={() => setQrModal({ isOpen: true, url: linksDropdown.links.preview.url, title: 'Preview QR', subtitle: 'For testing only - responses not saved', color: 'purple' })}
+                                              className="p-1.5 rounded text-purple-600 hover:bg-purple-100 transition-colors"
+                                              title="View QR Code"
+                                            >
+                                              <QrCode className="w-4 h-4" />
+                                            </button>
                                             <button
                                               onClick={() => copyToClipboard(linksDropdown.links.preview.url, 'Preview Link')}
                                               className={`px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 ${
@@ -827,6 +930,13 @@ export default function ActivitiesPage() {
                                                 className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-gray-600 truncate"
                                               />
                                               <button
+                                                onClick={() => setQrModal({ isOpen: true, url: linksDropdown.links.anonymous.url, title: 'Anonymous QR', subtitle: 'No registration required', color: 'orange' })}
+                                                className="p-1.5 rounded text-orange-600 hover:bg-orange-100 transition-colors"
+                                                title="View QR Code"
+                                              >
+                                                <QrCode className="w-4 h-4" />
+                                              </button>
+                                              <button
                                                 onClick={() => copyToClipboard(linksDropdown.links.anonymous.url, 'Anonymous Link')}
                                                 className={`px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 ${
                                                   copiedLink === 'Anonymous Link' 
@@ -856,6 +966,25 @@ export default function ActivitiesPage() {
                               </div>
                             )}
                           </div>
+                          <button
+                            onClick={(e) => { 
+                              e.stopPropagation();
+                              console.log('[BTN CLICK] activity.id:', activity.id, 'allow_participant_reminders:', activity.allow_participant_reminders);
+                              toggleParticipantReminders(activity.id.toString(), activity.allow_participant_reminders || false); 
+                            }}
+                            className={`p-1.5 rounded transition-colors ${
+                              activity.allow_participant_reminders
+                                ? 'bg-purple-100 text-purple-600' 
+                                : 'text-gray-400 hover:bg-gray-100'
+                            }`}
+                            title={activity.allow_participant_reminders ? 'Participant Reminders Enabled' : 'Participant Reminders Disabled'}
+                          >
+                            {(() => {
+                              const icon = activity.allow_participant_reminders ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />;
+                              console.log('[BTN RENDER] activity.id:', activity.id, 'allow_participant_reminders:', activity.allow_participant_reminders, 'showing:', activity.allow_participant_reminders ? 'BellRing' : 'Bell');
+                              return icon;
+                            })()}
+                          </button>
                           <button
                             onClick={() => handleSendNotification(activity.id.toString())}
                             className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
@@ -954,6 +1083,16 @@ export default function ActivitiesPage() {
         title="Delete Event?"
         itemName={deleteModal.activityName || undefined}
         itemType="event"
+      />
+
+      {/* QR Code Modal */}
+      <QRCodeModal
+        isOpen={qrModal.isOpen}
+        onClose={() => setQrModal({ isOpen: false, url: '', title: '', subtitle: '', color: 'blue' })}
+        url={qrModal.url}
+        title={qrModal.title}
+        subtitle={qrModal.subtitle}
+        color={qrModal.color}
       />
     </AppLayout>
   );

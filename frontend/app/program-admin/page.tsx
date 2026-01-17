@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import ProgramAdminLayout from "@/components/program-admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GradientStatCard } from "@/components/ui/gradient-stat-card";
 import {
   Users,
   Activity,
@@ -13,9 +14,13 @@ import {
   Mail,
   FileText,
   Globe,
+  Calendar,
+  X,
+  Bell,
 } from "lucide-react";
-import { activitiesApi, participantsApi } from "@/lib/api";
+import { activitiesApi, participantsApi, programsApi } from "@/lib/api";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { toast } from "@/components/ui/toast";
 
 // Language color mappings (moved outside component to avoid initialization issues)
 const languageColors: { [key: string]: string } = {
@@ -42,8 +47,17 @@ export default function ProgramAdminDashboard() {
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [participants, setParticipants] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [selectedProgramId, setSelectedProgramId] = useState<string>("all");
+  const [sendingReminder, setSendingReminder] = useState(false);
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [reminderDate, setReminderDate] = useState("");
+  const [reminderTime, setReminderTime] = useState("09:00");
+  const [reminderMessage, setReminderMessage] = useState("");
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [activeParticipants, setActiveParticipants] = useState(0);
+  const [authenticatedParticipants, setAuthenticatedParticipants] = useState(0);
+  const [guestParticipants, setGuestParticipants] = useState(0);
   const [completedActivities, setCompletedActivities] = useState(0);
   const [pendingResponses, setPendingResponses] = useState(0);
   const [completionRate, setCompletionRate] = useState(0);
@@ -53,6 +67,12 @@ export default function ProgramAdminDashboard() {
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      loadFilteredData();
+    }
+  }, [selectedProgramId, currentUser]);
 
   async function loadDashboardData() {
     try {
@@ -68,16 +88,43 @@ export default function ProgramAdminDashboard() {
       const userData = await userResponse.json();
       setCurrentUser(userData.user);
       
-      if (!userData.user.programId) {
-        console.error('Program Admin has no program assigned');
+      // Load programs for the filter dropdown
+      try {
+        const programsData = await programsApi.getAll();
+        setPrograms(programsData);
+      } catch (err) {
+        console.error('Error loading programs:', err);
+      }
+      
+      if (!userData.user.programId && !userData.user.organizationId) {
+        console.error('Program Admin has no program or organization assigned');
         setLoading(false);
         return;
       }
 
+      // Fetch initial data
+      await loadFilteredData(userData.user);
+
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadFilteredData(user?: UserData) {
+    const currentUserData = user || currentUser;
+    if (!currentUserData) return;
+
+    try {
+      const programFilter = selectedProgramId !== "all" 
+        ? selectedProgramId 
+        : currentUserData.programId;
+
       // Fetch data filtered by program
       const [participantsData, activitiesData] = await Promise.all([
-        participantsApi.getAll({ program_id: userData.user.programId }).catch(() => []),
-        activitiesApi.getAll({ program_id: userData.user.programId }).catch(() => []),
+        participantsApi.getAll(programFilter ? { program_id: programFilter } : {}).catch(() => []),
+        activitiesApi.getAll(programFilter ? { program_id: programFilter } : {}).catch(() => []),
       ]);
 
       setParticipants(participantsData);
@@ -86,6 +133,8 @@ export default function ProgramAdminDashboard() {
       // Calculate stats
       const total = participantsData.length;
       const active = participantsData.filter((p: any) => p.status === 'active').length;
+      const authenticated = participantsData.filter((p: any) => !p.is_guest && !p.isGuest).length;
+      const guests = participantsData.filter((p: any) => p.is_guest || p.isGuest).length;
       
       // Calculate completed activities - count activities with at least 1 response
       const completed = activitiesData.filter((a: any) => {
@@ -97,7 +146,6 @@ export default function ProgramAdminDashboard() {
       let totalResponses = 0;
       let totalExpected = 0;
       activitiesData.forEach((activity: any) => {
-        // Use active_participants_count + anonymous_participants_count for total
         const activeCount = activity.active_participants_count || 0;
         const anonCount = activity.anonymous_participants_count || 0;
         const participantCount = activeCount + anonCount;
@@ -110,14 +158,107 @@ export default function ProgramAdminDashboard() {
 
       setTotalParticipants(total);
       setActiveParticipants(active);
+      setAuthenticatedParticipants(authenticated);
+      setGuestParticipants(guests);
       setCompletedActivities(completed);
       setPendingResponses(pending);
       setCompletionRate(rate);
 
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      console.error('Error loading filtered data:', error);
+    }
+  }
+
+  async function handleSendReminder() {
+    // Get participants with pending responses
+    const pendingParticipants = participants.filter((p: any) => p.status === 'active');
+    
+    if (pendingParticipants.length === 0) {
+      toast({
+        title: "No Recipients",
+        description: "No active participants found to send reminders to",
+        variant: "warning"
+      });
+      return;
+    }
+
+    // Set default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setReminderDate(tomorrow.toISOString().split('T')[0]);
+    setReminderTime("09:00");
+    setReminderMessage(`Reminder: Please complete your pending activities for the program.`);
+    setShowReminderDialog(true);
+  }
+
+  async function scheduleReminder() {
+    if (!reminderDate || !reminderTime) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a date and time for the reminder",
+        variant: "error"
+      });
+      return;
+    }
+
+    setSendingReminder(true);
+    try {
+      const pendingParticipants = participants.filter((p: any) => p.status === 'active');
+      const scheduledDateTime = new Date(`${reminderDate}T${reminderTime}`);
+
+      // Create calendar event URL (Google Calendar)
+      const eventTitle = encodeURIComponent(`QSights Reminder: Complete Pending Activities`);
+      const eventDetails = encodeURIComponent(reminderMessage || 'Complete your pending activities');
+      const eventStart = scheduledDateTime.toISOString().replace(/-|:|\.\d+/g, '');
+      const eventEnd = new Date(scheduledDateTime.getTime() + 30 * 60000).toISOString().replace(/-|:|\.\d+/g, '');
+      
+      const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${eventTitle}&details=${eventDetails}&dates=${eventStart}/${eventEnd}`;
+
+      // Also try to send email reminders via API
+      try {
+        const response = await fetch('/api/notifications/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            program_id: selectedProgramId !== "all" ? selectedProgramId : currentUser?.programId,
+            participant_ids: pendingParticipants.map((p: any) => p.id),
+            type: 'reminder',
+            subject: 'Reminder: Complete Your Pending Activities',
+            message: reminderMessage,
+            scheduled_at: scheduledDateTime.toISOString()
+          })
+        });
+
+        if (response.ok) {
+          toast({
+            title: "Reminders Scheduled!",
+            description: `Email reminders scheduled for ${pendingParticipants.length} participants`,
+            variant: "success"
+          });
+        }
+      } catch (emailError) {
+        console.log('Email scheduling not available, using calendar only');
+      }
+
+      // Open Google Calendar to add event
+      window.open(googleCalendarUrl, '_blank');
+      
+      toast({
+        title: "Calendar Opened",
+        description: "Add the reminder event to your calendar to track follow-ups",
+        variant: "success"
+      });
+
+      setShowReminderDialog(false);
+    } catch (error) {
+      console.error('Error scheduling reminder:', error);
+      toast({
+        title: "Error",
+        description: "Failed to schedule reminder. Please try again.",
+        variant: "error"
+      });
     } finally {
-      setLoading(false);
+      setSendingReminder(false);
     }
   }
 
@@ -156,39 +297,31 @@ export default function ProgramAdminDashboard() {
   const participantStats = [
     {
       title: "Total Participants",
-      value: loading ? "..." : totalParticipants.toString(),
-      change: participants.length > 0 ? `${activeParticipants} active` : "No participants yet",
+      value: loading ? "..." : `${totalParticipants} (${authenticatedParticipants}/${guestParticipants})`,
+      subtitle: "(Participant/Anonymous)",
       icon: Users,
-      color: "bg-blue-500",
-      lightColor: "bg-blue-50",
-      textColor: "text-blue-600",
+      variant: "blue" as const,
     },
     {
       title: "Active Participants",
       value: loading ? "..." : activeParticipants.toString(),
-      change: totalParticipants > 0 ? `${Math.round((activeParticipants/totalParticipants)*100)}% of total` : "",
+      subtitle: totalParticipants > 0 ? `${Math.round((activeParticipants/totalParticipants)*100)}% of total` : "0% of total",
       icon: Activity,
-      color: "bg-green-500",
-      lightColor: "bg-green-50",
-      textColor: "text-green-600",
+      variant: "green" as const,
     },
     {
       title: "Completed Events",
       value: loading ? "..." : completedActivities.toString(),
-      change: `${completionRate}% completion rate`,
+      subtitle: `${completionRate}% completion rate`,
       icon: CheckCircle,
-      color: "bg-purple-500",
-      lightColor: "bg-purple-50",
-      textColor: "text-purple-600",
+      variant: "purple" as const,
     },
     {
       title: "Pending Responses",
       value: loading ? "..." : pendingResponses.toString(),
-      change: `${100 - completionRate}% pending`,
+      subtitle: `${100 - completionRate}% pending`,
       icon: Clock,
-      color: "bg-orange-500",
-      lightColor: "bg-orange-50",
-      textColor: "text-orange-600",
+      variant: "orange" as const,
     },
   ];
 
@@ -220,39 +353,121 @@ export default function ProgramAdminDashboard() {
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Program Admin Dashboard</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
             <p className="text-gray-600 mt-1">Monitor participant engagement and activity progress</p>
           </div>
           <div className="flex items-center gap-3">
-            <select className="px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white">
-              <option>All Programs</option>
-              <option>Employee Wellness</option>
-              <option>Customer Feedback</option>
-              <option>Training</option>
+            <select 
+              value={selectedProgramId}
+              onChange={(e) => setSelectedProgramId(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-qsights-blue"
+            >
+              <option value="all">All Programs</option>
+              {programs.map((program) => (
+                <option key={program.id} value={program.id}>
+                  {program.name}
+                </option>
+              ))}
             </select>
-            <button className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue-dark">
-              Send Reminder
+            <button 
+              onClick={handleSendReminder}
+              disabled={sendingReminder}
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue-dark disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Bell className="w-4 h-4" />
+              {sendingReminder ? "Scheduling..." : "Send Reminder"}
             </button>
           </div>
         </div>
 
-        {/* Participant Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {participantStats.map((stat, index) => (
-            <Card key={index} className="hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{stat.title}</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
-                    <p className="text-sm text-green-600 mt-2">{stat.change}</p>
+        {/* Reminder Dialog */}
+        {showReminderDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowReminderDialog(false)}>
+            <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <Bell className="w-5 h-5 text-blue-600" />
                   </div>
-                  <div className={`${stat.lightColor} w-14 h-14 rounded-xl flex items-center justify-center`}>
-                    <stat.icon className={`w-7 h-7 ${stat.textColor}`} />
+                  <h3 className="text-lg font-semibold">Schedule Reminder</h3>
+                </div>
+                <button onClick={() => setShowReminderDialog(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    <strong>{participants.filter((p: any) => p.status === 'active').length}</strong> active participants will receive this reminder
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={reminderDate}
+                      onChange={(e) => setReminderDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                    <input
+                      type="time"
+                      value={reminderTime}
+                      onChange={(e) => setReminderTime(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                  <textarea
+                    value={reminderMessage}
+                    onChange={(e) => setReminderMessage(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter reminder message..."
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setShowReminderDialog(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={scheduleReminder}
+                    disabled={sendingReminder || !reminderDate}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    {sendingReminder ? "Scheduling..." : "Schedule & Add to Calendar"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Participant Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {participantStats.map((stat, index) => (
+            <GradientStatCard
+              key={index}
+              title={stat.title}
+              value={stat.value}
+              subtitle={stat.subtitle}
+              icon={stat.icon}
+              variant={stat.variant}
+            />
           ))}
         </div>
 

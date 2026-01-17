@@ -1,7 +1,7 @@
 // API Integration Layer for QSights 2.0
 // Handles all backend communication with Laravel API
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://prod.qsights.com/api';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
 export const API_BASE_URL = API_URL.replace('/api', '');
 
 // Helper to build query string with program-level filtering
@@ -198,6 +198,7 @@ export interface Activity {
   start_date?: string;
   end_date?: string;
   allow_guests?: boolean;
+  allow_participant_reminders?: boolean;
   is_multilingual?: boolean;
   languages?: string[]; // Array of language codes (e.g., ["EN", "HI"])
   settings?: {
@@ -366,7 +367,7 @@ function getCsrfToken(): string | null {
 }
 
 // Fetch wrapper with authentication and error handling
-async function fetchWithAuth(endpoint: string, options: RequestInit = {}): Promise<any> {
+export async function fetchWithAuth(endpoint: string, options: RequestInit = {}): Promise<any> {
   const token = getBackendToken();
   
   // Debug logging
@@ -383,11 +384,15 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}): Promi
   }
   
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     'Accept': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
     ...(options.headers as Record<string, string> || {}),
   };
+
+  // Only set Content-Type if not FormData (browser will set it automatically with boundary)
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -431,6 +436,14 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}): Promi
   }
 
   if (!response.ok) {
+    // For 422 validation errors, extract the actual field errors
+    if (response.status === 422 && data.errors) {
+      const errorMessages = Object.entries(data.errors)
+        .map(([field, messages]) => `${field}: ${(messages as string[]).join(', ')}`)
+        .join('; ');
+      console.error('[API] Validation errors:', data.errors);
+      throw new Error(errorMessages || data.message || 'Validation failed');
+    }
     throw new Error(data.message || `HTTP ${response.status}`);
   }
 
@@ -745,7 +758,10 @@ export const participantsApi = {
 // Questionnaires API
 export const questionnairesApi = {
   async getAll(filters?: { program_id?: string; organization_id?: string }): Promise<Questionnaire[]> {
-    const query = buildQueryString(filters || {});
+    const query = buildQueryString({ 
+      withCount: 'responses,authenticated_responses_count,guest_responses_count',
+      ...filters 
+    });
     const response = await fetchWithAuth(`/questionnaires${query}`);
     
     // Handle Laravel pagination structure: response has 'data' property with items array
@@ -870,7 +886,10 @@ export const questionnairesApi = {
 // Activities API
 export const activitiesApi = {
   async getAll(filters?: { program_id?: string; organization_id?: string }): Promise<Activity[]> {
-    const query = buildQueryString({ withCount: 'participants,responses', ...filters });
+    const query = buildQueryString({ 
+      withCount: 'participants,responses,authenticated_responses_count,guest_responses_count', 
+      ...filters 
+    });
     const response = await fetchWithAuth(`/activities${query}`);
     
     // Handle Laravel pagination structure: response has 'data' property with items array
@@ -1636,19 +1655,39 @@ export const notificationsApi = {
     });
   },
 
+  async clearAll(): Promise<void> {
+    await fetchWithAuth('/notifications/clear-all', {
+      method: 'POST',
+    });
+  },
+
   async delete(id: string): Promise<void> {
     await fetchWithAuth(`/notifications/${id}`, {
       method: 'DELETE',
     });
   },
 
-  // Email notification reports
+  // Email notification reports (OLD - aggregated)
   async getReportsForActivity(activityId: string): Promise<any> {
     return await fetchWithAuth(`/notifications/reports/${activityId}`);
   },
 
   async getAllReports(): Promise<any> {
     return await fetchWithAuth(`/notifications/reports`);
+  },
+
+  // Notification logs (NEW - detailed with participant info)
+  async getLogsForActivity(activityId: string): Promise<any> {
+    return await fetchWithAuth(`/notifications/logs/${activityId}`);
+  },
+
+  async getAllLogs(params?: { start_date?: string; end_date?: string; activity_id?: string }): Promise<any> {
+    return await fetchWithAuth(`/notifications/logs${buildQueryString(params || {})}`);
+  },
+
+  // New analytics API with real tracking data
+  async getAnalytics(params?: { start_date?: string; end_date?: string; activity_id?: string; program_id?: string }): Promise<any> {
+    return await fetchWithAuth(`/notifications/analytics${buildQueryString(params || {})}`);
   },
 };
 
@@ -1675,6 +1714,11 @@ export const eventContactMessagesApi = {
 
     if (!response.ok) {
       const error = await response.json();
+      // If there are validation errors, format them nicely
+      if (error.errors && typeof error.errors === 'object') {
+        const errorMessages = Object.values(error.errors).flat().join(', ');
+        throw new Error(errorMessages || error.message || 'Failed to submit contact message');
+      }
       throw new Error(error.message || 'Failed to submit contact message');
     }
 
@@ -1704,3 +1748,224 @@ export const eventContactMessagesApi = {
     });
   },
 };
+
+// =====================================================
+// HIERARCHY-BASED EVALUATION EVENTS API
+// =====================================================
+
+export interface EvaluationEvent {
+  id: string;
+  name: string;
+  description?: string;
+  questionnaire_id: string;
+  organization_id?: string;
+  program_id?: string;
+  status: 'draft' | 'active' | 'paused' | 'completed';
+  start_date?: string;
+  end_date?: string;
+  allow_self_evaluation: boolean;
+  is_anonymous: boolean;
+  show_individual_responses: boolean;
+  hierarchy_levels?: number;
+  email_subject?: string;
+  email_body?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  questionnaire?: Questionnaire;
+  organization?: Organization;
+  program?: Program;
+  creator?: User;
+  assignments_count?: number;
+  completed_count?: number;
+}
+
+export interface EvaluationAssignment {
+  id: string;
+  evaluation_event_id: string;
+  evaluatee_type: 'user' | 'participant';
+  evaluatee_id: string;
+  triggered_by: string;
+  access_token: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  sent_at?: string;
+  started_at?: string;
+  completed_at?: string;
+  reminder_count: number;
+  evaluatee_name?: string;
+  evaluatee_email?: string;
+}
+
+export const evaluationEventsApi = {
+  // Get all evaluation events
+  async getAll(params?: { organization_id?: string; program_id?: string; status?: string }): Promise<EvaluationEvent[]> {
+    return await fetchWithAuth(`/evaluation-events${buildQueryString(params || {})}`);
+  },
+
+  // Get single evaluation event
+  async get(id: string): Promise<EvaluationEvent> {
+    return await fetchWithAuth(`/evaluation-events/${id}`);
+  },
+
+  // Create evaluation event
+  async create(data: Partial<EvaluationEvent>): Promise<EvaluationEvent> {
+    return await fetchWithAuth('/evaluation-events', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Update evaluation event
+  async update(id: string, data: Partial<EvaluationEvent>): Promise<EvaluationEvent> {
+    return await fetchWithAuth(`/evaluation-events/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Delete evaluation event
+  async delete(id: string): Promise<void> {
+    return await fetchWithAuth(`/evaluation-events/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Activate evaluation event
+  async activate(id: string): Promise<EvaluationEvent> {
+    return await fetchWithAuth(`/evaluation-events/${id}/activate`, {
+      method: 'POST',
+    });
+  },
+
+  // Pause evaluation event
+  async pause(id: string): Promise<EvaluationEvent> {
+    return await fetchWithAuth(`/evaluation-events/${id}/pause`, {
+      method: 'POST',
+    });
+  },
+
+  // Complete evaluation event
+  async complete(id: string): Promise<EvaluationEvent> {
+    return await fetchWithAuth(`/evaluation-events/${id}/complete`, {
+      method: 'POST',
+    });
+  },
+
+  // Get available evaluatees (based on manager's hierarchy)
+  async getAvailableEvaluatees(id: string): Promise<{
+    users: Array<{ id: string; name: string; email: string; department?: string }>;
+    participants: Array<{ id: string; name: string; email: string }>;
+  }> {
+    return await fetchWithAuth(`/evaluation-events/${id}/available-evaluatees`);
+  },
+
+  // Trigger evaluation for selected team members
+  async trigger(id: string, data: {
+    evaluatees: Array<{ type: 'user' | 'participant'; id: string }>;
+    custom_message?: string;
+    send_email?: boolean;
+  }): Promise<{ assignments: EvaluationAssignment[]; message: string }> {
+    return await fetchWithAuth(`/evaluation-events/${id}/trigger`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Get manager's assignments (evaluations they've triggered)
+  async getMyAssignments(id: string): Promise<EvaluationAssignment[]> {
+    return await fetchWithAuth(`/evaluation-events/${id}/my-assignments`);
+  },
+
+  // Send reminder for a specific assignment
+  async sendReminder(eventId: string, assignmentId: string): Promise<{ message: string }> {
+    return await fetchWithAuth(`/evaluation-events/${eventId}/assignments/${assignmentId}/remind`, {
+      method: 'POST',
+    });
+  },
+
+  // Report endpoints
+  reports: {
+    async getSummary(eventId: string): Promise<any> {
+      return await fetchWithAuth(`/evaluation-events/${eventId}/reports/summary`);
+    },
+
+    async getByEvaluatee(eventId: string): Promise<any> {
+      return await fetchWithAuth(`/evaluation-events/${eventId}/reports/by-evaluatee`);
+    },
+
+    async getCompletionStatus(eventId: string): Promise<any> {
+      return await fetchWithAuth(`/evaluation-events/${eventId}/reports/completion-status`);
+    },
+
+    async getMyTeamReport(eventId: string): Promise<any> {
+      return await fetchWithAuth(`/evaluation-events/${eventId}/reports/my-team`);
+    },
+
+    async export(eventId: string): Promise<any> {
+      return await fetchWithAuth(`/evaluation-events/${eventId}/reports/export`);
+    },
+  },
+};
+
+// Public Evaluation Taking API (no auth required)
+export const evaluationTakeApi = {
+  // Get evaluation by token (public)
+  async getByToken(token: string): Promise<{
+    assignment: EvaluationAssignment;
+    event: EvaluationEvent;
+    questionnaire: Questionnaire;
+    evaluatee: { name: string; email?: string };
+  }> {
+    const response = await fetch(`${API_URL}/evaluation/take/${token}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to load evaluation');
+    }
+
+    return await response.json();
+  },
+
+  // Submit evaluation responses (public)
+  async submit(token: string, responses: Array<{
+    question_id: string;
+    section_id: string;
+    answer: any;
+    score?: number;
+  }>): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/evaluation/take/${token}/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ responses }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to submit evaluation');
+    }
+
+    return await response.json();
+  },
+};
+
+// My Evaluations API (for logged-in users to see their pending evaluations)
+export const myEvaluationsApi = {
+  async getPending(): Promise<EvaluationAssignment[]> {
+    return await fetchWithAuth('/my-evaluations/pending');
+  },
+
+  async getCompleted(): Promise<EvaluationAssignment[]> {
+    return await fetchWithAuth('/my-evaluations/completed');
+  },
+};
+

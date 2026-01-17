@@ -241,30 +241,38 @@ export default function ProgramsPage() {
   // Mock data removed - using only real API data
 
   const displayPrograms = programs_display;
+  const activeProgramsCount = displayPrograms.filter((p) => p.status === "active").length;
+  const completedProgramsCount = displayPrograms.filter((p) => p.status === "completed").length;
+  const totalProgramParticipants = displayPrograms.reduce((sum, p) => sum + p.activeParticipants + p.inactiveParticipants + p.guestParticipants, 0);
+  const totalAuthParticipants = displayPrograms.reduce((sum, p) => sum + p.activeParticipants + p.inactiveParticipants, 0);
+  const totalGuestParticipants = displayPrograms.reduce((sum, p) => sum + p.guestParticipants, 0);
 
   const stats = [
     {
       title: "Total Programs",
       value: displayPrograms.length,
+      subtitle: `${activeProgramsCount} active`,
       icon: FolderOpen,
       variant: 'blue' as const,
     },
     {
       title: "Active Programs",
-      value: displayPrograms.filter((p) => p.status === "active").length,
+      value: activeProgramsCount,
+      subtitle: displayPrograms.length > 0 ? `${Math.round((activeProgramsCount/displayPrograms.length)*100)}% of total` : "0% of total",
       icon: Activity,
       variant: 'green' as const,
     },
     {
       title: "Total Participants",
-      value: `${displayPrograms.reduce((sum, p) => sum + p.activeParticipants + p.inactiveParticipants + p.guestParticipants, 0)} (${displayPrograms.reduce((sum, p) => sum + p.activeParticipants + p.inactiveParticipants, 0)}/${displayPrograms.reduce((sum, p) => sum + p.guestParticipants, 0)})`,
+      value: `${totalProgramParticipants} (${totalAuthParticipants}/${totalGuestParticipants})`,
       subtitle: "(Participant/Anonymous)",
       icon: Users,
       variant: 'purple' as const,
     },
     {
       title: "Completed",
-      value: displayPrograms.filter((p) => p.status === "completed").length,
+      value: completedProgramsCount,
+      subtitle: displayPrograms.length > 0 ? `${Math.round((completedProgramsCount/displayPrograms.length)*100)}% completion` : "0% completion",
       icon: CheckCircle,
       variant: 'teal' as const,
     },
@@ -286,6 +294,11 @@ export default function ProgramsPage() {
       selectedOrganization === "all" ||
       program.organization === selectedOrganization;
     return matchesSearch && matchesStatus && matchesOrganization;
+  }).sort((a, b) => {
+    // Sort by latest first (startDate as proxy for created/updated)
+    const dateA = new Date(a.startDate === "N/A" ? 0 : a.startDate).getTime();
+    const dateB = new Date(b.startDate === "N/A" ? 0 : b.startDate).getTime();
+    return dateB - dateA;
   });
 
   const totalPages = Math.ceil(filteredPrograms.length / itemsPerPage);

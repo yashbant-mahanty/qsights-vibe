@@ -131,8 +131,11 @@ export default function ParticipantsPage() {
   }
 
   const handleEdit = (participantId: string) => {
-    const participant = participants.find(p => p.id === participantId);
-    if (!participant) return;
+    const participant = participants.find(p => String(p.id) === participantId);
+    if (!participant) {
+      console.error('Participant not found:', participantId);
+      return;
+    }
     
     const nameParts = participant.name.split(' ');
     const firstName = nameParts[0] || '';
@@ -144,15 +147,18 @@ export default function ParticipantsPage() {
       lastName,
       email: participant.email,
       phone: participant.phone || '',
-      selectedPrograms: participant.programs?.map(p => p.id) || [],
+      selectedPrograms: participant.programs?.map(p => String(p.id)) || [],
       status: participant.status,
     });
     setShowEditModal(true);
   };
 
   const handleViewPrograms = (participantId: string) => {
-    const participant = participants.find(p => p.id === participantId);
-    if (!participant) return;
+    const participant = participants.find(p => String(p.id) === participantId);
+    if (!participant) {
+      console.error('Participant not found:', participantId);
+      return;
+    }
     
     setSelectedParticipant(participant);
     setSelectedParticipantPrograms(participant.programs || []);
@@ -261,7 +267,9 @@ export default function ParticipantsPage() {
     if (selectedParticipantIds.length === 0) return;
     
     try {
-      const result = await participantsApi.bulkDelete(selectedParticipantIds);
+      // Ensure IDs are strings for API validation
+      const stringIds = selectedParticipantIds.map(id => String(id));
+      const result = await participantsApi.bulkDelete(stringIds);
       await loadParticipants();
       setSelectedParticipantIds([]);
       setBulkDeleteModal(false);
@@ -284,7 +292,8 @@ export default function ParticipantsPage() {
     if (selectedParticipantIds.length === currentParticipants.length) {
       setSelectedParticipantIds([]);
     } else {
-      setSelectedParticipantIds(currentParticipants.map(p => p.id));
+      // Ensure IDs are strings
+      setSelectedParticipantIds(currentParticipants.map(p => String(p.id)));
     }
   };
 
@@ -382,31 +391,36 @@ export default function ParticipantsPage() {
   const authenticatedCount = displayParticipants.filter(p => !p.isGuest).length;
   const anonymousCount = displayParticipants.filter(p => p.isGuest).length;
   const totalActiveParticipants = authenticatedCount + anonymousCount;
+  const activeParticipantsCount = displayParticipants.filter((p) => p.status === "active").length;
+  const inactiveParticipantsCount = displayParticipants.filter((p) => p.status === "inactive").length;
+  const totalEnrolledPrograms = displayParticipants.reduce((sum, p) => sum + p.programs.length, 0);
 
   const stats = [
     {
       title: "Total Participants",
-      value: totalActiveParticipants,
-      subtitle: totalActiveParticipants > 0 ? `(${authenticatedCount}/${anonymousCount})` : undefined,
-      subtitleLabel: totalActiveParticipants > 0 ? "(Participant/Anonymous)" : undefined,
+      value: `${totalActiveParticipants} (${authenticatedCount}/${anonymousCount})`,
+      subtitle: "(Participant/Anonymous)",
       icon: Users,
       variant: 'blue' as const,
     },
     {
       title: "Active",
-      value: displayParticipants.filter((p) => p.status === "active").length,
+      value: activeParticipantsCount,
+      subtitle: totalActiveParticipants > 0 ? `${Math.round((activeParticipantsCount/totalActiveParticipants)*100)}% of total` : "0% of total",
       icon: CheckCircle,
       variant: 'green' as const,
     },
     {
       title: "Inactive",
-      value: displayParticipants.filter((p) => p.status === "inactive").length,
+      value: inactiveParticipantsCount,
+      subtitle: totalActiveParticipants > 0 ? `${Math.round((inactiveParticipantsCount/totalActiveParticipants)*100)}% of total` : "0% of total",
       icon: XCircle,
       variant: 'red' as const,
     },
     {
       title: "Enrolled Programs",
-      value: displayParticipants.reduce((sum, p) => sum + p.programs.length, 0),
+      value: totalEnrolledPrograms,
+      subtitle: `${totalEnrolledPrograms} enrollments`,
       icon: FolderOpen,
       variant: 'purple' as const,
     },
@@ -427,6 +441,11 @@ export default function ParticipantsPage() {
       selectedProgram === "all" ||
       participant.programs.includes(selectedProgram);
     return matchesSearch && matchesStatus && matchesProgram;
+  }).sort((a, b) => {
+    // Sort by latest first (joinedDate)
+    const dateA = new Date(a.joinedDate || 0).getTime();
+    const dateB = new Date(b.joinedDate || 0).getTime();
+    return dateB - dateA;
   });
 
   const totalPages = Math.ceil(filteredParticipants.length / itemsPerPage);
@@ -516,6 +535,7 @@ export default function ParticipantsPage() {
               key={index}
               title={stat.title}
               value={stat.value}
+              subtitle={stat.subtitle}
               icon={stat.icon}
               variant={stat.variant}
             />
@@ -919,7 +939,7 @@ export default function ParticipantsPage() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
-                      Email Address <span className="text-red-500">*</span>
+                      Communication Email ID <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="email"

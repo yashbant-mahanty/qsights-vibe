@@ -12,6 +12,52 @@ class Activity extends Model
 {
     use HasFactory, HasUuids, SoftDeletes;
 
+    /**
+     * Boot method to handle cascading deletes
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::deleting(function ($activity) {
+            if ($activity->isForceDeleting()) {
+                // Force delete all related data
+                $activity->responses()->forceDelete();
+                $activity->notificationTemplates()->forceDelete();
+                $activity->participants()->detach();
+                
+                // Delete from tables that might exist (use try-catch for safety)
+                try {
+                    \DB::table('notification_logs')->where('activity_id', $activity->id)->delete();
+                } catch (\Exception $e) {
+                    // Table doesn't exist or column missing
+                }
+                
+                try {
+                    \DB::table('activity_access_tokens')->where('activity_id', $activity->id)->delete();
+                } catch (\Exception $e) {
+                    // Table doesn't exist
+                }
+                
+                try {
+                    \DB::table('event_contact_messages')->where('activity_id', $activity->id)->delete();
+                } catch (\Exception $e) {
+                    // Table doesn't exist
+                }
+                
+                try {
+                    \DB::table('evaluation_events')->where('activity_id', $activity->id)->delete();
+                } catch (\Exception $e) {
+                    // Table doesn't exist
+                }
+            } else {
+                // Soft delete - cascade to related models
+                $activity->responses()->delete();
+                $activity->notificationTemplates()->delete();
+            }
+        });
+    }
+
     protected $fillable = [
         'program_id',
         'questionnaire_id',
@@ -23,6 +69,7 @@ class Activity extends Model
         'close_date',
         'status',
         'allow_guests',
+        'allow_participant_reminders',
         'is_multilingual',
         'languages',
         'settings',
@@ -103,6 +150,26 @@ class Activity extends Model
     public function approvedBy()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function notificationLogs()
+    {
+        return $this->hasMany(NotificationLog::class);
+    }
+
+    public function accessTokens()
+    {
+        return $this->hasMany(ActivityAccessToken::class);
+    }
+
+    public function contactMessages()
+    {
+        return $this->hasMany(EventContactMessage::class);
+    }
+
+    public function evaluationEvents()
+    {
+        return $this->hasMany(EvaluationEvent::class);
     }
 
     /**
