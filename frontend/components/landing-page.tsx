@@ -39,7 +39,7 @@ const features = [
     icon: BarChart3,
     title: "Poll",
     description: "Quick polls to gather instant feedback from your audience",
-    gradient: "from-purple-500 to-purple-600",
+    gradient: "from-qsights-cyan to-qsights-cyan",
   },
   {
     icon: FileText,
@@ -63,7 +63,7 @@ const features = [
     icon: Award,
     title: "Brand Reinforcement",
     description: "Strengthen your brand identity across all touchpoints",
-    gradient: "from-indigo-500 to-indigo-600",
+    gradient: "from-qsights-cyan to-qsights-cyan",
   },
 ];
 

@@ -21,11 +21,12 @@ import {
   AlertCircle,
   Palette,
   Settings as SettingsIcon,
+  FileText,
+  PlayCircle,
   Database,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/toast";
-import DataSafetySettings from "@/components/admin/DataSafetySettings";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -281,7 +282,7 @@ export default function SettingsPage() {
             {currentUser?.role !== 'program-admin' && currentUser?.role !== 'program-manager' && (
               <TabsTrigger 
                 value="app" 
-                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
               >
                 <SettingsIcon className="w-4 h-4 mr-2" />
                 App Settings
@@ -299,7 +300,7 @@ export default function SettingsPage() {
             {(currentUser?.role === 'super-admin' || currentUser?.role === 'admin') && (
               <TabsTrigger 
                 value="cms"
-                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-100 hover:text-gray-900"
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-100 hover:text-gray-900"
               >
                 <Mail className="w-4 h-4 mr-2" />
                 CMS & Content
@@ -312,15 +313,6 @@ export default function SettingsPage() {
               >
                 <SettingsIcon className="w-4 h-4 mr-2" />
                 System Config
-              </TabsTrigger>
-            )}
-            {currentUser?.role === 'super-admin' && (
-              <TabsTrigger 
-                value="data-safety"
-                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-emerald-600 data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-100 hover:text-gray-900"
-              >
-                <Database className="w-4 h-4 mr-2" />
-                Data Safety
               </TabsTrigger>
             )}
           </TabsList>
@@ -368,7 +360,7 @@ export default function SettingsPage() {
                           onChange={() => handleNotificationToggle("emailNotifications")}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                       </label>
                     </div>
 
@@ -389,7 +381,7 @@ export default function SettingsPage() {
                           onChange={() => handleNotificationToggle("activityReminders")}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                       </label>
                     </div>
 
@@ -408,7 +400,7 @@ export default function SettingsPage() {
                           onChange={() => handleNotificationToggle("responseAlerts")}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                       </label>
                     </div>
 
@@ -427,7 +419,7 @@ export default function SettingsPage() {
                           onChange={() => handleNotificationToggle("weeklyReports")}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                       </label>
                     </div>
 
@@ -446,7 +438,7 @@ export default function SettingsPage() {
                           onChange={() => handleNotificationToggle("systemUpdates")}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                       </label>
                     </div>
 
@@ -467,7 +459,7 @@ export default function SettingsPage() {
                           onChange={() => handleNotificationToggle("participantActivity")}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                       </label>
                     </div>
                   </div>
@@ -616,7 +608,7 @@ export default function SettingsPage() {
                       </Label>
                       <Input type="password" placeholder="Confirm new password" />
                     </div>
-                    <button className="px-6 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors">
+                    <button className="px-6 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors">
                       Update Password
                     </button>
                   </CardContent>
@@ -738,8 +730,8 @@ export default function SettingsPage() {
                       <h3 className="font-semibold text-sm text-gray-900 mb-1">Template Selection</h3>
                       <p className="text-xs text-gray-600">Choose between Advanced or Regular landing page templates</p>
                     </div>
-                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                      <Camera className="w-8 h-8 text-purple-600 mb-3" />
+                    <div className="p-4 bg-qsights-light rounded-lg border border-purple-200">
+                      <Camera className="w-8 h-8 text-qsights-cyan mb-3" />
                       <h3 className="font-semibold text-sm text-gray-900 mb-1">Branding & Images</h3>
                       <p className="text-xs text-gray-600">Upload logos, banners, hero images, and icons</p>
                     </div>
@@ -824,9 +816,9 @@ export default function SettingsPage() {
           {(currentUser?.role === 'super-admin' || currentUser?.role === 'admin') && (
             <TabsContent value="cms" className="space-y-6">
               <Card>
-                <CardHeader className="border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
+                <CardHeader className="border-b border-gray-200 bg-gradient-to-r from-qsights-light to-cyan-50">
                   <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    <Mail className="w-6 h-6 text-indigo-600" />
+                    <Mail className="w-6 h-6 text-qsights-cyan" />
                     CMS & Content Management
                   </CardTitle>
                 </CardHeader>
@@ -850,8 +842,8 @@ export default function SettingsPage() {
                       <h3 className="font-semibold text-sm text-gray-900 mb-1">Contact Forms</h3>
                       <p className="text-xs text-gray-600">Edit Contact Sales, Request Demo, and Contact Us forms</p>
                     </div>
-                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                      <Shield className="w-8 h-8 text-purple-600 mb-3" />
+                    <div className="p-4 bg-qsights-light rounded-lg border border-purple-200">
+                      <Shield className="w-8 h-8 text-qsights-cyan mb-3" />
                       <h3 className="font-semibold text-sm text-gray-900 mb-1">Legal Pages</h3>
                       <p className="text-xs text-gray-600">Manage Privacy Policy and Terms of Service with rich-text</p>
                     </div>
@@ -863,7 +855,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Call to Action */}
-                  <div className="p-6 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl text-white">
+                  <div className="p-6 bg-gradient-to-br bg-qsights-dark rounded-xl text-white">
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-lg font-bold mb-2">Content Management System</h3>
@@ -900,7 +892,7 @@ export default function SettingsPage() {
                       <div className="ml-6">
                         <button
                           onClick={() => router.push('/settings/cms')}
-                          className="px-6 py-3 bg-white text-indigo-600 rounded-lg font-semibold hover:bg-gray-50 transition-colors shadow-lg flex items-center gap-2"
+                          className="px-6 py-3 bg-white text-qsights-cyan rounded-lg font-semibold hover:bg-gray-50 transition-colors shadow-lg flex items-center gap-2"
                         >
                           <Mail className="w-5 h-5" />
                           Open CMS Manager
@@ -951,8 +943,8 @@ export default function SettingsPage() {
                       <h3 className="font-semibold text-sm text-gray-900 mb-1">Secure Storage</h3>
                       <p className="text-xs text-gray-600">All API keys encrypted at rest in database</p>
                     </div>
-                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                      <Key className="w-8 h-8 text-purple-600 mb-3" />
+                    <div className="p-4 bg-qsights-light rounded-lg border border-purple-200">
+                      <Key className="w-8 h-8 text-qsights-cyan mb-3" />
                       <h3 className="font-semibold text-sm text-gray-900 mb-1">Audit Logging</h3>
                       <p className="text-xs text-gray-600">Track all configuration changes with full history</p>
                     </div>
@@ -1002,15 +994,82 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* System Design Document (SDD) Card */}
+              <Card>
+                <CardHeader className="border-b border-gray-200">
+                  <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-qsights-blue" />
+                    System Design Document (SDD)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+                  {/* Feature Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <FileText className="w-8 h-8 text-blue-600 mb-3" />
+                      <h3 className="font-semibold text-sm text-gray-900 mb-1">Auto-Generated SDD</h3>
+                      <p className="text-xs text-gray-600">Always up-to-date documentation with versioned PDF</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                      <PlayCircle className="w-8 h-8 text-green-600 mb-3" />
+                      <h3 className="font-semibold text-sm text-gray-900 mb-1">Pre-Deployment Tests</h3>
+                      <p className="text-xs text-gray-600">Mandatory tests before any production deployment</p>
+                    </div>
+                    <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                      <Database className="w-8 h-8 text-orange-600 mb-3" />
+                      <h3 className="font-semibold text-sm text-gray-900 mb-1">Schema Validation</h3>
+                      <p className="text-xs text-gray-600">Prevent UUID ↔ BIGINT migration mismatches</p>
+                    </div>
+                  </div>
+
+                  {/* Call to Action */}
+                  <div className="p-6 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl text-white">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold mb-2">Engineering Governance & Documentation</h3>
+                        <p className="text-sm text-blue-100 mb-4">
+                          Complete system documentation and deployment safety:
+                        </p>
+                        <ul className="space-y-1.5 text-sm text-blue-50">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Download complete SDD as versioned PDF
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Run pre-deployment tests (REQUIRED)
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Validate schema consistency
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            View rollback procedures
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4" />
+                            Manage critical features list
+                          </li>
+                        </ul>
+                      </div>
+                      <div className="ml-6">
+                        <button
+                          onClick={() => router.push('/settings/system-design')}
+                          className="px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-gray-50 transition-colors shadow-lg flex items-center gap-2"
+                        >
+                          <FileText className="w-5 h-5" />
+                          View SDD
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
 
-          {/* Data Safety Tab Content */}
-          {currentUser?.role === 'super-admin' && (
-            <TabsContent value="data-safety" className="space-y-6">
-              <DataSafetySettings />
-            </TabsContent>
-          )}
         </Tabs>
 
         {/* Save Button - Below All Tabs */}
@@ -1023,7 +1082,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-6 py-3 bg-qsights-blue text-white rounded-lg font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105 transition-all"
+                className="flex items-center gap-2 px-6 py-3 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105 transition-all"
               >
                 <Save className="w-5 h-5" />
                 {saving ? 'Saving...' : 'Save Changes'}

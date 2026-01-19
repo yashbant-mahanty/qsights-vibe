@@ -307,7 +307,7 @@ export default function OrganizationsPage() {
             <p className="text-red-600 font-semibold">{error}</p>
             <button 
               onClick={loadOrganizations}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
             >
               Retry
             </button>
@@ -336,7 +336,7 @@ export default function OrganizationsPage() {
           </div>
           <a
             href="/organizations/create"
-            className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Create Organization
@@ -436,7 +436,7 @@ export default function OrganizationsPage() {
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="w-10 h-10 bg-qsights-blue rounded-lg flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+                          <div className="w-10 h-10 bg-qsights-dark rounded-lg flex items-center justify-center text-white font-bold text-sm overflow-hidden">
                             {org.logo ? (
                               <img src={org.logo} alt={org.name} className="w-full h-full object-cover" />
                             ) : (
@@ -559,7 +559,7 @@ export default function OrganizationsPage() {
                           onClick={() => setCurrentPage(page)}
                           className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
                             currentPage === page
-                              ? "bg-qsights-blue text-white"
+                              ? "bg-qsights-dark text-white"
                               : "text-gray-700 hover:bg-gray-100"
                           }`}
                         >
@@ -799,7 +799,7 @@ export default function OrganizationsPage() {
               <button
                 onClick={handleSaveEdit}
                 disabled={!editFormData.name || !editFormData.email}
-                className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save Changes
               </button>

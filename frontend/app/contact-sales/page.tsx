@@ -275,7 +275,7 @@ export default function ContactSalesPage() {
           {/* Right Column - Form */}
           <div>
             <Card className="shadow-2xl border-2 border-gray-200">
-              <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 p-6 text-white">
+              <div className="bg-gradient-to-br bg-qsights-dark p-6 text-white">
                 <Mail className="w-8 h-8 mb-3" />
                 <h2 className="text-2xl font-bold mb-2">Send Us a Message</h2>
                 <p className="text-blue-100 text-sm">

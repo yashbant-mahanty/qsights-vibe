@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -85,15 +86,58 @@ class AuthController extends Controller
 
             \Log::info('Validation passed');
 
+            $user = null;
+            $passwordVerified = false;
+
             // Try to find user by email first, then by username (stored in 'name' field)
             $user = User::where('email', $request->email)->first();
             if (!$user) {
                 // If not found by email, try username (which is stored in 'name' field for program users)
                 $user = User::where('name', $request->email)->first();
             }
-            \Log::info('User lookup complete', ['found' => $user ? 'yes' : 'no']);
+            
+            // If found in users table, verify password
+            if ($user) {
+                $passwordVerified = Hash::check($request->password, $user->password);
+                \Log::info('User found in users table', ['verified' => $passwordVerified]);
+            }
+            
+            // If still not found or password doesn't match, check program_roles table
+            if (!$passwordVerified) {
+                \Log::info('Checking program_roles table');
+                $programRole = DB::table('program_roles')
+                    ->where(function($query) use ($request) {
+                        $query->where('email', $request->email)
+                              ->orWhere('username', $request->email);
+                    })
+                    ->where('status', 'active')
+                    ->first();
+                
+                if ($programRole) {
+                    \Log::info('Program role found', ['email' => $programRole->email]);
+                    $passwordVerified = Hash::check($request->password, $programRole->password);
+                    
+                    if ($passwordVerified) {
+                        \Log::info('Password verified for program role');
+                        // Create or sync user record for this program role
+                        $user = User::updateOrCreate(
+                            ['email' => $programRole->email],
+                            [
+                                'name' => $programRole->username,
+                                'password' => $programRole->password, // Already hashed
+                                'role' => $programRole->role_name ?? 'program-user',
+                                'program_id' => $programRole->program_id,
+                                'status' => 'active'
+                            ]
+                        );
+                        \Log::info('User synced from program_roles', ['email' => $user->email]);
+                    }
+                }
+            }
+            
+            \Log::info('Authentication check', ['user_exists' => $user ? 'yes' : 'no', 'password_verified' => $passwordVerified]);
 
-            if (!$user || !Hash::check($request->password, $user->password)) {
+            if (!$user || !$passwordVerified) {
                 \Log::info('Authentication failed');
                 throw ValidationException::withMessages([
                     'email' => ['The provided credentials are incorrect.'],
@@ -155,6 +199,19 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Get services/permissions for program roles
+        $services = [];
+        if ($user->program_id) {
+            $programRole = DB::table('program_roles')
+                ->where('email', $user->email)
+                ->where('program_id', $user->program_id)
+                ->first();
+            
+            if ($programRole && $programRole->services) {
+                $services = json_decode($programRole->services, true) ?? [];
+            }
+        }
+
         return response()->json([
             'user' => [
                 'userId' => $user->id,
@@ -172,6 +229,7 @@ class AuthController extends Controller
                 'postal_code' => $user->postal_code,
                 'bio' => $user->bio,
                 'preferences' => $user->preferences,
+                'services' => $services, // Add services for permission checks
             ]
         ]);
     }

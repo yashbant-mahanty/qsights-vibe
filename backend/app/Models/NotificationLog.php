@@ -5,12 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Carbon\Carbon;
 
 class NotificationLog extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -71,6 +70,12 @@ class NotificationLog extends Model
     }
 
     public function event()
+    {
+        return $this->belongsTo(Activity::class, 'event_id');
+    }
+
+    // Alias for event() relationship
+    public function activity()
     {
         return $this->belongsTo(Activity::class, 'event_id');
     }

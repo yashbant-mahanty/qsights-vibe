@@ -41,10 +41,10 @@ interface RegistrationFormBuilderProps {
 const FIELD_TYPES = [
   { type: "text" as const, label: "Text Field", icon: FileText, color: "bg-blue-100 text-blue-600" },
   { type: "phone" as const, label: "Phone Number", icon: Phone, color: "bg-green-100 text-green-600" },
-  { type: "number" as const, label: "Number", icon: Hash, color: "bg-purple-100 text-purple-600" },
+  { type: "number" as const, label: "Number", icon: Hash, color: "bg-cyan-50 text-qsights-cyan" },
   { type: "date" as const, label: "Date", icon: Calendar, color: "bg-orange-100 text-orange-600" },
   { type: "textarea" as const, label: "Long Text", icon: FileText, color: "bg-pink-100 text-pink-600" },
-  { type: "select" as const, label: "Dropdown", icon: ChevronDown, color: "bg-indigo-100 text-indigo-600" },
+  { type: "select" as const, label: "Dropdown", icon: ChevronDown, color: "bg-cyan-50 text-qsights-cyan" },
   { type: "address" as const, label: "Address", icon: MapPin, color: "bg-yellow-100 text-yellow-600" },
   { type: "organization" as const, label: "Organization", icon: Building, color: "bg-teal-100 text-teal-600" },
 ];

@@ -62,7 +62,7 @@ export default function ActivityNotificationsPage() {
             <p className="text-red-600">{error || "Activity not found"}</p>
             <button
               onClick={() => router.push("/activities")}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg"
             >
               Back to Activities
             </button>

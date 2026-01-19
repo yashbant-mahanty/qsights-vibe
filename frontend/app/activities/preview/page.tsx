@@ -59,7 +59,7 @@ export default function PreviewActivityPage() {
           </div>
           <button
             onClick={() => router.back()}
-            className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+            className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
           >
             Back to Edit
           </button>
@@ -136,7 +136,7 @@ export default function PreviewActivityPage() {
                       key={qId}
                       className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg"
                     >
-                      <div className="flex items-center justify-center w-8 h-8 bg-qsights-blue text-white rounded-full font-semibold text-sm">
+                      <div className="flex items-center justify-center w-8 h-8 bg-qsights-dark text-white rounded-full font-semibold text-sm">
                         {index + 1}
                       </div>
                       <div className="flex-1">

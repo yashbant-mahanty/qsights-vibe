@@ -157,12 +157,12 @@ export default function CreateProgramPage() {
     // Major Global Languages
     { code: "EN", name: "English", color: "border-blue-500 text-blue-700 bg-blue-50" },
     { code: "ES", name: "Spanish", color: "border-red-500 text-red-700 bg-red-50" },
-    { code: "FR", name: "French", color: "border-purple-500 text-purple-700 bg-purple-50" },
+    { code: "FR", name: "French", color: "border-purple-500 text-purple-700 bg-qsights-light" },
     { code: "DE", name: "German", color: "border-yellow-600 text-yellow-800 bg-yellow-50" },
     { code: "IT", name: "Italian", color: "border-green-500 text-green-700 bg-green-50" },
     { code: "PT", name: "Portuguese", color: "border-orange-500 text-orange-700 bg-orange-50" },
     { code: "ZH", name: "Chinese", color: "border-pink-500 text-pink-700 bg-pink-50" },
-    { code: "JA", name: "Japanese", color: "border-indigo-500 text-indigo-700 bg-indigo-50" },
+    { code: "JA", name: "Japanese", color: "border-indigo-500 text-indigo-700 bg-qsights-light" },
     // Additional Global Languages
     { code: "AR", name: "Arabic", color: "border-emerald-500 text-emerald-700 bg-emerald-50" },
     { code: "HI", name: "Hindi", color: "border-amber-500 text-amber-700 bg-amber-50" },
@@ -177,10 +177,10 @@ export default function CreateProgramPage() {
     { code: "MS", name: "Malay", color: "border-slate-500 text-slate-700 bg-slate-50" },
     { code: "SV", name: "Swedish", color: "border-blue-400 text-blue-600 bg-blue-50" },
     { code: "NO", name: "Norwegian", color: "border-red-400 text-red-600 bg-red-50" },
-    { code: "DA", name: "Danish", color: "border-purple-400 text-purple-600 bg-purple-50" },
+    { code: "DA", name: "Danish", color: "border-purple-400 text-qsights-cyan bg-qsights-light" },
     { code: "FI", name: "Finnish", color: "border-cyan-400 text-cyan-600 bg-cyan-50" },
     { code: "EL", name: "Greek", color: "border-sky-400 text-sky-600 bg-sky-50" },
-    { code: "HE", name: "Hebrew", color: "border-indigo-400 text-indigo-600 bg-indigo-50" },
+    { code: "HE", name: "Hebrew", color: "border-indigo-400 text-qsights-cyan bg-qsights-light" },
     { code: "CS", name: "Czech", color: "border-rose-400 text-rose-600 bg-rose-50" },
     { code: "RO", name: "Romanian", color: "border-amber-400 text-amber-600 bg-amber-50" },
     { code: "UK", name: "Ukrainian", color: "border-yellow-400 text-yellow-600 bg-yellow-50" },
@@ -474,7 +474,7 @@ export default function CreateProgramPage() {
             </Card>
 
             {/* Auto-Generated Credentials */}
-            <Card className="bg-purple-50 border-purple-200">
+            <Card className="bg-qsights-light border-purple-200">
               <CardHeader className="border-b border-purple-200">
                 <CardTitle className="text-sm font-bold text-purple-900 flex items-center gap-2">
                   <Key className="w-4 h-4" />
@@ -504,7 +504,7 @@ export default function CreateProgramPage() {
                     className="bg-white text-sm font-mono"
                   />
                 </div>
-                <div className="flex items-start gap-2 mt-3 p-3 bg-purple-100 rounded-lg">
+                <div className="flex items-start gap-2 mt-3 p-3 bg-cyan-50 rounded-lg">
                   <Info className="w-4 h-4 text-purple-700 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-purple-800">
                     These credentials will be automatically generated upon saving
@@ -520,7 +520,7 @@ export default function CreateProgramPage() {
                 <button 
                   onClick={handleSubmit}
                   disabled={saving || loading}
-                  className="w-full px-4 py-2.5 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2.5 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving...' : 'Save Program'}
                 </button>
@@ -585,7 +585,7 @@ export default function CreateProgramPage() {
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
                             cred.role === 'program-admin' 
-                              ? 'bg-purple-100 text-purple-800'
+                              ? 'bg-cyan-50 text-purple-800'
                               : cred.role === 'program-manager'
                               ? 'bg-blue-100 text-blue-800'
                               : 'bg-green-100 text-green-800'

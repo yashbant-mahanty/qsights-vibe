@@ -36,6 +36,7 @@ import {
   StarRating,
   DEFAULT_SETTINGS,
 } from "@/components/questions";
+import { createAnswerPayload } from "@/lib/valueDisplayUtils";
 
 interface FormField {
   id: string;
@@ -1961,7 +1962,7 @@ export default function TakeActivityPage() {
                     disabled={isSubmitted || isPollSubmitted_rating}
                     className={`w-12 h-12 rounded-lg border-2 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
                       responses[questionId] === rating
-                        ? "border-qsights-blue bg-qsights-blue text-white"
+                        ? "border-qsights-blue bg-qsights-dark text-white"
                         : "border-gray-300 text-gray-600 hover:border-qsights-blue"
                     }`}
                   >
@@ -2188,11 +2189,29 @@ export default function TakeActivityPage() {
         );
 
       case "slider_scale":
+        console.log('🔍 [SLIDER] Question settings:', JSON.stringify(question.settings, null, 2));
+        console.log('🔍 [SLIDER] customImages:', question.settings?.customImages);
+        console.log('🔍 [SLIDER] useCustomImages:', question.settings?.useCustomImages);
         return (
           <div className="py-4">
             <SliderScale
               value={responses[questionId] !== undefined ? Number(responses[questionId]) : null}
-              onChange={(value) => handleResponseChange(questionId, value)}
+              onChange={(value) => {
+                const settings = question.settings || {};
+                if (settings.valueDisplayMode && settings.valueDisplayMode !== 'number') {
+                  // Create enhanced payload for range/text modes
+                  const payload = createAnswerPayload(
+                    value,
+                    settings.valueDisplayMode,
+                    settings.rangeMappings,
+                    settings.textMappings
+                  );
+                  handleResponseChange(questionId, payload);
+                } else {
+                  // Default numeric mode
+                  handleResponseChange(questionId, value);
+                }
+              }}
               settings={question.settings || DEFAULT_SETTINGS.slider_scale}
               disabled={isSubmitted}
             />
@@ -2204,7 +2223,22 @@ export default function TakeActivityPage() {
           <div className="py-4 flex justify-center">
             <DialGauge
               value={responses[questionId] !== undefined ? Number(responses[questionId]) : null}
-              onChange={(value) => handleResponseChange(questionId, value)}
+              onChange={(value) => {
+                const settings = question.settings || {};
+                if (settings.valueDisplayMode && settings.valueDisplayMode !== 'number') {
+                  // Create enhanced payload for range/text modes
+                  const payload = createAnswerPayload(
+                    value,
+                    settings.valueDisplayMode,
+                    settings.rangeMappings,
+                    settings.textMappings
+                  );
+                  handleResponseChange(questionId, payload);
+                } else {
+                  // Default numeric mode
+                  handleResponseChange(questionId, value);
+                }
+              }}
               settings={question.settings || DEFAULT_SETTINGS.dial_gauge}
               disabled={isSubmitted}
             />
@@ -2314,7 +2348,7 @@ export default function TakeActivityPage() {
     });
 
     return (
-      <div className="h-screen overflow-hidden flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-blue-50">
+      <div className="h-screen overflow-hidden flex items-center justify-center bg-gradient-to-br from-cyan-50 via-white to-blue-50">
         <div className="w-full max-w-2xl px-6">
           {isAssessment && assessmentResult ? (
             // Assessment Results - Typeform-inspired design
@@ -2343,11 +2377,11 @@ export default function TakeActivityPage() {
                 <div>
                   <div className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">Your Score</div>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-6xl font-bold text-gray-900">{assessmentResult.correctAnswersCount}</span>
-                    <span className="text-3xl font-semibold text-gray-400">/</span>
-                    <span className="text-6xl font-bold text-gray-400">{assessmentResult.totalQuestions}</span>
+                    <span className="text-4xl font-bold text-gray-900">{assessmentResult.correctAnswersCount}</span>
+                    <span className="text-2xl font-semibold text-gray-400">/</span>
+                    <span className="text-4xl font-bold text-gray-400">{assessmentResult.totalQuestions}</span>
                   </div>
-                  <div className="mt-2 text-2xl font-semibold text-gray-600">
+                  <div className="mt-2 text-xl font-semibold text-gray-600">
                     {assessmentResult.score?.toFixed(0)}%
                   </div>
                 </div>
@@ -3477,7 +3511,7 @@ export default function TakeActivityPage() {
                       {activity.name}
                     </h1>
                     <div className="flex-shrink-0 px-4 py-1.5 bg-white/95 backdrop-blur-sm rounded-full shadow-lg">
-                      <span className="text-xs font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent uppercase tracking-wider">
+                      <span className="text-xs font-bold bg-gradient-to-r from-qsights-cyan to-qsights-navy bg-clip-text text-transparent uppercase tracking-wider">
                         {activity.type}
                       </span>
                     </div>
@@ -3574,7 +3608,7 @@ export default function TakeActivityPage() {
             </div>
 
             {/* Gradient Border Bottom */}
-            <div className="h-1 bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-500" />
+            <div className="h-1 bg-gradient-to-r from-qsights-cyan via-cyan-400 to-cyan-500" />
           </div>
 
         {/* Timer Display */}
@@ -3595,7 +3629,7 @@ export default function TakeActivityPage() {
                     Time Remaining
                   </span>
                   <div className="flex items-baseline gap-1">
-                    <span className={`text-4xl font-bold font-mono tracking-tight ${
+                    <span className={`text-3xl font-bold font-mono tracking-tight ${
                       remainingSeconds <= 60 ? 'text-red-600' : remainingSeconds <= 300 ? 'text-yellow-700' : 'text-blue-600'
                     }`}>
                       {Math.floor(remainingSeconds / 60).toString().padStart(2, '0')}:{(remainingSeconds % 60).toString().padStart(2, '0')}
@@ -3621,7 +3655,7 @@ export default function TakeActivityPage() {
                 {/* Progress Bar Background */}
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gray-100">
                   <div 
-                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-all duration-500 ease-out"
+                    className="h-full bg-gradient-to-r from-qsights-cyan via-cyan-500 to-qsights-cyan transition-all duration-500 ease-out"
                     style={{ width: `${((currentSectionIndex + 1) / totalSections) * 100}%` }}
                   />
                 </div>
@@ -3629,7 +3663,7 @@ export default function TakeActivityPage() {
                 <div className="flex items-center justify-between px-6 py-4 pt-5">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
-                      <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                      <span className="text-2xl font-bold bg-gradient-to-r from-qsights-cyan to-qsights-navy bg-clip-text text-transparent">
                         {Math.round(((currentSectionIndex + 1) / totalSections) * 100)}%
                       </span>
                       <span className="text-sm font-medium text-gray-500">
@@ -3664,7 +3698,7 @@ export default function TakeActivityPage() {
                 {/* Progress Bar Background */}
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gray-100">
                   <div 
-                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-all duration-500 ease-out"
+                    className="h-full bg-gradient-to-r from-qsights-cyan via-cyan-500 to-qsights-cyan transition-all duration-500 ease-out"
                     style={{ width: `${((currentSectionIndex + 1) / totalSections) * 100}%` }}
                   />
                 </div>
@@ -3672,7 +3706,7 @@ export default function TakeActivityPage() {
                 <div className="flex items-center justify-between px-6 py-4 pt-5">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
-                      <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                      <span className="text-2xl font-bold bg-gradient-to-r from-qsights-cyan to-qsights-navy bg-clip-text text-transparent">
                         {Math.round(((currentSectionIndex + 1) / totalSections) * 100)}%
                       </span>
                       <span className="text-sm font-medium text-gray-500">
@@ -3732,7 +3766,7 @@ export default function TakeActivityPage() {
                             </div>
                           )}
                           <div className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-blue text-white rounded-full text-sm font-semibold">
+                            <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
                               {currentQuestionIndex + 1}
                             </span>
                             <div className="flex-1">
@@ -3784,7 +3818,7 @@ export default function TakeActivityPage() {
                       {currentSectionFiltered.map((question: any, qIndex: number) => (
                         <div key={question.id || qIndex} className="space-y-3 pb-6 border-b border-gray-200 last:border-b-0">
                           <div className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-blue text-white rounded-full text-sm font-semibold">
+                            <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
                               {qIndex + 1}
                             </span>
                             <div className="flex-1">
@@ -3845,7 +3879,7 @@ export default function TakeActivityPage() {
                             section.questions.map((question: any, qIdx: number) => (
                               <div key={question.id || qIdx} className="space-y-3 pb-6 border-b border-gray-200 last:border-0">
                                 <div className="flex items-start gap-3">
-                                  <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-blue text-white rounded-full text-sm font-semibold">
+                                  <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
                                     {qIdx + 1}
                                   </span>
                                   <div className="flex-1">
@@ -3961,7 +3995,7 @@ export default function TakeActivityPage() {
                               if (!validateCurrentAnswers()) return;
                               await handlePollAnswer(currentQuestion.id);
                             }}
-                            className="px-6 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2"
+                            className="px-6 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
                           >
                             <Send className="w-4 h-4" />
                             Submit
@@ -3975,7 +4009,7 @@ export default function TakeActivityPage() {
                         return (
                           <button
                             onClick={navigateToNext}
-                            className="px-6 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2"
+                            className="px-6 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
                           >
                             Next
                             <ChevronRight className="w-4 h-4" />
@@ -3989,7 +4023,7 @@ export default function TakeActivityPage() {
                               if (!validateCurrentAnswers()) return;
                               await handlePollAnswer(currentQuestion.id);
                             }}
-                            className="px-6 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2"
+                            className="px-6 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
                           >
                             <Send className="w-4 h-4" />
                             Submit
@@ -4032,7 +4066,7 @@ export default function TakeActivityPage() {
                       return (
                         <button
                           onClick={handleSubmitAndNext}
-                          className="px-6 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2"
+                          className="px-6 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
                         >
                           {isCurrentSubmitted ? (
                             <>
@@ -4077,7 +4111,7 @@ export default function TakeActivityPage() {
                   return (
                     <button
                       onClick={navigateToNext}
-                      className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2"
+                      className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
                     >
                       Next
                       <ChevronRight className="w-4 h-4" />
@@ -4140,7 +4174,7 @@ export default function TakeActivityPage() {
                           setCurrentQuestionIndex(0);
                         }
                       }}
-                      className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2"
+                      className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
                     >
                       Next Section
                       <ChevronRight className="w-4 h-4" />
@@ -4334,7 +4368,7 @@ export default function TakeActivityPage() {
       {activity?.contact_us_enabled && !submitted && (
         <button
           onClick={() => setShowContactModal(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-gradient-to-r bg-qsights-dark text-white rounded-full shadow-lg hover:shadow-xl hover:bg-qsights-dark/90 transition-all duration-200 transform hover:scale-105"
           title="Contact Us"
         >
           <MessageCircle className="w-5 h-5" />

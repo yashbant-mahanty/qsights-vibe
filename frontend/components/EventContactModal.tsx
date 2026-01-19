@@ -121,7 +121,7 @@ export default function EventContactModal({
       {/* Modal */}
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+        <div className="bg-gradient-to-r bg-qsights-cyan px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-lg">
@@ -168,7 +168,7 @@ export default function EventContactModal({
               </p>
               <button
                 onClick={handleClose}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                className="px-6 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-qsights-cyan/90 transition-colors"
               >
                 Close
               </button>
@@ -191,7 +191,7 @@ export default function EventContactModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter your name"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500 transition-colors"
                   disabled={!!participantName}
                 />
               </div>
@@ -206,7 +206,7 @@ export default function EventContactModal({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500 transition-colors"
                   disabled={!!participantEmail}
                 />
               </div>
@@ -234,7 +234,7 @@ export default function EventContactModal({
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="How can we help you?"
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500 transition-colors resize-none"
                 />
               </div>
 
@@ -242,7 +242,7 @@ export default function EventContactModal({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-gradient-to-r bg-qsights-cyan text-white font-medium rounded-lg hover:bg-qsights-cyan/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <>

@@ -363,7 +363,7 @@ export default function GroupHeadsPage() {
             <p className="text-red-600 font-semibold">{error}</p>
             <button 
               onClick={loadGroupHeads}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
             >
               Retry
             </button>
@@ -386,7 +386,7 @@ export default function GroupHeadsPage() {
           </div>
           <a
             href="/group-heads/create"
-            className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Create Group Head
@@ -633,7 +633,7 @@ export default function GroupHeadsPage() {
                           onClick={() => setCurrentPage(page)}
                           className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
                             currentPage === page
-                              ? "bg-qsights-blue text-white"
+                              ? "bg-qsights-dark text-white"
                               : "text-gray-700 hover:bg-gray-100"
                           }`}
                         >
@@ -842,7 +842,7 @@ export default function GroupHeadsPage() {
               <button
                 onClick={handleSaveEdit}
                 disabled={!editFormData.name || !editFormData.email || !editFormData.organization_id}
-                className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save Changes
               </button>

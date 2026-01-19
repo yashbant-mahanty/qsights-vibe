@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_EMAIL_TEMPLATES } from "@/lib/email-templates";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
 
 export async function GET(
   request: NextRequest,

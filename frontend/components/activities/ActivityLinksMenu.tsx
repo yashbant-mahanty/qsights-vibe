@@ -39,7 +39,7 @@ interface LinksResponse {
 const ActivityLinksMenu: React.FC<ActivityLinksMenuProps> = ({ 
   activityId, 
   authToken, 
-  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api' 
+  apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api' 
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [links, setLinks] = useState<LinksResponse | null>(null);
@@ -59,7 +59,7 @@ const ActivityLinksMenu: React.FC<ActivityLinksMenuProps> = ({
     
     try {
       // Use the full backend URL, not the Next.js API route
-      const backendUrl = apiUrl || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000/api';
+      const backendUrl = apiUrl || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://prod.qsights.com/api';
       const url = `${backendUrl}/activities/${activityId}/links`;
       
       console.log('Fetching activity links from:', url);

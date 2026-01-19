@@ -246,7 +246,7 @@ const SendNotificationPanel = ({
       <div className="w-full max-w-4xl min-h-full py-12 px-4 flex items-center">
         <Card className="w-full shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200 bg-white rounded-xl overflow-hidden flex flex-col max-h-[85vh]">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-5 border-b bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 py-5 border-b bg-gradient-to-r bg-qsights-cyan flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
                 <Mail className="w-5 h-5 text-white" />
@@ -303,7 +303,7 @@ const SendNotificationPanel = ({
             )}
 
             {/* Template Selection */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-xl border-2 border-blue-200 shadow-sm">
+            <div className="bg-gradient-to-br from-qsights-light to-cyan-50 p-5 rounded-xl border-2 border-blue-200 shadow-sm">
               <Label className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
                 <div className="p-1.5 bg-blue-600 rounded-lg">
                   <Mail className="w-4 h-4 text-white" />
@@ -333,7 +333,7 @@ const SendNotificationPanel = ({
             {/* Recipient Mode */}
             <div className="bg-white p-5 rounded-xl border-2 border-gray-200 shadow-sm">
               <Label className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <div className="p-1.5 bg-indigo-600 rounded-lg">
+                <div className="p-1.5 bg-qsights-cyan rounded-lg">
                   <Users className="w-4 h-4 text-white" />
                 </div>
                 Recipients *
@@ -342,7 +342,7 @@ const SendNotificationPanel = ({
                 <label
                   className={`flex items-center gap-3 p-3.5 border-2 rounded-xl cursor-pointer transition-all ${
                     recipientMode === "all"
-                      ? "border-blue-600 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-md"
+                      ? "border-blue-600 bg-gradient-to-r from-qsights-light to-cyan-50 shadow-md"
                       : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"
                   }`}
                 >
@@ -395,7 +395,7 @@ const SendNotificationPanel = ({
                 <label
                   className={`flex items-center gap-3 p-3.5 border-2 rounded-xl cursor-pointer transition-all ${
                     recipientMode === "status"
-                      ? "border-purple-600 bg-gradient-to-r from-purple-50 to-pink-50 shadow-md"
+                      ? "border-qsights-cyan bg-gradient-to-r from-qsights-light to-cyan-50 shadow-md"
                       : "border-gray-300 hover:border-purple-400 hover:bg-gray-50"
                   }`}
                 >
@@ -405,10 +405,10 @@ const SendNotificationPanel = ({
                     value="status"
                     checked={recipientMode === "status"}
                     onChange={(e) => setRecipientMode(e.target.value as any)}
-                    className="w-5 h-5 text-purple-600"
+                    className="w-5 h-5 text-qsights-cyan"
                   />
                   <div className="flex items-center gap-2.5 flex-1">
-                    <div className={`p-1.5 rounded-lg ${recipientMode === "status" ? "bg-purple-600" : "bg-gray-400"}`}>
+                    <div className={`p-1.5 rounded-lg ${recipientMode === "status" ? "bg-qsights-cyan" : "bg-gray-400"}`}>
                       <Clock className="w-4 h-4 text-white" />
                     </div>
                     <span className="text-sm font-bold text-gray-800">
@@ -555,7 +555,7 @@ const SendNotificationPanel = ({
               <Button
                 onClick={handleSendNow}
                 disabled={sending || !selectedTemplate}
-                className="px-8 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-bold rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-8 py-2.5 bg-gradient-to-r bg-qsights-cyan hover:bg-qsights-cyan/90 text-white font-bold rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {sending ? (
                   <>

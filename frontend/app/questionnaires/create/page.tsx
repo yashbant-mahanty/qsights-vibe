@@ -11,6 +11,8 @@ import IsolatedTextInput from "@/components/IsolatedTextInput";
 import EnhancedConditionalLogicEditor from "@/components/EnhancedConditionalLogicEditor";
 import ImportPreviewModal from "@/components/ImportPreviewModal";
 import S3ImageUpload from "@/components/S3ImageUpload";
+import BulkImageUpload from "@/components/BulkImageUpload";
+import { ValueDisplayModeConfig } from "@/components/ValueDisplayModeConfig";
 import {
   ArrowLeft,
   Plus,
@@ -41,6 +43,7 @@ import {
   TrendingUp,
   Smile,
   Heart,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   SliderScale,
@@ -197,13 +200,13 @@ export default function QuestionnaireBuilderPage() {
 
   const questionTypes = [
     { id: "mcq", label: "Multiple Choice", icon: CheckSquare, color: "text-blue-600" },
-    { id: "multi", label: "Multi-Select", icon: List, color: "text-purple-600" },
+    { id: "multi", label: "Multi-Select", icon: List, color: "text-qsights-cyan" },
     { id: "text", label: "Text Input", icon: Type, color: "text-green-600" },
     { id: "slider", label: "Slider", icon: Sliders, color: "text-orange-600" },
     { id: "rating", label: "Rating", icon: Star, color: "text-yellow-600" },
     { id: "matrix", label: "Matrix", icon: LayoutGrid, color: "text-pink-600" },
     { id: "information", label: "Information Block", icon: FileText, color: "text-teal-600" },
-    { id: "slider_scale", label: "Slider Scale", icon: TrendingUp, color: "text-indigo-600" },
+    { id: "slider_scale", label: "Slider Scale", icon: TrendingUp, color: "text-qsights-cyan" },
     { id: "dial_gauge", label: "Dial Gauge", icon: Gauge, color: "text-red-600" },
     { id: "likert_visual", label: "Likert Visual", icon: Smile, color: "text-amber-600" },
     { id: "nps", label: "NPS Scale", icon: ThumbsUp, color: "text-cyan-600" },
@@ -581,6 +584,9 @@ export default function QuestionnaireBuilderPage() {
               is_required: question.required || false,
               options: question.options || null,
               settings: {
+                // Spread the full settings object first (includes customImages, sequenceImages, etc.)
+                ...(question.settings || {}),
+                // Then overlay individual properties for backwards compatibility
                 ...(question.scale ? { scale: question.scale } : {}),
                 ...(question.min !== undefined ? { min: question.min } : {}),
                 ...(question.max !== undefined ? { max: question.max } : {}),
@@ -860,7 +866,7 @@ export default function QuestionnaireBuilderPage() {
                     setSelectedQuestion(question.id);
                     setShowConditionalLogic(true);
                   }}
-                  className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                  className="p-1.5 text-qsights-cyan hover:bg-qsights-light rounded transition-colors"
                   title="Conditional Logic"
                 >
                   <GitBranch className="w-4 h-4" />
@@ -1464,8 +1470,8 @@ export default function QuestionnaireBuilderPage() {
                     <Label className="text-xs text-gray-600">Min Value</Label>
                     <Input
                       type="number"
-                      value={sliderSettings.min ?? 0}
-                      onChange={(e) => {
+                      defaultValue={sliderSettings.min ?? 0}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1481,6 +1487,7 @@ export default function QuestionnaireBuilderPage() {
                           )
                         );
                       }}
+                      key={`slider-min-${question.id}-${sliderSettings.min}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1489,8 +1496,8 @@ export default function QuestionnaireBuilderPage() {
                     <Label className="text-xs text-gray-600">Max Value</Label>
                     <Input
                       type="number"
-                      value={sliderSettings.max ?? 100}
-                      onChange={(e) => {
+                      defaultValue={sliderSettings.max ?? 100}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1506,6 +1513,7 @@ export default function QuestionnaireBuilderPage() {
                           )
                         );
                       }}
+                      key={`slider-max-${question.id}-${sliderSettings.max}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1514,8 +1522,8 @@ export default function QuestionnaireBuilderPage() {
                     <Label className="text-xs text-gray-600">Step</Label>
                     <Input
                       type="number"
-                      value={sliderSettings.step ?? 1}
-                      onChange={(e) => {
+                      defaultValue={sliderSettings.step ?? 1}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1531,6 +1539,7 @@ export default function QuestionnaireBuilderPage() {
                           )
                         );
                       }}
+                      key={`slider-step-${question.id}-${sliderSettings.step}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1541,9 +1550,9 @@ export default function QuestionnaireBuilderPage() {
                     <Label className="text-xs text-gray-600">Start Label</Label>
                     <Input
                       type="text"
-                      value={sliderSettings.labels?.start || ''}
+                      defaultValue={sliderSettings.labels?.start || ''}
                       placeholder="e.g., Low"
-                      onChange={(e) => {
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1559,6 +1568,7 @@ export default function QuestionnaireBuilderPage() {
                           )
                         );
                       }}
+                      key={`slider-start-${question.id}-${sliderSettings.labels?.start}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1567,9 +1577,9 @@ export default function QuestionnaireBuilderPage() {
                     <Label className="text-xs text-gray-600">Middle Label</Label>
                     <Input
                       type="text"
-                      value={sliderSettings.labels?.middle || ''}
+                      defaultValue={sliderSettings.labels?.middle || ''}
                       placeholder="e.g., Medium"
-                      onChange={(e) => {
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1585,6 +1595,7 @@ export default function QuestionnaireBuilderPage() {
                           )
                         );
                       }}
+                      key={`slider-middle-${question.id}-${sliderSettings.labels?.middle}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1593,9 +1604,9 @@ export default function QuestionnaireBuilderPage() {
                     <Label className="text-xs text-gray-600">End Label</Label>
                     <Input
                       type="text"
-                      value={sliderSettings.labels?.end || ''}
+                      defaultValue={sliderSettings.labels?.end || ''}
                       placeholder="e.g., High"
-                      onChange={(e) => {
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1611,6 +1622,7 @@ export default function QuestionnaireBuilderPage() {
                           )
                         );
                       }}
+                      key={`slider-end-${question.id}-${sliderSettings.labels?.end}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1700,7 +1712,44 @@ export default function QuestionnaireBuilderPage() {
                       🖼️ Use Custom Images
                     </Label>
                   </div>
+                  {/* Show Image Labels Toggle */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`slider-labels-${question.id}`}
+                      checked={sliderSettings.showImageLabels !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, showImageLabels: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`slider-labels-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      🔢 Show Image Numbers
+                    </Label>
+                  </div>
                 </div>
+
+                {/* Value Display Mode Configuration */}
+                <ValueDisplayModeConfig
+                  settings={sliderSettings}
+                  questionId={question.id}
+                  sectionId={sectionId}
+                  setSections={setSections}
+                />
+
                 {/* Custom Images Section for Slider */}
                 {sliderSettings.useCustomImages && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -1736,14 +1785,15 @@ export default function QuestionnaireBuilderPage() {
                           folder="questionnaire-images/slider"
                           placeholder="Upload thumb image"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={5}
                         />
                         <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
                         <Input
                           type="url"
                           placeholder="https://example.com/thumb.png"
-                          value={sliderSettings.customImages?.thumbUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={sliderSettings.customImages?.thumbUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(sliderSettings.customImages || {}), thumbUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -1760,6 +1810,7 @@ export default function QuestionnaireBuilderPage() {
                               )
                             );
                           }}
+                          key={`slider-thumb-url-${question.id}-${sliderSettings.customImages?.thumbUrl}`}
                           className="text-xs h-7"
                         />
                       </div>
@@ -1793,14 +1844,15 @@ export default function QuestionnaireBuilderPage() {
                           folder="questionnaire-images/slider"
                           placeholder="Upload track image"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={5}
                         />
                         <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
                         <Input
                           type="url"
                           placeholder="https://example.com/track.png"
-                          value={sliderSettings.customImages?.trackUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={sliderSettings.customImages?.trackUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(sliderSettings.customImages || {}), trackUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -1817,11 +1869,56 @@ export default function QuestionnaireBuilderPage() {
                               )
                             );
                           }}
+                          key={`slider-track-url-${question.id}-${sliderSettings.customImages?.trackUrl}`}
                           className="text-xs h-7"
                         />
                       </div>
                     </div>
                     <p className="text-xs text-gray-400 mt-2">💡 Custom thumb replaces the slider handle. Track background appears behind the slider.</p>
+                  </div>
+                )}
+                
+                {/* Sequence Images Section */}
+                {!showPreview && (
+                  <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <ImageIcon className="w-4 h-4 text-qsights-cyan" />
+                      <span className="text-sm font-semibold text-purple-900">Interactive Image Sequence</span>
+                      <span className="text-xs bg-qsights-dark text-white px-2 py-0.5 rounded-full">NEW</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-1">
+                      Upload multiple images that highlight interactively as the slider moves. Each value gets its own image!
+                    </p>
+                    <p className="text-xs text-blue-600 font-medium mb-3">
+                      📐 Recommended Size: 1200 × 675 pixels (16:9 ratio) | Max: 1MB per image
+                    </p>
+                    <BulkImageUpload
+                      value={sliderSettings.customImages?.sequenceImages || []}
+                      onChange={(urls) => {
+                        const newCustomImages = { ...(sliderSettings.customImages || {}), sequenceImages: urls };
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, customImages: newCustomImages } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      showUniversalSizeHelper={true}
+                      maxFiles={20}
+                      maxSize={5}
+                      placeholder="Upload Sequence Images (1-20)"
+                    />
+                    <div className="mt-2 p-2 bg-blue-100 rounded text-xs text-blue-800">
+                      <strong>💡 Pro Tip:</strong> For a 0-10 slider, upload 11 images. Image #0 = value 0, Image #5 = value 5, etc.
+                    </div>
                   </div>
                 )}
               </div>
@@ -1853,8 +1950,8 @@ export default function QuestionnaireBuilderPage() {
                     <Label className="text-xs text-gray-600">Min Value</Label>
                     <Input
                       type="number"
-                      value={dialSettings.min ?? 0}
-                      onChange={(e) => {
+                      defaultValue={dialSettings.min ?? 0}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1870,6 +1967,7 @@ export default function QuestionnaireBuilderPage() {
                           )
                         );
                       }}
+                      key={`dial-min-${question.id}-${dialSettings.min}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1878,8 +1976,8 @@ export default function QuestionnaireBuilderPage() {
                     <Label className="text-xs text-gray-600">Max Value</Label>
                     <Input
                       type="number"
-                      value={dialSettings.max ?? 10}
-                      onChange={(e) => {
+                      defaultValue={dialSettings.max ?? 10}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1895,6 +1993,7 @@ export default function QuestionnaireBuilderPage() {
                           )
                         );
                       }}
+                      key={`dial-max-${question.id}-${dialSettings.max}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1985,14 +2084,51 @@ export default function QuestionnaireBuilderPage() {
                       🖼️ Use Custom Images
                     </Label>
                   </div>
+                  {/* Show Image Labels Toggle */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`dial-labels-${question.id}`}
+                      checked={dialSettings.showImageLabels !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, showImageLabels: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`dial-labels-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      🔢 Show Image Numbers
+                    </Label>
+                  </div>
                 </div>
+
+                {/* Value Display Mode Configuration */}
+                <ValueDisplayModeConfig
+                  settings={dialSettings}
+                  questionId={question.id}
+                  sectionId={sectionId}
+                  setSections={setSections}
+                />
+
                 {/* Custom Images Section for Dial Gauge */}
                 {dialSettings.useCustomImages && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <Label className="text-xs text-gray-600 block mb-3">Custom Gauge Images</Label>
                     <div className="grid grid-cols-2 gap-4">
                       {/* Gauge Background Image */}
-                      <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="p-3 bg-qsights-light rounded-lg border border-purple-200">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-sm font-medium text-purple-700">Gauge Background</span>
                           {dialSettings.customImages?.backgroundUrl && (
@@ -2021,14 +2157,15 @@ export default function QuestionnaireBuilderPage() {
                           folder="questionnaire-images/dial-gauge"
                           placeholder="Upload gauge background"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={5}
                         />
                         <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
                         <Input
                           type="url"
                           placeholder="https://example.com/gauge-bg.png"
-                          value={dialSettings.customImages?.backgroundUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={dialSettings.customImages?.backgroundUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(dialSettings.customImages || {}), backgroundUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -2045,6 +2182,7 @@ export default function QuestionnaireBuilderPage() {
                               )
                             );
                           }}
+                          key={`dial-bg-url-${question.id}-${dialSettings.customImages?.backgroundUrl}`}
                           className="text-xs h-7"
                         />
                       </div>
@@ -2084,8 +2222,8 @@ export default function QuestionnaireBuilderPage() {
                         <Input
                           type="url"
                           placeholder="https://example.com/needle.png"
-                          value={dialSettings.customImages?.needleUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={dialSettings.customImages?.needleUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(dialSettings.customImages || {}), needleUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -2102,11 +2240,55 @@ export default function QuestionnaireBuilderPage() {
                               )
                             );
                           }}
+                          key={`dial-needle-url-${question.id}-${dialSettings.customImages?.needleUrl}`}
                           className="text-xs h-7"
                         />
                       </div>
                     </div>
                     <p className="text-xs text-gray-400 mt-2">💡 Custom background replaces the gauge dial. Needle image replaces the pointer.</p>
+                  </div>
+                )}
+                
+                {/* Sequence Images Section */}
+                {!showPreview && (
+                  <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <ImageIcon className="w-4 h-4 text-qsights-cyan" />
+                      <span className="text-sm font-semibold text-purple-900">Interactive Image Sequence</span>
+                      <span className="text-xs bg-qsights-dark text-white px-2 py-0.5 rounded-full">NEW</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-1">
+                      Upload multiple images that highlight interactively as the gauge pointer moves. Each value gets its own image!
+                    </p>
+                    <p className="text-xs text-blue-600 font-medium mb-3">
+                      📐 Recommended Size: 1200 × 675 pixels (16:9 ratio) | Max: 1MB per image
+                    </p>
+                    <BulkImageUpload
+                      value={dialSettings.customImages?.sequenceImages || []}
+                      onChange={(urls) => {
+                        const newCustomImages = { ...(dialSettings.customImages || {}), sequenceImages: urls };
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, customImages: newCustomImages } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      maxFiles={20}
+                      maxSize={5}
+                      placeholder="Upload Sequence Images (1-20)"
+                    />
+                    <div className="mt-2 p-2 bg-blue-100 rounded text-xs text-blue-800">
+                      <strong>💡 Pro Tip:</strong> For a 0-10 gauge, upload 11 images. Image #0 = value 0, Image #5 = value 5, etc.
+                    </div>
                   </div>
                 )}
               </div>
@@ -2291,8 +2473,8 @@ export default function QuestionnaireBuilderPage() {
                             <Input
                               type="url"
                               placeholder={`https://example.com/image-${idx + 1}.png`}
-                              value={likertSettings.customImages?.[idx]?.imageUrl || ''}
-                              onChange={(e) => {
+                              defaultValue={likertSettings.customImages?.[idx]?.imageUrl || ''}
+                              onBlur={(e) => {
                                 const newCustomImages = [...(likertSettings.customImages || [])];
                                 newCustomImages[idx] = { value: idx + 1, imageUrl: e.target.value };
                                 setSections(prevSections =>
@@ -2310,6 +2492,7 @@ export default function QuestionnaireBuilderPage() {
                                   )
                                 );
                               }}
+                              key={`likert-img-url-${question.id}-${idx}-${likertSettings.customImages?.[idx]?.imageUrl}`}
                               className="text-xs h-8"
                             />
                           </div>
@@ -2572,8 +2755,8 @@ export default function QuestionnaireBuilderPage() {
                         <Input
                           type="url"
                           placeholder="https://example.com/active-star.png"
-                          value={starSettings.customImages?.activeImageUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={starSettings.customImages?.activeImageUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(starSettings.customImages || {}), activeImageUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -2590,6 +2773,7 @@ export default function QuestionnaireBuilderPage() {
                               )
                             );
                           }}
+                          key={`star-active-url-${question.id}-${starSettings.customImages?.activeImageUrl}`}
                           className="text-xs h-8"
                         />
                       </div>
@@ -2629,8 +2813,8 @@ export default function QuestionnaireBuilderPage() {
                         <Input
                           type="url"
                           placeholder="https://example.com/inactive-star.png"
-                          value={starSettings.customImages?.inactiveImageUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={starSettings.customImages?.inactiveImageUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(starSettings.customImages || {}), inactiveImageUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -2647,6 +2831,7 @@ export default function QuestionnaireBuilderPage() {
                               )
                             );
                           }}
+                          key={`star-inactive-url-${question.id}-${starSettings.customImages?.inactiveImageUrl}`}
                           className="text-xs h-8"
                         />
                       </div>
@@ -2694,7 +2879,7 @@ export default function QuestionnaireBuilderPage() {
             <button 
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save Questionnaire'}
@@ -2732,7 +2917,7 @@ export default function QuestionnaireBuilderPage() {
             </Card>
 
             {/* Question Types */}
-            <Card className="bg-purple-50 border-purple-200">
+            <Card className="bg-qsights-light border-purple-200">
               <CardContent className="p-4">
                 <h4 className="text-sm font-semibold text-purple-900 mb-2">
                   📝 Question Types
@@ -2963,7 +3148,7 @@ export default function QuestionnaireBuilderPage() {
                     <button className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors">
                       Cancel
                     </button>
-                    <button className="px-6 py-2 bg-qsights-blue text-white rounded-lg font-medium hover:bg-qsights-blue/90 transition-colors">
+                    <button className="px-6 py-2 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 transition-colors">
                       Submit Questionnaire
                     </button>
                   </div>
@@ -3091,9 +3276,9 @@ export default function QuestionnaireBuilderPage() {
             </div>
             <div className="p-6 space-y-6">
               <div className="space-y-4">
-                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="p-4 bg-qsights-light border border-purple-200 rounded-lg">
                   <div className="flex items-start gap-2">
-                    <GitBranch className="w-5 h-5 text-purple-600 mt-0.5" />
+                    <GitBranch className="w-5 h-5 text-qsights-cyan mt-0.5" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-purple-900 mb-2">Show this question if:</p>
                       <div className="space-y-3">
@@ -3119,7 +3304,7 @@ export default function QuestionnaireBuilderPage() {
                   </div>
                 </div>
 
-                <button className="w-full py-2 border-2 border-dashed border-purple-300 text-purple-600 rounded-lg text-sm font-medium hover:bg-purple-50 transition-colors">
+                <button className="w-full py-2 border-2 border-dashed border-purple-300 text-qsights-cyan rounded-lg text-sm font-medium hover:bg-qsights-light transition-colors">
                   + Add Condition
                 </button>
 
@@ -3144,7 +3329,7 @@ export default function QuestionnaireBuilderPage() {
                 </button>
                 <button
                   onClick={() => setShowConditionalLogic(false)}
-                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                  className="flex-1 px-4 py-2 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 transition-colors"
                 >
                   Apply Logic
                 </button>
@@ -3456,7 +3641,7 @@ export default function QuestionnaireBuilderPage() {
                                     : lang === "ES"
                                     ? "bg-red-500"
                                     : lang === "FR"
-                                    ? "bg-purple-500"
+                                    ? "bg-qsights-light0"
                                     : "bg-yellow-500"
                                 }`}
                               ></div>
@@ -3631,7 +3816,7 @@ export default function QuestionnaireBuilderPage() {
                     setSelectedQuestionForTranslation(null);
                     setTranslationData({});
                   }}
-                  className="px-6 py-2 bg-qsights-blue text-white rounded-lg font-medium hover:bg-qsights-blue/90 transition-colors"
+                  className="px-6 py-2 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 transition-colors"
                 >
                   Save Translations
                 </button>

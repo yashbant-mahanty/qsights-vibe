@@ -10,7 +10,7 @@ export async function POST(
     const { participant_id, question_id, answer } = body;
 
     // Forward to Laravel backend
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "https://prod.qsights.com";
     const response = await fetch(
       `${backendUrl}/api/public/activity/${activityId}/poll-answer`,
       {

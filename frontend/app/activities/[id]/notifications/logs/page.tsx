@@ -46,7 +46,7 @@ export default function NotificationLogsPage() {
       
       // Fetch notification logs from backend API
       const token = localStorage.getItem('token');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
       
       const response = await fetch(`${API_URL}/notifications/reports/${activityId}`, {
         headers: {
@@ -127,7 +127,7 @@ export default function NotificationLogsPage() {
       case 'opened':
         return <Eye className="w-5 h-5 text-blue-600" />;
       case 'clicked':
-        return <MousePointer className="w-5 h-5 text-purple-600" />;
+        return <MousePointer className="w-5 h-5 text-qsights-cyan" />;
       case 'bounced':
       case 'dropped':
         return <XCircle className="w-5 h-5 text-red-600" />;
@@ -143,7 +143,7 @@ export default function NotificationLogsPage() {
       case 'opened':
         return 'bg-blue-100 text-blue-800';
       case 'clicked':
-        return 'bg-purple-100 text-purple-800';
+        return 'bg-cyan-50 text-purple-800';
       case 'bounced':
       case 'dropped':
         return 'bg-red-100 text-red-800';
@@ -222,7 +222,7 @@ export default function NotificationLogsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-600">Clicked</p>
-                <p className="text-2xl font-bold text-purple-600">{stats.clicked}</p>
+                <p className="text-2xl font-bold text-qsights-cyan">{stats.clicked}</p>
               </div>
               <MousePointer className="w-8 h-8 text-purple-400" />
             </div>

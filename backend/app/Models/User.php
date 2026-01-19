@@ -107,7 +107,7 @@ class User extends Authenticatable
     // ============================================
 
     /**
-     * Get the manager this user reports to
+     * Get the manager this user reports to (legacy)
      */
     public function reportsTo()
     {
@@ -115,7 +115,66 @@ class User extends Authenticatable
     }
 
     /**
-     * Get all users who report directly to this user
+     * Get the manager this user reports to (new hierarchy system)
+     */
+    public function manager()
+    {
+        return $this->belongsTo(User::class, 'manager_user_id');
+    }
+
+    /**
+     * Get the hierarchical role assigned to this user
+     */
+    public function hierarchicalRole()
+    {
+        return $this->belongsTo(HierarchicalRole::class);
+    }
+
+    /**
+     * Get all hierarchical role assignments for this user
+     */
+    public function roleHierarchies()
+    {
+        return $this->hasMany(UserRoleHierarchy::class, 'user_id');
+    }
+
+    /**
+     * Get the active role hierarchy for a specific program
+     */
+    public function roleHierarchyForProgram($programId)
+    {
+        return $this->roleHierarchies()
+            ->where('program_id', $programId)
+            ->with(['hierarchicalRole', 'manager', 'program'])
+            ->first();
+    }
+
+    /**
+     * Get all users who report directly to this user (new hierarchy system)
+     */
+    public function managedUsers()
+    {
+        return $this->hasMany(UserRoleHierarchy::class, 'manager_user_id');
+    }
+
+    /**
+     * Get manager dashboard access settings
+     */
+    public function managerDashboardAccess()
+    {
+        return $this->hasMany(ManagerDashboardAccess::class, 'manager_user_id');
+    }
+
+    /**
+     * Get hierarchy change logs for this user
+     */
+    public function hierarchyChangeLogs()
+    {
+        return $this->hasMany(HierarchyChangeLog::class, 'user_id');
+    }
+
+    /**
+     * Get all users who report directly to this user (legacy)
      */
     public function directReports()
     {
@@ -131,9 +190,88 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if this user is a manager (has direct reports)
+     * Check if this user is a manager (has direct reports in new hierarchy system)
      */
     public function isManager(): bool
+    {
+        return $this->managedUsers()->exists() 
+            || $this->directReports()->exists() 
+            || $this->participantReports()->exists();
+    }
+
+    /**
+     * Check if this user is a manager in a specific program
+     */
+    public function isManagerInProgram($programId): bool
+    {
+        return $this->managedUsers()
+            ->where('program_id', $programId)
+            ->exists();
+    }
+
+    /**
+     * Get all direct reports for a specific program
+     */
+    public function getDirectReportsForProgram($programId)
+    {
+        return $this->managedUsers()
+            ->where('program_id', $programId)
+            ->with(['user', 'hierarchicalRole'])
+            ->get()
+            ->pluck('user');
+    }
+
+    /**
+     * Get all subordinates recursively in new hierarchy system
+     */
+    public function getAllSubordinatesInProgram($programId, $depth = 0, $maxDepth = 10): array
+    {
+        if ($depth >= $maxDepth) {
+            return [];
+        }
+
+        $subordinates = [];
+        $directReports = $this->getDirectReportsForProgram($programId);
+
+        foreach ($directReports as $user) {
+            $subordinates[] = [
+                'type' => 'user',
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'depth' => $depth + 1
+            ];
+            
+            // Recursively get their subordinates
+            $subSubordinates = $user->getAllSubordinatesInProgram($programId, $depth + 1, $maxDepth);
+            $subordinates = array_merge($subordinates, $subSubordinates);
+        }
+
+        return $subordinates;
+    }
+
+    /**
+     * Check if assigning a manager would create a circular reference
+     */
+    public function wouldCreateCircularReference($proposedManagerId, $programId): bool
+    {
+        if ($this->id === $proposedManagerId) {
+            return true; // Self-reference
+        }
+
+        // Get all subordinates of this user
+        $subordinates = $this->getAllSubordinatesInProgram($programId);
+        $subordinateIds = collect($subordinates)->pluck('id')->toArray();
+
+        // If proposed manager is in subordinates, it's circular
+        return in_array($proposedManagerId, $subordinateIds);
+    }
+
+    /**
+     * Check if this user is a manager (has direct reports) - legacy
+     * @deprecated Use isManager() instead
+     */
+    public function isManagerLegacy(): bool
     {
         return $this->directReports()->exists() || $this->participantReports()->exists();
     }

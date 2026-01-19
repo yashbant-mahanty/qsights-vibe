@@ -180,8 +180,15 @@ class NotificationController extends Controller
                             // Extract SendGrid message ID from response headers
                             $messageId = null;
                             $headers = $response->headers();
-                            if (isset($headers['X-Message-Id'])) {
-                                $messageId = is_array($headers['X-Message-Id']) ? $headers['X-Message-Id'][0] : $headers['X-Message-Id'];
+                            
+                            // SendGrid returns headers as array of strings, need to parse
+                            if (is_array($headers)) {
+                                foreach ($headers as $header) {
+                                    if (is_string($header) && stripos($header, 'X-Message-Id:') === 0) {
+                                        $messageId = trim(substr($header, 13)); // Extract value after "X-Message-Id:"
+                                        break;
+                                    }
+                                }
                             }
                             
                             // Mark as sent in notification log
@@ -743,7 +750,7 @@ class NotificationController extends Controller
     public function getNotificationLogs(Request $request)
     {
         try {
-            $query = NotificationLog::with(['participant:id,name,email', 'user:id,name,email', 'activity:id,name'])
+            $query = NotificationLog::with(['participant:id,name,email', 'user:id,name,email', 'activity:id,name,program_id', 'activity.program:id,name'])
                 ->orderBy('created_at', 'desc');
 
             // Filter by activity_id if provided
@@ -767,6 +774,8 @@ class NotificationController extends Controller
                     'id' => $log->id,
                     'activity_id' => $log->event_id,
                     'activity_name' => $log->activity?->name ?? 'Unknown Activity',
+                    'program_id' => $log->activity?->program_id,
+                    'program_name' => $log->activity?->program?->name ?? null,
                     'participant_id' => $log->participant_id,
                     'participant_name' => $log->participant?->name ?? 'Unknown',
                     'participant_email' => $log->recipient_email ?? $log->participant?->email,
@@ -830,7 +839,7 @@ class NotificationController extends Controller
     public function getNotificationLogsForActivity($activityId)
     {
         try {
-            $logs = NotificationLog::with(['participant:id,name,email', 'user:id,name,email'])
+            $logs = NotificationLog::with(['participant:id,name,email', 'user:id,name,email', 'activity:id,name,program_id', 'activity.program:id,name'])
                 ->where('event_id', $activityId)
                 ->orderBy('created_at', 'desc')
                 ->get();
@@ -838,6 +847,10 @@ class NotificationController extends Controller
             $transformedLogs = $logs->map(function ($log) {
                 return [
                     'id' => $log->id,
+                    'activity_id' => $log->event_id,
+                    'activity_name' => $log->activity?->name ?? 'Unknown Activity',
+                    'program_id' => $log->activity?->program_id,
+                    'program_name' => $log->activity?->program?->name ?? null,
                     'participant_id' => $log->participant_id,
                     'participant_name' => $log->participant?->name ?? 'Unknown',
                     'participant_email' => $log->recipient_email ?? $log->participant?->email,

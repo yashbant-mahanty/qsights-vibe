@@ -378,7 +378,7 @@ export default function EnhancedConditionalLogicEditor({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500">
+        <div className="p-5 border-b border-gray-100 bg-gradient-to-r bg-qsights-cyan to-pink-500">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
@@ -539,7 +539,7 @@ export default function EnhancedConditionalLogicEditor({
               className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
                 errors.length > 0
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg hover:shadow-purple-500/25 hover:-translate-y-0.5'
+                  : 'bg-gradient-to-r bg-qsights-cyan text-white hover:shadow-lg hover:shadow-cyan-500/25 hover:-translate-y-0.5'
               }`}
             >
               <CheckCircle className="w-4 h-4" />
@@ -608,13 +608,13 @@ function SimpleMode({
   return (
     <div className="space-y-5">
       {/* Current Question Display */}
-      <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl">
+      <div className="p-4 bg-gradient-to-r from-qsights-light to-cyan-50 border-2 border-cyan-200 rounded-xl">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 bg-qsights-cyan rounded-xl flex items-center justify-center flex-shrink-0">
             <span className="text-sm font-bold text-white">Q</span>
           </div>
           <div className="flex-1">
-            <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">Current Question</p>
+            <p className="text-xs font-semibold text-qsights-cyan uppercase tracking-wide mb-1">Current Question</p>
             <p className="text-base font-medium text-gray-900">{currentQuestion.question}</p>
             <p className="text-xs text-gray-500 mt-1">
               {currentQuestion.type === 'mcq' ? 'Multiple Choice' : currentQuestion.type === 'multi' ? 'Multi-Select' : 'Yes/No'}
@@ -654,13 +654,13 @@ function SimpleMode({
                 onClick={() => setExpandedOption(isExpanded ? null : option)}
                 className={`w-full p-4 flex items-center justify-between transition-all ${
                   isExpanded 
-                    ? 'bg-indigo-50 border-b-2 border-indigo-200' 
+                    ? 'bg-qsights-light border-b-2 border-cyan-200' 
                     : 'bg-white hover:bg-gray-50'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
-                    isExpanded ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'
+                    isExpanded ? 'bg-qsights-cyan text-white' : 'bg-gray-100 text-gray-600'
                   }`}>
                     {optionIdx + 1}
                   </div>
@@ -851,7 +851,7 @@ function AdvancedMode({
           <label className="text-sm font-semibold text-gray-700">Conditions</label>
           <button
             onClick={addRule}
-            className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-1.5"
+            className="px-3 py-1.5 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
             Add Condition
@@ -882,7 +882,7 @@ function AdvancedMode({
                   <div className="flex justify-center">
                     <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
                       logic.combinator === 'AND' 
-                        ? 'bg-purple-100 text-purple-700' 
+                        ? 'bg-cyan-50 text-purple-700' 
                         : 'bg-blue-100 text-blue-700'
                     }`}>
                       {logic.combinator}
@@ -904,7 +904,7 @@ function AdvancedMode({
               onClick={() => setLogic(prev => ({ ...prev, combinator: 'AND' }))}
               className={`p-3 rounded-xl border-2 transition-all ${
                 logic.combinator === 'AND'
-                  ? 'border-purple-500 bg-purple-50'
+                  ? 'border-purple-500 bg-qsights-light'
                   : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
             >
@@ -1032,7 +1032,7 @@ function AdvancedRuleEditor({
                             : currentValues.filter(v => v !== option);
                           onUpdate({ value: newValues });
                         }}
-                        className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                        className="w-4 h-4 text-qsights-cyan rounded border-gray-300 focus:ring-qsights-cyan"
                       />
                       <span className="text-sm text-gray-700">{option}</span>
                     </label>

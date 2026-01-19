@@ -49,7 +49,7 @@ function ErrorContent() {
 
         {/* Powered by */}
         <p className="text-center text-sm text-gray-500 mt-6">
-          Powered by <span className="font-semibold text-purple-600">QSights</span>
+          Powered by <span className="font-semibold text-qsights-cyan">QSights</span>
         </p>
       </div>
     </div>

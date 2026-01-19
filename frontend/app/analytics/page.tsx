@@ -162,6 +162,8 @@ export default function AdvancedAnalyticsPage() {
           id: log.id,
           activity_id: log.activity_id,
           activity_name: log.activity_name,
+          program_id: log.program_id,
+          program_name: log.program_name,
           participant_email: log.participant_email,
           participant_name: log.participant_name,
           status: log.status,
@@ -173,22 +175,6 @@ export default function AdvancedAnalyticsPage() {
         }));
         console.log('Transformed notifications count:', transformedNotifications.length);
         setNotifications(transformedNotifications);
-        
-        // Also load analytics summary
-        try {
-          const analyticsData = await notificationsApi.getAnalytics();
-          if (analyticsData?.data?.summary) {
-            const webhookSummary = {
-              delivered: analyticsData.data.summary.delivered || 0,
-              opened: analyticsData.data.summary.opened || 0,
-              clicked: analyticsData.data.summary.read || 0,
-            };
-            console.log('📊 Webhook tracking data:', webhookSummary);
-            setWebhookStats(webhookSummary);
-          }
-        } catch (err) {
-          console.warn('⚠️ Could not load webhook analytics:', err);
-        }
       } catch (err) {
         console.error('❌ Failed to load notifications:', err);
         setNotifications([]);
@@ -279,28 +265,17 @@ export default function AdvancedAnalyticsPage() {
       : 0,
   };
 
-  // Notification stats - use webhook data if available
-  const notificationStats = webhookStats ? {
-    sent: filteredNotifications.length,
-    delivered: webhookStats.delivered || 0,
-    opened: webhookStats.opened || 0,
-    read: webhookStats.clicked || 0,
+  // Notification stats - calculate from filteredNotifications array based on status
+  const notificationStats = {
+    sent: filteredNotifications.filter(n => n.status === 'sent' || n.status === 'delivered' || n.status === 'opened' || n.status === 'read' || n.status === 'clicked').length,
+    delivered: filteredNotifications.filter(n => n.status === 'delivered' || n.status === 'opened' || n.status === 'read' || n.status === 'clicked').length,
+    opened: filteredNotifications.filter(n => n.status === 'opened' || n.status === 'read' || n.status === 'clicked').length,
+    read: filteredNotifications.filter(n => n.status === 'read' || n.status === 'clicked').length,
     deliveryRate: filteredNotifications.length > 0
-      ? ((webhookStats.delivered / filteredNotifications.length) * 100).toFixed(1)
+      ? ((filteredNotifications.filter(n => n.status === 'delivered' || n.status === 'opened' || n.status === 'read' || n.status === 'clicked').length / filteredNotifications.length) * 100).toFixed(1)
       : 0,
-    openRate: webhookStats.delivered > 0
-      ? ((webhookStats.opened / webhookStats.delivered) * 100).toFixed(1)
-      : 0,
-  } : {
-    sent: filteredNotifications.length,
-    delivered: filteredNotifications.filter(n => ['delivered', 'opened', 'read'].includes(n.status)).length,
-    opened: filteredNotifications.filter(n => ['opened', 'read'].includes(n.status)).length,
-    read: filteredNotifications.filter(n => n.status === 'read').length,
-    deliveryRate: filteredNotifications.length > 0
-      ? ((filteredNotifications.filter(n => ['delivered', 'opened', 'read'].includes(n.status)).length / filteredNotifications.length) * 100).toFixed(1)
-      : 0,
-    openRate: filteredNotifications.filter(n => ['delivered', 'opened', 'read'].includes(n.status)).length > 0
-      ? ((filteredNotifications.filter(n => ['opened', 'read'].includes(n.status)).length / filteredNotifications.filter(n => ['delivered', 'opened', 'read'].includes(n.status)).length) * 100).toFixed(1)
+    openRate: filteredNotifications.filter(n => n.status === 'delivered' || n.status === 'opened' || n.status === 'read' || n.status === 'clicked').length > 0
+      ? ((filteredNotifications.filter(n => n.status === 'opened' || n.status === 'read' || n.status === 'clicked').length / filteredNotifications.filter(n => n.status === 'delivered' || n.status === 'opened' || n.status === 'read' || n.status === 'clicked').length) * 100).toFixed(1)
       : 0,
   };
 
@@ -466,7 +441,7 @@ export default function AdvancedAnalyticsPage() {
             <div className="relative export-dropdown">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
-                className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 flex items-center gap-2"
+                className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 Export
@@ -675,7 +650,7 @@ export default function AdvancedAnalyticsPage() {
               <div className="flex items-center gap-3 mt-6 pt-6 border-t border-gray-200">
                 <button
                   onClick={() => setFilters({ ...filters })}
-                  className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90"
+                  className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90"
                 >
                   Apply Filters
                 </button>
@@ -709,7 +684,7 @@ export default function AdvancedAnalyticsPage() {
             </TabsTrigger>
             <TabsTrigger 
               value="participants" 
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
             >
               <Users className="w-4 h-4 mr-2" />
               Participant-wise
@@ -854,7 +829,7 @@ export default function AdvancedAnalyticsPage() {
                                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                     activity.type === 'survey' ? 'bg-blue-100 text-blue-700' :
                                     activity.type === 'poll' ? 'bg-green-100 text-green-700' :
-                                    activity.type === 'assessment' ? 'bg-purple-100 text-purple-700' :
+                                    activity.type === 'assessment' ? 'bg-cyan-50 text-purple-700' :
                                     'bg-gray-100 text-gray-700'
                                   }`}>
                                     {activity.type}
@@ -862,7 +837,7 @@ export default function AdvancedAnalyticsPage() {
                                 </td>
                                 <td className="px-6 py-4">
                                   <p className="text-sm text-gray-900">
-                                    {activity.program_id ? String(activity.program_id).padStart(8, '0') : 'N/A'}
+                                    {activity.program_name || 'N/A'}
                                   </p>
                                 </td>
                                 <td className="px-6 py-4">
@@ -966,15 +941,15 @@ export default function AdvancedAnalyticsPage() {
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                               <div>
                                 <p className="text-xs text-gray-500 mb-1">Participants</p>
-                                <p className="text-lg font-bold text-green-600">{registeredParticipants}</p>
+                                <p className="text-base font-bold text-green-600">{registeredParticipants}</p>
                               </div>
                               <div>
                                 <p className="text-xs text-gray-500 mb-1">Anonymous Participants</p>
-                                <p className="text-lg font-bold text-purple-600">{anonymousParticipants}</p>
+                                <p className="text-base font-bold text-qsights-cyan">{anonymousParticipants}</p>
                               </div>
                               <div>
                                 <p className="text-xs text-gray-500 mb-1">Total Responses</p>
-                                <p className="text-lg font-bold text-blue-600">{activity.responses_count || 0}</p>
+                                <p className="text-base font-bold text-blue-600">{activity.responses_count || 0}</p>
                               </div>
                             </div>
                             
@@ -1087,7 +1062,7 @@ export default function AdvancedAnalyticsPage() {
                             <td className="px-6 py-4">
                               <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                 participant.additional_data?.participant_type === 'anonymous' 
-                                  ? 'bg-purple-100 text-purple-700' 
+                                  ? 'bg-cyan-50 text-purple-700' 
                                   : 'bg-blue-100 text-blue-700'
                               }`}>
                                 {participant.additional_data?.participant_type === 'anonymous' ? 'Anonymous' : 'Participant'}
@@ -1168,6 +1143,9 @@ export default function AdvancedAnalyticsPage() {
                             Activity
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Program
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Status
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1187,7 +1165,7 @@ export default function AdvancedAnalyticsPage() {
                       <tbody className="bg-white divide-y divide-gray-200">
                         {filteredNotifications.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                            <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                               No notification data available
                             </td>
                           </tr>
@@ -1205,10 +1183,13 @@ export default function AdvancedAnalyticsPage() {
                                 </p>
                               </td>
                               <td className="px-6 py-4">
+                                <p className="text-sm text-gray-900">{notification.program_name || 'N/A'}</p>
+                              </td>
+                              <td className="px-6 py-4">
                                 <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                   notification.status === 'read' ? 'bg-green-100 text-green-700' :
                                   notification.status === 'opened' ? 'bg-blue-100 text-blue-700' :
-                                  notification.status === 'delivered' ? 'bg-purple-100 text-purple-700' :
+                                  notification.status === 'delivered' ? 'bg-cyan-50 text-purple-700' :
                                   notification.status === 'sent' ? 'bg-gray-100 text-gray-700' :
                                   'bg-red-100 text-red-700'
                                 }`}>

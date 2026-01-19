@@ -37,7 +37,7 @@ const gradientStyles: Record<GradientVariant, {
 }> = {
   purple: {
     background: 'bg-gradient-to-br from-violet-100 via-purple-50 to-violet-100',
-    titleColor: 'text-purple-600',
+    titleColor: 'text-qsights-cyan',
     valueColor: 'text-purple-800',
     iconBg: 'bg-white/80',
     iconColor: 'text-purple-500',
@@ -86,7 +86,7 @@ const gradientStyles: Record<GradientVariant, {
   },
   indigo: {
     background: 'bg-gradient-to-br from-indigo-100 via-violet-50 to-indigo-100',
-    titleColor: 'text-indigo-600',
+    titleColor: 'text-qsights-cyan',
     valueColor: 'text-indigo-800',
     iconBg: 'bg-white/80',
     iconColor: 'text-indigo-500',
@@ -147,7 +147,7 @@ export const GradientStatCard: React.FC<GradientStatCardProps> = ({
           <p className={cn('text-sm font-semibold mb-3', styles.titleColor)}>
             {title}
           </p>
-          <p className={cn('text-4xl font-bold leading-tight', styles.valueColor)}>
+          <p className={cn('text-3xl font-bold leading-tight', styles.valueColor)}>
             {value}
           </p>
           {subtitle && (

@@ -430,4 +430,194 @@ class ProgramRoleController extends Controller
                     ->subject('Your Role Access Has Been Created - ' . $role->program->name);
         });
     }
+
+    /**
+     * Get all system-wide roles (no program association)
+     */
+    public function indexSystemRoles(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role !== 'super-admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $roles = ProgramRole::whereNull('program_id')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json(['roles' => $roles]);
+    }
+
+    /**
+     * Create a system-wide role (not tied to any program)
+     */
+    public function storeSystemRole(Request $request)
+    {
+        $user = $request->user();
+        
+        if ($user->role !== 'super-admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Validation
+        $validator = Validator::make($request->all(), [
+            'role_name' => 'required|string|max:255',
+            'username' => 'required|string|max:255|unique:program_roles,username',
+            'email' => 'required|email|max:255|unique:program_roles,email',
+            'password' => 'required|string|min:8',
+            'description' => 'nullable|string',
+            'service_ids' => 'nullable|array',
+            'service_ids.*' => 'string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Check if role_name is unique for system roles
+        $existingRole = ProgramRole::whereNull('program_id')
+            ->where('role_name', $request->role_name)
+            ->first();
+
+        if ($existingRole) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['role_name' => ['A system role with this name already exists']]
+            ], 422);
+        }
+
+        // Create the system-wide role (program_id = null)
+        $role = ProgramRole::create([
+            'program_id' => null, // System-wide role
+            'role_name' => $request->role_name,
+            'username' => $request->username,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'description' => $request->description,
+            'status' => 'active',
+            'services' => $request->service_ids ?? [],
+        ]);
+
+        // Send email notification
+        try {
+            $this->sendSystemRoleCreationEmail($role, $request->password, $user);
+        } catch (\Exception $e) {
+            \Log::error('Failed to send system role creation email: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'System role created successfully',
+            'role' => $role
+        ], 201);
+    }
+
+    /**
+     * Get a single system role
+     */
+    public function showSystemRole(Request $request, $roleId)
+    {
+        $user = $request->user();
+        if ($user->role !== 'super-admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $role = ProgramRole::whereNull('program_id')->findOrFail($roleId);
+
+        return response()->json(['role' => $role]);
+    }
+
+    /**
+     * Update a system role
+     */
+    public function updateSystemRole(Request $request, $roleId)
+    {
+        $user = $request->user();
+        
+        if ($user->role !== 'super-admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $role = ProgramRole::whereNull('program_id')->findOrFail($roleId);
+
+        // Validation
+        $validator = Validator::make($request->all(), [
+            'username' => 'sometimes|string|max:255|unique:program_roles,username,' . $roleId,
+            'email' => 'sometimes|email|max:255|unique:program_roles,email,' . $roleId,
+            'password' => 'sometimes|string|min:8',
+            'service_ids' => 'sometimes|array',
+            'service_ids.*' => 'string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Update fields
+        if ($request->has('username')) {
+            $role->username = $request->username;
+        }
+        if ($request->has('email')) {
+            $role->email = $request->email;
+        }
+        if ($request->has('password')) {
+            $role->password = Hash::make($request->password);
+        }
+        if ($request->has('service_ids')) {
+            $role->services = $request->service_ids;
+        }
+
+        $role->save();
+
+        return response()->json([
+            'message' => 'System role updated successfully',
+            'role' => $role
+        ]);
+    }
+
+    /**
+     * Delete a system role
+     */
+    public function destroySystemRole(Request $request, $roleId)
+    {
+        $user = $request->user();
+        
+        if ($user->role !== 'super-admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $role = ProgramRole::whereNull('program_id')->findOrFail($roleId);
+        $role->delete();
+
+        return response()->json([
+            'message' => 'System role deleted successfully'
+        ]);
+    }
+
+    /**
+     * Send system role creation email
+     */
+    private function sendSystemRoleCreationEmail($role, $plainPassword, $creator)
+    {
+        $emailData = [
+            'role_name' => $role->role_name,
+            'username' => $role->username,
+            'password' => $plainPassword,
+            'email' => $role->email,
+            'program_name' => 'System-wide (All Programs)',
+            'organization_name' => 'QSights',
+            'login_url' => config('app.frontend_url', 'https://prod.qsights.com'),
+            'created_by' => $creator->name,
+        ];
+
+        Mail::send('emails.role-created', $emailData, function ($message) use ($role) {
+            $message->to($role->email)
+                    ->subject('Your System Role Access Has Been Created - QSights Platform');
+        });
+    }
 }

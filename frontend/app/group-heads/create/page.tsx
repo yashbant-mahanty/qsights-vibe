@@ -358,7 +358,7 @@ export default function CreateGroupHeadPage() {
                       onClick={() => { setLogoInputMode("file"); setLogoUrl(""); }}
                       className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                         logoInputMode === "file"
-                          ? "bg-qsights-blue text-white"
+                          ? "bg-qsights-dark text-white"
                           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                       }`}
                     >
@@ -370,7 +370,7 @@ export default function CreateGroupHeadPage() {
                       onClick={() => { setLogoInputMode("url"); setLogoFile(null); }}
                       className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                         logoInputMode === "url"
-                          ? "bg-qsights-blue text-white"
+                          ? "bg-qsights-dark text-white"
                           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                       }`}
                     >
@@ -539,7 +539,7 @@ export default function CreateGroupHeadPage() {
                 <button 
                   onClick={handleSubmit}
                   disabled={saving || loading}
-                  className="w-full px-4 py-2.5 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2.5 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving...' : 'Save Group Head'}
                 </button>
@@ -662,7 +662,7 @@ export default function CreateGroupHeadPage() {
               >
                 Close
               </button>
-              <button className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2">
+              <button className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2">
                 <Mail className="w-4 h-4" />
                 Send Credentials
               </button>

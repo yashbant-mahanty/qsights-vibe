@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Eye, EyeOff, RefreshCw, Filter } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, RefreshCw, Filter, Users, UserCog, Network } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import {
@@ -27,6 +28,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { API_URL } from "@/lib/api";
+import ManagerAssignmentModal from "@/components/manager-assignment-modal";
+import HierarchyTreeModal from "@/components/hierarchy-tree-modal";
+import HierarchyMappingModal from "@/components/hierarchy-mapping-modal";
 
 // Predefined list of services
 const AVAILABLE_SERVICES = [
@@ -65,8 +69,9 @@ interface ProgramOption {
 function RolesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<"program-users" | "system-roles">("program-users");
+  const [activeTab, setActiveTab] = useState<"program-users" | "system-roles" | "hierarchy-mapping">("program-users");
   const [showForm, setShowForm] = useState(false);
+  const [showMappingModal, setShowMappingModal] = useState(false);
   const [roleName, setRoleName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -81,6 +86,7 @@ function RolesPage() {
   const [editEmail, setEditEmail] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [editSelectedServices, setEditSelectedServices] = useState<string[]>([]);
   const [programId, setProgramId] = useState<string>("");
   const [programs, setPrograms] = useState<ProgramOption[]>([]);
   const [selectedProgramFilter, setSelectedProgramFilter] = useState<string>("all");
@@ -91,12 +97,35 @@ function RolesPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
+  
+  // Hierarchy modal states
+  const [managerAssignmentModal, setManagerAssignmentModal] = useState(false);
+  const [hierarchyTreeModal, setHierarchyTreeModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{ id: number; name: string; programId: string; programName: string } | null>(null);
+  const [treeViewProgramId, setTreeViewProgramId] = useState<string>("");
+  const [treeViewProgramName, setTreeViewProgramName] = useState<string>("");
+
+  // Hierarchy Mapping states
+  const [mappingStep, setMappingStep] = useState<number>(1);
+  const [mappingProgramId, setMappingProgramId] = useState<string>("");
+  const [mappingParentRoleId, setMappingParentRoleId] = useState<string>("");
+  const [mappingParentUserId, setMappingParentUserId] = useState<string>("");
+  const [mappingChildRoleId, setMappingChildRoleId] = useState<string>("");
+  const [mappingChildUserIds, setMappingChildUserIds] = useState<string[]>([]);
+  const [availableParentUsers, setAvailableParentUsers] = useState<Role[]>([]);
+  const [availableChildUsers, setAvailableChildUsers] = useState<Role[]>([]);
+  const [hierarchyMappings, setHierarchyMappings] = useState<any[]>([]);
 
   // Fetch roles on mount and when tab changes
   useEffect(() => {
     checkUserRole();
     loadPrograms();
     loadRoles();
+    
+    // Load hierarchy mappings when on hierarchy-mapping tab
+    if (activeTab === 'hierarchy-mapping') {
+      loadHierarchyMappings();
+    }
   }, [activeTab]);
 
   const checkUserRole = async () => {
@@ -204,47 +233,106 @@ function RolesPage() {
       const allPrograms = Array.isArray(programsData) ? programsData : (programsData.programs || programsData.data || []);
       console.log('All programs:', allPrograms);
 
-      // Fetch roles from each program based on active tab
-      const rolesPromises = allPrograms.map(async (prog: ProgramOption) => {
+      // Fetch roles based on active tab
+      let allRoles: Role[] = [];
+      
+      if (activeTab === 'system-roles') {
+        // For system roles, fetch from /system-roles endpoint (no program association)
         try {
-          console.log(`Fetching roles for program: ${prog.id}`);
-          // Use /users endpoint for Program Users tab, /roles for System Roles tab
-          const endpoint = activeTab === 'program-users' ? 'users' : 'roles';
-          const rolesResponse = await fetch(`${API_URL}/programs/${prog.id}/${endpoint}`, {
+          const systemRolesResponse = await fetch(`${API_URL}/system-roles`, {
             headers,
             credentials: 'include',
           });
 
-          console.log(`${endpoint} response for ${prog.id}:`, rolesResponse.status);
-
-          if (rolesResponse.ok) {
-            const rolesData = await rolesResponse.json();
-            console.log(`${endpoint} data for ${prog.id}:`, rolesData);
-            // Handle both array response and object with roles/data/users property
-            const rolesList = Array.isArray(rolesData) ? rolesData : (rolesData.roles || rolesData.data || rolesData.users || []);
-            return rolesList.map((role: any) => ({
+          if (systemRolesResponse.ok) {
+            const systemRolesData = await systemRolesResponse.json();
+            const rolesList = Array.isArray(systemRolesData) ? systemRolesData : (systemRolesData.roles || systemRolesData.data || []);
+            allRoles = rolesList.map((role: any) => ({
               id: role.id,
-              role_name: role.role || role.role_name || 'User',
+              role_name: role.role || role.role_name || 'System Role',
               username: role.username || role.name,
               email: role.email,
-              program_id: prog.id,
+              program_id: role.program_id || null,
               created_at: role.created_at,
-              program: { id: prog.id, name: prog.name }
+              program: role.program || null
             }));
           }
-          return [];
         } catch (error) {
-          console.error(`Error loading roles for program ${prog.id}:`, error);
-          return [];
+          console.error('Error loading system roles:', error);
         }
-      });
+      } else {
+        // For program users, fetch from each program
+        const rolesPromises = allPrograms.map(async (prog: ProgramOption) => {
+          try {
+            console.log(`Fetching users and roles for program: ${prog.id}`);
+            
+            // Fetch both default users AND custom roles
+            const [usersResponse, rolesResponse] = await Promise.all([
+              fetch(`${API_URL}/programs/${prog.id}/users`, {
+                headers,
+                credentials: 'include',
+              }),
+              fetch(`${API_URL}/programs/${prog.id}/roles`, {
+                headers,
+                credentials: 'include',
+              })
+            ]);
 
-      const rolesArrays = await Promise.all(rolesPromises);
-      const allRolesData = rolesArrays.flat();
-      
-      console.log('All roles loaded:', allRolesData);
-      setAllRoles(allRolesData);
-      setRoles(allRolesData);
+            console.log(`users response for ${prog.id}:`, usersResponse.status);
+            console.log(`roles response for ${prog.id}:`, rolesResponse.status);
+
+            const allProgramRoles = [];
+
+            // Process default users
+            if (usersResponse.ok) {
+              const usersData = await usersResponse.json();
+              console.log(`users data for ${prog.id}:`, usersData);
+              const usersList = Array.isArray(usersData) ? usersData : (usersData.users || usersData.data || []);
+              const mappedUsers = usersList.map((user: any) => ({
+                id: user.id,
+                role_name: user.role || user.role_name || 'User',
+                username: user.username || user.name,
+                email: user.email,
+                program_id: prog.id,
+                created_at: user.created_at,
+                program: { id: prog.id, name: prog.name }
+              }));
+              allProgramRoles.push(...mappedUsers);
+            }
+
+            // Process custom roles
+            if (rolesResponse.ok) {
+              const rolesData = await rolesResponse.json();
+              console.log(`roles data for ${prog.id}:`, rolesData);
+              const rolesList = Array.isArray(rolesData) ? rolesData : (rolesData.roles || rolesData.data || []);
+              const mappedRoles = rolesList.map((role: any) => ({
+                id: role.id,
+                role_name: role.role || role.role_name || 'Role',
+                username: role.username || role.name,
+                email: role.email,
+                program_id: prog.id,
+                created_at: role.created_at,
+                program: { id: prog.id, name: prog.name }
+              }));
+              allProgramRoles.push(...mappedRoles);
+            }
+
+            return allProgramRoles;
+          } catch (error) {
+            console.error(`Error loading users/roles for program ${prog.id}:`, error);
+            return [];
+          }
+        });
+
+        const rolesArrays = await Promise.all(rolesPromises);
+        allRoles = rolesArrays.flat();
+      }
+
+      console.log('All roles loaded:', allRoles);
+
+      // Apply program filter
+      setAllRoles(allRoles);
+      setRoles(allRoles);
     } catch (error: any) {
       console.error('Error loading roles:', error);
       if (error.message === 'Not authenticated') {
@@ -252,6 +340,65 @@ function RolesPage() {
       }
     } finally {
       setLoadingRoles(false);
+    }
+  };
+
+  const loadHierarchyMappings = async () => {
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch(`${API_URL}/hierarchy-mappings`, {
+        headers,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch hierarchy mappings');
+      }
+
+      const data = await response.json();
+      const mappings = Array.isArray(data) ? data : (data.mappings || data.data || []);
+      setHierarchyMappings(mappings);
+    } catch (error) {
+      console.error('Error loading hierarchy mappings:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load hierarchy mappings",
+        variant: "error"
+      });
+    }
+  };
+
+  const handleDeleteMapping = async (mappingId: string) => {
+    if (!confirm('Are you sure you want to remove this hierarchy mapping?')) {
+      return;
+    }
+
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch(`${API_URL}/hierarchy-mappings/${mappingId}`, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete mapping');
+      }
+
+      toast({
+        title: "Success",
+        description: "Hierarchy mapping removed successfully",
+        variant: "success"
+      });
+
+      loadHierarchyMappings();
+    } catch (error: any) {
+      console.error('Error deleting mapping:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete mapping",
+        variant: "error"
+      });
     }
   };
 
@@ -274,12 +421,41 @@ function RolesPage() {
     }
   };
 
-  const handleEdit = (role: Role) => {
+  const handleEdit = async (role: Role) => {
     setEditingRole(role);
     setEditUsername(role.username);
     setEditEmail(role.email);
     setEditPassword(""); // Don't show actual password
     setShowPassword(false);
+    setEditSelectedServices([]); // Reset services
+    
+    // Fetch role details including services
+    try {
+      const headers = getAuthHeaders();
+      let url: string;
+      if (activeTab === 'system-roles') {
+        url = `${API_URL}/system-roles/${role.id}`;
+      } else {
+        url = `${API_URL}/programs/${role.program_id}/roles/${role.id}`;
+      }
+      
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const roleData = data.role || data;
+        // Set services if available
+        if (roleData.services && Array.isArray(roleData.services)) {
+          setEditSelectedServices(roleData.services);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching role details:', error);
+    }
+    
     setShowEditModal(true);
   };
 
@@ -299,17 +475,27 @@ function RolesPage() {
       if (editPassword) {
         updateData.password = editPassword;
       }
+      
+      // Include services if any are selected
+      if (editSelectedServices.length > 0) {
+        updateData.service_ids = editSelectedServices;
+      }
 
-      const endpoint = activeTab === 'program-users' ? 'users' : 'roles';
-      const response = await fetch(
-        `${API_URL}/programs/${editingRole.program_id}/${endpoint}/${editingRole.id}`,
-        {
-          method: 'PUT',
-          headers,
-          credentials: 'include',
-          body: JSON.stringify(updateData),
-        }
-      );
+      // Determine the correct endpoint based on active tab
+      let url: string;
+      if (activeTab === 'system-roles') {
+        url = `${API_URL}/system-roles/${editingRole.id}`;
+      } else {
+        // Program users tab always uses /roles endpoint
+        url = `${API_URL}/programs/${editingRole.program_id}/roles/${editingRole.id}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify(updateData),
+      });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ message: 'Failed to update role' }));
@@ -367,15 +553,20 @@ function RolesPage() {
       setLoading(true);
       const headers = getAuthHeaders();
 
-      const endpoint = activeTab === 'program-users' ? 'users' : 'roles';
-      const response = await fetch(
-        `${API_URL}/programs/${roleToDelete.program_id}/${endpoint}/${roleToDelete.id}`,
-        {
-          method: 'DELETE',
-          headers,
-          credentials: 'include',
-        }
-      );
+      // Determine the correct endpoint based on active tab
+      let url: string;
+      if (activeTab === 'system-roles') {
+        url = `${API_URL}/system-roles/${roleToDelete.id}`;
+      } else {
+        // Program users tab always uses /roles endpoint
+        url = `${API_URL}/programs/${roleToDelete.program_id}/roles/${roleToDelete.id}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ message: 'Failed to delete role' }));
@@ -420,21 +611,26 @@ function RolesPage() {
     try {
       setLoading(true);
       const headers = getAuthHeaders();
-      const endpoint = activeTab === 'program-users' ? 'users' : 'roles';
 
       // Delete each role individually
       const deletePromises = selectedRoleIds.map(async (roleId) => {
         const role = roles.find(r => r.id === roleId);
         if (!role) return;
         
-        const response = await fetch(
-          `${API_URL}/programs/${role.program_id}/${endpoint}/${roleId}`,
-          {
-            method: 'DELETE',
-            headers,
-            credentials: 'include',
-          }
-        );
+        // Determine the correct endpoint based on active tab
+        let url: string;
+        if (activeTab === 'system-roles') {
+          url = `${API_URL}/system-roles/${roleId}`;
+        } else {
+          // Program users tab always uses /roles endpoint
+          url = `${API_URL}/programs/${role.program_id}/roles/${roleId}`;
+        }
+
+        const response = await fetch(url, {
+          method: 'DELETE',
+          headers,
+          credentials: 'include',
+        });
         
         if (!response.ok) {
           throw new Error(`Failed to delete role ${role.role_name}`);
@@ -480,6 +676,20 @@ function RolesPage() {
     );
   };
 
+  const handleEditRole = (role: Role) => {
+    setEditingRole(role);
+    setEditUsername(role.username);
+    setEditEmail(role.email);
+    setEditPassword(""); // Don't show actual password
+    setShowPassword(false);
+    setShowEditModal(true);
+  };
+
+  const handleDeleteRole = (role: Role) => {
+    setRoleToDelete(role);
+    setDeleteModalOpen(true);
+  };
+
   const handleServiceToggle = (serviceId: string) => {
     setSelectedServices(prev =>
       prev.includes(serviceId)
@@ -513,23 +723,41 @@ function RolesPage() {
 
     try {
       const headers = getAuthHeaders();
-      // Use selected program from dropdown, or default to user's program if not selected (system-wide)
-      const progId = createFormProgramId || getProgramId();
-
-      // Create role (program user or system-wide)
-      const endpoint = activeTab === 'program-users' ? 'users' : 'roles';
-      const response = await fetch(`${API_URL}/programs/${progId}/${endpoint}`, {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({
+      
+      // Determine endpoint and request data based on tab
+      let endpoint;
+      let requestBody;
+      
+      if (activeTab === 'system-roles') {
+        // System roles: no program association, use /system-roles endpoint
+        endpoint = `${API_URL}/system-roles`;
+        requestBody = {
+          role_name: roleName,
+          username: username,
+          email: email,
+          password: password,
+          service_ids: selectedServices,
+          description: `System-wide role with access to all programs`
+        };
+      } else {
+        // Program users: tied to specific program
+        const progId = createFormProgramId || getProgramId();
+        endpoint = `${API_URL}/programs/${progId}/roles`;
+        requestBody = {
           role_name: roleName,
           username: username,
           email: email,
           password: password,
           service_ids: selectedServices,
           event_ids: [],
-        }),
+        };
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -610,66 +838,85 @@ function RolesPage() {
               }
             </p>
           </div>
-          {!showForm && (
-            <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Create New Role
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* View Hierarchy Tree Button - Only show when program filter is set */}
+            {!showForm && selectedProgramFilter !== "all" && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  const selectedProgram = programs.find(p => p.id === selectedProgramFilter);
+                  if (selectedProgram) {
+                    setTreeViewProgramId(selectedProgram.id);
+                    setTreeViewProgramName(selectedProgram.name);
+                    setHierarchyTreeModal(true);
+                  }
+                }}
+                className="flex items-center gap-2"
+              >
+                <Network className="w-4 h-4" />
+                View Hierarchy
+              </Button>
+            )}
+            {!showForm && (
+              <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Create New Role
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => {
-                setActiveTab('program-users');
-                setShowForm(false);
-              }}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'program-users'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+        <Tabs value={activeTab} onValueChange={(value) => {
+          setActiveTab(value as "program-users" | "system-roles");
+          setShowForm(false);
+        }} className="w-full">
+          <TabsList className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200 flex-wrap gap-1 mb-6">
+            <TabsTrigger 
+              value="program-users" 
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-100 hover:text-gray-900"
             >
+              <Users className="w-4 h-4 mr-2" />
               Program Users
-            </button>
+            </TabsTrigger>
             {currentUser?.role === 'super-admin' && (
-              <button
-                onClick={() => {
-                  setActiveTab('system-roles');
-                  setShowForm(false);
-                }}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'system-roles'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+              <TabsTrigger 
+                value="system-roles" 
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
               >
+                <UserCog className="w-4 h-4 mr-2" />
                 System Roles
-              </button>
+              </TabsTrigger>
             )}
-          </nav>
-        </div>
+            <TabsTrigger 
+              value="hierarchy-mapping" 
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-green-600 data-[state=active]:shadow-lg data-[state=active]:shadow-green-100 hover:text-gray-900"
+            >
+              <Network className="w-4 h-4 mr-2" />
+              Hierarchy Mapping
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Info Banner */}
-        {!showForm && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 mt-0.5">
-                <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
+          {/* Program Users Tab Content */}
+          <TabsContent value="program-users" className="space-y-6">
+            {/* Info Banner */}
+            {!showForm && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-blue-900 mb-1">Roles Management</h3>
+                    <p className="text-sm text-blue-800">
+                      Create custom roles with specific permissions for your organization. Assign program-specific access or create system-wide roles for administrators.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-blue-900 mb-1">Roles Management</h3>
-                <p className="text-sm text-blue-800">
-                  Create custom roles with specific permissions for your organization. Assign program-specific access or create system-wide roles for administrators.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+            )}
 
         {/* Program Filter - Only show for Program Users tab */}
         {!showForm && activeTab === 'program-users' && (
@@ -762,7 +1009,17 @@ function RolesPage() {
                               className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                             />
                           </TableCell>
-                          <TableCell className="font-medium">{role.role_name}</TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              {role.role_name}
+                              {/* Show badge for default/system roles */}
+                              {['program-admin', 'program-manager', 'program-moderator', 'Group Head'].includes(role.role_name) && (
+                                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>{role.username}</TableCell>
                           <TableCell>
                             {role.program?.name || 'N/A'}
@@ -801,8 +1058,251 @@ function RolesPage() {
             </CardContent>
           </Card>
         )}
+          </TabsContent>
 
-        {/* Create Form */}
+          {/* System Roles Tab Content */}
+          {currentUser?.role === 'super-admin' && (
+            <TabsContent value="system-roles" className="space-y-6">
+              {/* Info Banner */}
+              {!showForm && (
+                <div className="bg-qsights-light border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <svg className="w-5 h-5 text-qsights-cyan" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-purple-900 mb-1">System Roles Management</h3>
+                      <p className="text-sm text-purple-800">
+                        Create system-wide roles for administrators with access to all programs and system settings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* System Roles List */}
+              {!showForm && (
+                <Card>
+                  <CardHeader className="border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <CardTitle>System Roles</CardTitle>
+                      <div className="text-sm text-gray-500">
+                        {roles.length} {roles.length === 1 ? "role" : "roles"}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12">
+                              <Checkbox
+                                checked={roles.length > 0 && selectedRoleIds.length === roles.length}
+                                onCheckedChange={handleSelectAll}
+                              />
+                            </TableHead>
+                            <TableHead>Role Name</TableHead>
+                            <TableHead>Username</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Program</TableHead>
+                            <TableHead>Created</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {loadingRoles ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="text-center py-8">
+                                <div className="flex items-center justify-center gap-2">
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                  <span>Loading roles...</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : roles.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                                No system roles found. Create one to get started.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            roles.map((role) => (
+                              <TableRow key={role.id}>
+                                <TableCell>
+                                  <Checkbox
+                                    checked={selectedRoleIds.includes(role.id)}
+                                    onCheckedChange={() => handleSelectRole(role.id)}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    {role.role_name}
+                                    {/* Show badge for default/system roles */}
+                                    {['super-admin', 'admin'].includes(role.role_name) && (
+                                      <span className="px-2 py-0.5 text-xs font-medium bg-cyan-50 text-purple-700 rounded">
+                                        System
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>{role.username}</TableCell>
+                                <TableCell>{role.email}</TableCell>
+                                <TableCell>
+                                  {role.program ? (
+                                    <span className="text-sm text-gray-600">{role.program.name}</span>
+                                  ) : (
+                                    <span className="text-sm text-gray-400">All Programs</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-500">
+                                  {new Date(role.created_at).toLocaleDateString()}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleEditRole(role)}
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDeleteRole(role)}
+                                    >
+                                      <Trash2 className="w-4 h-4 text-red-600" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          )}
+
+          {/* Hierarchy Mapping Tab Content */}
+          <TabsContent value="hierarchy-mapping" className="space-y-6">
+            {/* Info Banner */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-green-900 mb-1">Centralized Hierarchy Management</h3>
+                  <p className="text-sm text-green-700">
+                    Define reporting structures and organizational hierarchy. Map users to managers for streamlined team management and reporting.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <h2 className="text-2xl font-bold">Hierarchy Mappings</h2>
+                <p className="text-gray-600">Manage reporting relationships and organizational structure</p>
+              </div>
+              <Button 
+                onClick={() => {
+                  setShowMappingModal(true);
+                  setMappingStep(1);
+                  setMappingProgramId("");
+                  setMappingParentRoleId("");
+                  setMappingParentUserId("");
+                  setMappingChildRoleId("");
+                  setMappingChildUserIds([]);
+                }}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4" />
+                Create Mapping
+              </Button>
+            </div>
+
+            {/* Mappings List */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Active Hierarchies</CardTitle>
+                <p className="text-sm text-gray-600 mt-1">View and manage existing reporting structures</p>
+              </CardHeader>
+              <CardContent>
+                {hierarchyMappings.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Network className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Hierarchies Defined</h3>
+                    <p className="text-gray-600 mb-4">
+                      Create your first hierarchy mapping to establish reporting relationships
+                    </p>
+                    <Button 
+                      onClick={() => {
+                        setShowMappingModal(true);
+                        setMappingStep(1);
+                      }}
+                      variant="outline"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create First Mapping
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Program</TableHead>
+                          <TableHead>Manager (Parent)</TableHead>
+                          <TableHead>Parent Role</TableHead>
+                          <TableHead>Team Member (Child)</TableHead>
+                          <TableHead>Child Role</TableHead>
+                          <TableHead>Mapped On</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {hierarchyMappings.map((mapping) => (
+                          <TableRow key={mapping.id}>
+                            <TableCell className="font-medium">{mapping.program_name}</TableCell>
+                            <TableCell>{mapping.parent_user_name}</TableCell>
+                            <TableCell><span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">{mapping.parent_role_name}</span></TableCell>
+                            <TableCell>{mapping.child_user_name}</TableCell>
+                            <TableCell><span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded">{mapping.child_role_name}</span></TableCell>
+                            <TableCell className="text-sm text-gray-500">
+                              {new Date(mapping.mapped_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteMapping(mapping.id)}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Create Form - Shared between both tabs */}
         {showForm && (
           <Card>
             <CardHeader>
@@ -832,25 +1332,38 @@ function RolesPage() {
                       required
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="program">Program (Optional)</Label>
-                    <select
-                      id="program"
-                      value={createFormProgramId}
-                      onChange={(e) => setCreateFormProgramId(e.target.value)}
-                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                    >
-                      <option value="">System-wide (All Programs)</option>
-                      {programs.map((prog) => (
-                        <option key={prog.id} value={prog.id}>
-                          {prog.name}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Leave blank for system-wide access
-                    </p>
-                  </div>
+                  {activeTab === 'program-users' && (
+                    <div>
+                      <Label htmlFor="program">Program (Optional)</Label>
+                      <select
+                        id="program"
+                        value={createFormProgramId}
+                        onChange={(e) => setCreateFormProgramId(e.target.value)}
+                        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      >
+                        <option value="">All Programs</option>
+                        {programs.map((prog) => (
+                          <option key={prog.id} value={prog.id}>
+                            {prog.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Select a specific program or leave blank for all programs
+                      </p>
+                    </div>
+                  )}
+                  {activeTab === 'system-roles' && (
+                    <div>
+                      <Label>Access Level</Label>
+                      <div className="flex h-10 items-center px-3 py-2 rounded-md border border-gray-200 bg-gray-50">
+                        <span className="text-sm font-medium text-purple-700">System-wide (All Programs)</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        System roles have access to all programs and administrative features
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <Label htmlFor="email">Email *</Label>
                     <Input
@@ -951,7 +1464,7 @@ function RolesPage() {
 
         {/* Edit Role Modal */}
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Role: {editingRole?.role_name}</DialogTitle>
             </DialogHeader>
@@ -1012,6 +1525,43 @@ function RolesPage() {
                   Leave blank to keep the current password
                 </p>
               </div>
+              
+              {/* Services Selection */}
+              <div className="border-t pt-4">
+                <Label className="text-base font-semibold mb-3 block">
+                  Selected Services ({editSelectedServices.length} selected)
+                </Label>
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {Object.entries(servicesByCategory).map(([category, services]) => (
+                    <div key={category} className="border rounded-lg p-3">
+                      <h3 className="font-semibold text-sm text-gray-900 mb-2">{category}</h3>
+                      <div className="grid grid-cols-1 gap-2">
+                        {services.map((service) => (
+                          <div key={service.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`edit-${service.id}`}
+                              checked={editSelectedServices.includes(service.id)}
+                              onCheckedChange={() => {
+                                setEditSelectedServices(prev =>
+                                  prev.includes(service.id)
+                                    ? prev.filter(id => id !== service.id)
+                                    : [...prev, service.id]
+                                );
+                              }}
+                            />
+                            <Label
+                              htmlFor={`edit-${service.id}`}
+                              className="text-sm font-normal cursor-pointer"
+                            >
+                              {service.name}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button
@@ -1047,6 +1597,53 @@ function RolesPage() {
           onConfirm={confirmBulkDelete}
           title="Delete Multiple Roles"
           message={`Are you sure you want to delete ${selectedRoleIds.length} role(s)? This action cannot be undone.`}
+        />
+
+        {/* Manager Assignment Modal */}
+        {selectedUser && (
+          <ManagerAssignmentModal
+            isOpen={managerAssignmentModal}
+            onClose={() => {
+              setManagerAssignmentModal(false);
+              setSelectedUser(null);
+            }}
+            userId={selectedUser.id}
+            userName={selectedUser.name}
+            programId={selectedUser.programId}
+            programName={selectedUser.programName}
+            onSuccess={() => {
+              loadRoles();
+              toast({
+                title: "Success!",
+                description: "Manager assignment updated successfully",
+                variant: "success"
+              });
+            }}
+          />
+        )}
+
+        {/* Hierarchy Tree Modal */}
+        <HierarchyTreeModal
+          isOpen={hierarchyTreeModal}
+          onClose={() => setHierarchyTreeModal(false)}
+          programId={treeViewProgramId}
+          programName={treeViewProgramName}
+        />
+
+        {/* Hierarchy Mapping Modal */}
+        <HierarchyMappingModal
+          isOpen={showMappingModal}
+          onClose={() => setShowMappingModal(false)}
+          programs={programs}
+          allRoles={allRoles}
+          onSuccess={() => {
+            loadHierarchyMappings();
+            toast({
+              title: "Success!",
+              description: "Hierarchy mapping created successfully",
+              variant: "success"
+            });
+          }}
         />
       </div>
     </ProgramAdminLayout>

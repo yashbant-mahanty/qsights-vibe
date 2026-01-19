@@ -91,7 +91,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
 
   const colorClasses: Record<string, { bg: string; text: string; border: string; button: string }> = {
     blue: { bg: 'bg-blue-100', text: 'text-blue-600', border: 'border-blue-200', button: 'bg-blue-600 hover:bg-blue-700' },
-    purple: { bg: 'bg-purple-100', text: 'text-purple-600', border: 'border-purple-200', button: 'bg-purple-600 hover:bg-purple-700' },
+    purple: { bg: 'bg-cyan-50', text: 'text-qsights-cyan', border: 'border-purple-200', button: 'bg-qsights-cyan hover:bg-qsights-cyan/90' },
     orange: { bg: 'bg-orange-100', text: 'text-orange-600', border: 'border-orange-200', button: 'bg-orange-600 hover:bg-orange-700' },
   };
 
@@ -205,7 +205,7 @@ interface QRButtonProps {
 export const QRButton: React.FC<QRButtonProps> = ({ onClick, color = 'gray' }) => {
   const colorClasses: Record<string, string> = {
     blue: 'text-blue-600 hover:bg-blue-50',
-    purple: 'text-purple-600 hover:bg-purple-50',
+    purple: 'text-qsights-cyan hover:bg-qsights-light',
     orange: 'text-orange-600 hover:bg-orange-50',
     gray: 'text-gray-600 hover:bg-gray-100',
   };

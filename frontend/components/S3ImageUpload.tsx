@@ -21,7 +21,14 @@ interface S3ImageUploadProps {
   className?: string;
   placeholder?: string;
   showPreview?: boolean;
+  showUniversalSizeHelper?: boolean;
 }
+
+// Universal image size recommendation (16:9 aspect ratio)
+const UNIVERSAL_IMAGE_WIDTH = 1200;
+const UNIVERSAL_IMAGE_HEIGHT = 675;
+const UNIVERSAL_ASPECT_RATIO = UNIVERSAL_IMAGE_WIDTH / UNIVERSAL_IMAGE_HEIGHT;
+const ASPECT_RATIO_TOLERANCE = 0.1;
 
 export default function S3ImageUpload({
   value,
@@ -35,10 +42,12 @@ export default function S3ImageUpload({
   className = "",
   placeholder = "Click to upload or drag and drop",
   showPreview = true,
+  showUniversalSizeHelper = false,
 }: S3ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [aspectRatioWarning, setAspectRatioWarning] = useState<string | null>(null);
   const [s3Configured, setS3Configured] = useState<boolean | null>(
     s3ConfigCache && Date.now() - s3ConfigCache.checkedAt < S3_CONFIG_CACHE_TTL 
       ? s3ConfigCache.configured 
@@ -84,6 +93,7 @@ export default function S3ImageUpload({
 
   const handleFile = async (file: File) => {
     setError(null);
+    setAspectRatioWarning(null);
 
     // Check S3 config
     const isConfigured = await checkS3Config();
@@ -94,6 +104,25 @@ export default function S3ImageUpload({
     if (!validTypes.includes(file.type)) {
       setError(`Invalid file type. Allowed: ${accept}`);
       return;
+    }
+
+    // Soft validation: Check aspect ratio (warning only)
+    if (showUniversalSizeHelper && file.type.startsWith('image/')) {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        const aspectRatio = img.width / img.height;
+        const deviation = Math.abs(aspectRatio - UNIVERSAL_ASPECT_RATIO) / UNIVERSAL_ASPECT_RATIO;
+        
+        if (deviation > ASPECT_RATIO_TOLERANCE) {
+          setAspectRatioWarning(
+            `⚠️ Image aspect ratio is ${img.width}×${img.height} (${aspectRatio.toFixed(2)}:1). ` +
+            `Recommended ratio is 16:9 (1.78:1) for best cross-device display.`
+          );
+        }
+        URL.revokeObjectURL(objectUrl);
+      };
+      img.src = objectUrl;
     }
 
     // Validate file size
@@ -175,92 +204,120 @@ export default function S3ImageUpload({
     <div className={`space-y-2 ${className}`}>
       {/* Upload Area */}
       {!value ? (
-        <div
-          onClick={handleClick}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          className={`
-            relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
-            transition-colors duration-200
-            ${dragActive 
-              ? "border-blue-500 bg-blue-50" 
-              : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
-            }
-            ${uploading ? "pointer-events-none opacity-60" : ""}
-            ${error ? "border-red-300 bg-red-50" : ""}
-          `}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={accept}
-            onChange={handleInputChange}
-            className="hidden"
-            disabled={uploading}
-          />
+        <>
+          <div
+            onClick={handleClick}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            className={`
+              relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
+              transition-colors duration-200
+              ${dragActive 
+                ? "border-blue-500 bg-blue-50" 
+                : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+              }
+              ${uploading ? "pointer-events-none opacity-60" : ""}
+              ${error ? "border-red-300 bg-red-50" : ""}
+            `}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={accept}
+              onChange={handleInputChange}
+              className="hidden"
+              disabled={uploading}
+            />
 
-          {uploading ? (
-            <div className="flex flex-col items-center gap-2">
-              <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-              <span className="text-sm text-gray-600">Uploading...</span>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2">
-              <Upload className="w-8 h-8 text-gray-400" />
-              <span className="text-sm text-gray-600">{placeholder}</span>
-              <span className="text-xs text-gray-400">
-                PNG, JPG, GIF, SVG, WebP up to {maxSize}MB
-              </span>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* Preview */
-        showPreview && (
-          <div className="relative rounded-lg border border-gray-200 overflow-hidden">
-            <div className="aspect-video bg-gray-100 flex items-center justify-center">
-              {value.endsWith(".svg") ? (
-                <object
-                  data={value}
-                  type="image/svg+xml"
-                  className="max-w-full max-h-48 object-contain"
-                >
-                  <ImageIcon className="w-12 h-12 text-gray-400" />
-                </object>
-              ) : (
-                <img
-                  src={value}
-                  alt="Uploaded image"
-                  className="max-w-full max-h-48 object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                  }}
-                />
-              )}
-            </div>
-            <div className="absolute top-2 right-2 flex gap-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                onClick={handleRemove}
-                className="h-8 w-8 p-0"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="p-2 bg-white border-t border-gray-200">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-green-500" />
-                <span className="text-xs text-gray-600 truncate flex-1">
-                  {value.split("/").pop()}
+            {uploading ? (
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                <span className="text-sm text-gray-600">Uploading...</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="w-8 h-8 text-gray-400" />
+                <span className="text-sm text-gray-600">{placeholder}</span>
+                <span className="text-xs text-gray-400">
+                  PNG, JPG, GIF, SVG, WebP up to {maxSize}MB
                 </span>
               </div>
-            </div>
+            )}
           </div>
-        )
+          
+          {/* Universal Size Helper */}
+          {showUniversalSizeHelper && !error && !uploading && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-xs font-medium text-blue-900 mb-1">📐 Recommended Universal Size:</p>
+              <p className="text-xs text-blue-700">
+                <strong>{UNIVERSAL_IMAGE_WIDTH} × {UNIVERSAL_IMAGE_HEIGHT} pixels (16:9 ratio)</strong>
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                This size works across Desktop, Tablet, and Mobile. Keep important visuals centered for best results.
+              </p>
+            </div>
+          )}
+        </>
+      ) : (
+        /* Preview */
+        <>
+          {aspectRatioWarning && (
+            <div className="p-3 border border-yellow-300 rounded-lg bg-yellow-50">
+              <div className="flex items-start gap-2 text-yellow-800">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <span className="text-xs">{aspectRatioWarning}</span>
+              </div>
+            </div>
+          )}
+          
+          {showPreview && (
+            <div className="relative rounded-lg border border-gray-200 overflow-hidden">
+              <div className="aspect-video bg-gray-100 flex items-center justify-center">
+                {value.endsWith(".svg") ? (
+                  <object
+                    data={value}
+                    type="image/svg+xml"
+                    className="max-w-full max-h-48"
+                    style={{ objectFit: 'contain' }}
+                  >
+                    <ImageIcon className="w-12 h-12 text-gray-400" />
+                  </object>
+                ) : (
+                  <img
+                    src={value}
+                    alt="Uploaded image"
+                    className="max-w-full max-h-48"
+                    style={{ objectFit: 'contain' }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                )}
+              </div>
+              <div className="absolute top-2 right-2 flex gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleRemove}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="p-2 bg-white border-t border-gray-200">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-500" />
+                  <span className="text-xs text-gray-600 truncate flex-1">
+                    {value.split("/").pop()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* URL Input for manual entry */}

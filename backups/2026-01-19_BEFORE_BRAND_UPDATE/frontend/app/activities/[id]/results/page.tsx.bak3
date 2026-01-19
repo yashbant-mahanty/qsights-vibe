@@ -1,0 +1,1057 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
+import AppLayout from "@/components/app-layout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ArrowLeft,
+  BarChart3,
+  Users,
+  TrendingUp,
+  Download,
+  Loader2,
+  CheckCircle,
+  Clock,
+  Mail,
+  MessageSquare,
+  Filter,
+  Calendar,
+  PieChart,
+  BarChart2,
+  TrendingDown,
+  Eye,
+  MousePointer,
+  AlertCircle,
+} from "lucide-react";
+import { activitiesApi, responsesApi, type Activity } from "@/lib/api";
+import { toast } from "@/components/ui/toast";
+import {
+  BarChart,
+  Bar,
+  PieChart as RePieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
+
+// Color palettes for charts
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+
+export default function ActivityResultsPage() {
+  const router = useRouter();
+  const params = useParams();
+  const activityId = params.id as string;
+
+  const [activity, setActivity] = useState<Activity | null>(null);
+  const [statistics, setStatistics] = useState<any>(null);
+  const [responses, setResponses] = useState<any[]>([]);
+  const [questionnaire, setQuestionnaire] = useState<any>(null);
+  const [notificationStats, setNotificationStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Tab and filter states
+  const [activeTab, setActiveTab] = useState<"overview" | "detailed" | "notifications">("overview");
+  const [dateRange, setDateRange] = useState("all");
+  const [participantFilter, setParticipantFilter] = useState("all");
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, [activityId]);
+
+  useEffect(() => {
+    // Close export menu when clicking outside
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showExportMenu && !target.closest('.export-menu-container')) {
+        setShowExportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [activityData, stats, responsesData] = await Promise.all([
+        activitiesApi.getById(activityId),
+        responsesApi.getStatistics(activityId).catch((err) => {
+          console.error('Failed to load statistics:', err);
+          return {
+            total_responses: 0,
+            submitted: 0,
+            in_progress: 0,
+            guest_responses: 0,
+            average_completion: 0,
+            average_time_per_question: 0,
+          };
+        }),
+        responsesApi.getByActivity(activityId).catch((err) => {
+          console.error('Failed to load responses:', err);
+          return [];
+        }),
+      ]);
+
+      setActivity(activityData);
+      setStatistics(stats);
+      setResponses(responsesData);
+
+      // Load questionnaire if available
+      if (activityData.questionnaire_id) {
+        try {
+          const questionnaireResponse = await fetch(`http://localhost:8000/api/questionnaires/${activityData.questionnaire_id}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (questionnaireResponse.ok) {
+            const qData = await questionnaireResponse.json();
+            setQuestionnaire(qData.data || qData);
+          }
+        } catch (err) {
+          console.error('Failed to load questionnaire:', err);
+        }
+      }
+
+      // Load notification stats
+      loadNotificationStats();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load results");
+      console.error("Error loading results:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadNotificationStats() {
+    try {
+      const response = await fetch(`http://localhost:8000/api/activities/${activityId}/notification-stats`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setNotificationStats(data);
+      } else {
+        console.error('Failed to load notification stats');
+        // Set empty state instead of null
+        setNotificationStats({
+          email: { sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, dropped: 0 },
+          sms: { sent: 0, delivered: 0, failed: 0 },
+          details: [],
+          total_participants: 0
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load notification stats:', err);
+      // Set empty state instead of null
+      setNotificationStats({
+        email: { sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, dropped: 0 },
+        sms: { sent: 0, delivered: 0, failed: 0 },
+        details: [],
+        total_participants: 0
+      });
+    }
+  }
+
+  const handleExport = async (type: 'overview' | 'detailed' | 'notifications') => {
+    try {
+      toast({ 
+        title: "Exporting Results", 
+        description: "Preparing your report for download...",
+        duration: 3000 
+      });
+
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:8000/api/activities/${activityId}/export?type=${type}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `activity-${type}-${activityId}-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        toast({ 
+          title: "Export Successful", 
+          description: `${type.charAt(0).toUpperCase() + type.slice(1)} report downloaded successfully`,
+          duration: 3000 
+        });
+      } else {
+        throw new Error('Export failed');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({ 
+        title: "Export Failed", 
+        description: "Failed to export results. Please try again.",
+        duration: 3000 
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-qsights-blue mx-auto" />
+            <p className="mt-2 text-sm text-gray-500">Loading results...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error || !activity) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <p className="text-red-600">{error || "Activity not found"}</p>
+            <button
+              onClick={() => router.push("/activities")}
+              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg"
+            >
+              Back to Activities
+            </button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // Map backend statistics to frontend format
+  const stats = {
+    total_responses: statistics?.total_responses || 0,
+    completed_responses: statistics?.submitted || 0,
+    in_progress_responses: statistics?.in_progress || 0,
+    completion_rate: statistics?.submitted && statistics?.total_responses
+      ? Math.round((statistics.submitted / statistics.total_responses) * 100)
+      : 0,
+  };
+
+  // Prepare data for charts
+  const responseTypeData = [
+    { name: 'Completed', value: stats.completed_responses, color: '#10B981' },
+    { name: 'In Progress', value: stats.in_progress_responses, color: '#F59E0B' },
+  ].filter(item => item.value > 0); // Only show non-zero values
+
+  return (
+    <AppLayout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push("/activities")}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Activity Results</h1>
+              <p className="text-sm text-gray-500 mt-1">{activity.name}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+            </select>
+            <div className="relative export-menu-container">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export Results
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  <div className="py-1">
+                    <button
+                      onClick={() => {
+                        handleExport('overview');
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                      <div>
+                        <div className="font-medium">Overview Report</div>
+                        <div className="text-xs text-gray-500">Statistics & response list</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleExport('detailed');
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <PieChart className="w-4 h-4" />
+                      <div>
+                        <div className="font-medium">Detailed Analysis</div>
+                        <div className="text-xs text-gray-500">Question-wise responses</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleExport('notifications');
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <Mail className="w-4 h-4" />
+                      <div>
+                        <div className="font-medium">Notification Report</div>
+                        <div className="text-xs text-gray-500">Email & SMS tracking</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8">
+            {[
+              { id: "overview", label: "Overview", icon: BarChart3 },
+              { id: "detailed", label: "Detailed Analysis", icon: PieChart },
+              { id: "notifications", label: "Notification Reports", icon: Mail },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center space-x-2 pb-4 border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <tab.icon className="w-4 h-4" />
+                <span className="font-medium">{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Overview Tab */}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            {/* Statistics Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Total Responses</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.total_responses}</p>
+                    </div>
+                    <div className="p-3 bg-blue-100 rounded-lg">
+                      <Users className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Completed</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.completed_responses}</p>
+                    </div>
+                    <div className="p-3 bg-green-100 rounded-lg">
+                      <CheckCircle className="w-6 h-6 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">In Progress</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.in_progress_responses}</p>
+                    </div>
+                    <div className="p-3 bg-yellow-100 rounded-lg">
+                      <Clock className="w-6 h-6 text-yellow-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Completion Rate</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.completion_rate}%</p>
+                    </div>
+                    <div className="p-3 bg-purple-100 rounded-lg">
+                      <TrendingUp className="w-6 h-6 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Response Distribution Chart */}
+            {responseTypeData.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Response Distribution</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RePieChart>
+                      <Pie
+                        data={responseTypeData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {responseTypeData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Response List */}
+            <Card>
+              <CardHeader className="border-b border-gray-200">
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-qsights-blue" />
+                  Response Analysis
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                {responses.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Participant</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Completion</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted At</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {responses.map((response, index) => (
+                          <tr key={response.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {response.participant_name || 'Guest Anonymous'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                Participant
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                response.status === 'submitted' 
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {response.status === 'submitted' ? 'Completed' : 'In Progress'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {response.completion_percentage || 0}%
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {response.submitted_at ? new Date(response.submitted_at).toLocaleString() : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500 font-medium">No Responses Available</p>
+                    <p className="text-sm text-gray-400 mt-2">Response data will appear here once participants submit their answers</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Detailed Analysis Tab */}
+        {activeTab === "detailed" && (
+          <DetailedAnalysisTab 
+            questionnaire={questionnaire}
+            responses={responses}
+            activity={activity}
+          />
+        )}
+
+        {/* Notification Reports Tab */}
+        {activeTab === "notifications" && (
+          <NotificationReportsTab 
+            notificationStats={notificationStats}
+            activity={activity}
+          />
+        )}
+      </div>
+    </AppLayout>
+  );
+}
+
+// Detailed Analysis Component
+function DetailedAnalysisTab({ questionnaire, responses, activity }: any) {
+  const [chartType, setChartType] = useState<'bar' | 'pie'>('bar');
+  
+  if (!questionnaire || !questionnaire.sections || questionnaire.sections.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <p className="text-gray-600 font-medium text-lg">No Questionnaire Assigned</p>
+        <p className="text-sm text-gray-400 mt-2 max-w-md mx-auto">
+          Detailed analysis will be available once a questionnaire with questions is assigned to this activity
+        </p>
+      </div>
+    );
+  }
+
+  // Process questions and their responses
+  const questionAnalytics = [];
+  
+  for (const section of questionnaire.sections) {
+    if (!section.questions || section.questions.length === 0) continue;
+    
+    for (const question of section.questions) {
+      const questionData = {
+        id: question.id,
+        text: question.text,
+        type: question.type,
+        section: section.title,
+        responses: [] as any[],
+        summary: {} as any
+      };
+      
+      // Analyze responses based on question type
+      if (question.type === 'multiple_choice' || question.type === 'single_choice') {
+        const optionCounts: { [key: string]: number } = {};
+        
+        // Initialize counts for each option
+        (question.options || []).forEach((option: any) => {
+          const optionText = typeof option === 'string' ? option : (option.text || option.label || '');
+          if (optionText) {
+            optionCounts[optionText] = 0;
+          }
+        });
+        
+        // Count responses
+        responses.forEach((response: any) => {
+          const answers = Array.isArray(response.answers) ? response.answers : [];
+          const answer = answers.find((a: any) => a.question_id === question.id);
+          
+          if (answer && answer.answer) {
+            if (Array.isArray(answer.answer)) {
+              answer.answer.forEach((opt: string) => {
+                if (optionCounts.hasOwnProperty(opt)) {
+                  optionCounts[opt]++;
+                }
+              });
+            } else if (typeof answer.answer === 'string') {
+              if (optionCounts.hasOwnProperty(answer.answer)) {
+                optionCounts[answer.answer]++;
+              }
+            }
+          }
+        });
+        
+        questionData.summary = optionCounts;
+        questionData.responses = Object.entries(optionCounts).map(([name, value], index) => ({
+          name,
+          value,
+          color: COLORS[index % COLORS.length]
+        }));
+        
+      } else if (question.type === 'rating' || question.type === 'scale') {
+        const ratingCounts: { [key: string]: number } = {};
+        let totalRating = 0;
+        let ratingCount = 0;
+        
+        responses.forEach((response: any) => {
+          const answers = Array.isArray(response.answers) ? response.answers : [];
+          const answer = answers.find((a: any) => a.question_id === question.id);
+          
+          if (answer && answer.answer) {
+            const rating = parseInt(answer.answer);
+            if (!isNaN(rating)) {
+              ratingCounts[rating] = (ratingCounts[rating] || 0) + 1;
+              totalRating += rating;
+              ratingCount++;
+            }
+          }
+        });
+        
+        questionData.summary = {
+          average: ratingCount > 0 ? (totalRating / ratingCount).toFixed(2) : 0,
+          distribution: ratingCounts
+        };
+        
+        questionData.responses = Object.entries(ratingCounts)
+          .sort(([a], [b]) => parseInt(a) - parseInt(b))
+          .map(([name, value], index) => ({
+            name: `Rating ${name}`,
+            value,
+            color: COLORS[index % COLORS.length]
+          }));
+        
+      } else if (question.type === 'text' || question.type === 'textarea') {
+        const textResponses: string[] = [];
+        
+        responses.forEach((response: any) => {
+          const answers = Array.isArray(response.answers) ? response.answers : [];
+          const answer = answers.find((a: any) => a.question_id === question.id);
+          
+          if (answer && answer.answer && typeof answer.answer === 'string') {
+            textResponses.push(answer.answer);
+          }
+        });
+        
+        questionData.summary = {
+          total: textResponses.length,
+          responses: textResponses.slice(0, 5) // Show first 5
+        };
+      }
+      
+      questionAnalytics.push(questionData);
+    }
+  }
+
+  if (questionAnalytics.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <p className="text-gray-600 font-medium text-lg">No Questions Found</p>
+        <p className="text-sm text-gray-400 mt-2 max-w-md mx-auto">
+          Add questions to the questionnaire to view detailed response analytics
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Chart Type Toggle */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">Question-wise Analysis</h3>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setChartType('bar')}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+              chartType === 'bar'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <BarChart2 className="w-4 h-4" />
+            Bar Chart
+          </button>
+          <button
+            onClick={() => setChartType('pie')}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+              chartType === 'pie'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <PieChart className="w-4 h-4" />
+            Pie Chart
+          </button>
+        </div>
+      </div>
+
+      {/* Question Charts */}
+      {questionAnalytics.map((question, index) => (
+        <Card key={question.id}>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="text-xs text-gray-500 mb-1">{question.section}</div>
+                <CardTitle className="text-base font-medium">
+                  Q{index + 1}. {question.text}
+                </CardTitle>
+                <div className="text-xs text-gray-500 mt-1 capitalize">Type: {question.type.replace('_', ' ')}</div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {(question.type === 'multiple_choice' || question.type === 'single_choice') && (
+              <div>
+                {question.responses.length > 0 ? (
+                  <>
+                    {chartType === 'bar' ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={question.responses}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="value" name="Responses">
+                            {question.responses.map((entry: any, idx: number) => (
+                              <Cell key={`cell-${idx}`} fill={entry.color} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <RePieChart>
+                          <Pie
+                            data={question.responses}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {question.responses.map((entry: any, idx: number) => (
+                              <Cell key={`cell-${idx}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </RePieChart>
+                      </ResponsiveContainer>
+                    )}
+                    <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {question.responses.map((resp: any, idx: number) => (
+                        <div key={idx} className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="text-lg font-bold" style={{ color: resp.color }}>
+                            {resp.value}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">{resp.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="font-medium">No Responses Yet</p>
+                    <p className="text-sm mt-1">Data will be displayed once participants respond to this question</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {(question.type === 'rating' || question.type === 'scale') && (
+              <div>
+                {question.responses.length > 0 ? (
+                  <>
+                    <div className="mb-4 text-center">
+                      <div className="text-3xl font-bold text-blue-600">
+                        {question.summary.average}
+                      </div>
+                      <div className="text-sm text-gray-600">Average Rating</div>
+                    </div>
+                    {chartType === 'bar' ? (
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={question.responses}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="value" name="Count" fill="#3B82F6" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={250}>
+                        <RePieChart>
+                          <Pie
+                            data={question.responses}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, value }) => `${name}: ${value}`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {question.responses.map((entry: any, idx: number) => (
+                              <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </RePieChart>
+                      </ResponsiveContainer>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="font-medium">No Ratings Yet</p>
+                    <p className="text-sm mt-1">Rating data will be displayed once participants respond</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {(question.type === 'text' || question.type === 'textarea') && (
+              <div>
+                {question.summary.total > 0 ? (
+                  <>
+                    <div className="mb-2 text-sm font-medium text-gray-700">
+                      Total Responses: {question.summary.total}
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {question.summary.responses.map((text: string, idx: number) => (
+                        <div key={idx} className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700">
+                          "{text}"
+                        </div>
+                      ))}
+                      {question.summary.total > 5 && (
+                        <div className="text-xs text-gray-500 text-center py-2">
+                          Showing 5 of {question.summary.total} responses
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="font-medium">No Text Responses Yet</p>
+                    <p className="text-sm mt-1">Participant responses will be displayed here once submitted</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// Notification Reports Component  
+function NotificationReportsTab({ notificationStats, activity }: any) {
+  if (!notificationStats) {
+    return (
+      <div className="text-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-qsights-blue mx-auto mb-4" />
+        <p className="text-gray-500">Loading notification reports...</p>
+      </div>
+    );
+  }
+
+  const emailStats = notificationStats.email || {};
+  const smsStats = notificationStats.sms || {};
+  const details = notificationStats.details || [];
+
+  const hasEmailData = emailStats.sent > 0;
+  const hasSMSData = smsStats.sent > 0;
+  const hasAnyData = hasEmailData || hasSMSData;
+
+  return (
+    <div className="space-y-6">
+      {/* Email Notification Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="w-5 h-5 text-qsights-blue" />
+            Email Notification Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {hasEmailData ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600">{emailStats.sent || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Sent</div>
+              </div>
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">{emailStats.delivered || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Delivered</div>
+              </div>
+              <div className="text-center p-4 bg-purple-50 rounded-lg">
+                <div className="text-2xl font-bold text-purple-600">{emailStats.opened || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Opened</div>
+              </div>
+              <div className="text-center p-4 bg-indigo-50 rounded-lg">
+                <div className="text-2xl font-bold text-indigo-600">{emailStats.clicked || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Clicked</div>
+              </div>
+              <div className="text-center p-4 bg-red-50 rounded-lg">
+                <div className="text-2xl font-bold text-red-600">{emailStats.bounced || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Bounced</div>
+              </div>
+              <div className="text-center p-4 bg-gray-50 rounded-lg">
+                <div className="text-2xl font-bold text-gray-600">{emailStats.dropped || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Dropped</div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <Mail className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="font-medium">No Email Notifications Sent</p>
+              <p className="text-sm mt-1">Email notification data will be displayed here once notifications are sent to participants</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* SMS Notification Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-qsights-blue" />
+            SMS Notification Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {hasSMSData ? (
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600">{smsStats.sent || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Sent</div>
+              </div>
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">{smsStats.delivered || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Delivered</div>
+              </div>
+              <div className="text-center p-4 bg-red-50 rounded-lg">
+                <div className="text-2xl font-bold text-red-600">{smsStats.failed || 0}</div>
+                <div className="text-xs text-gray-600 mt-1">Failed</div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="font-medium">No SMS Notifications Sent</p>
+              <p className="text-sm mt-1">SMS notification data will be displayed here once messages are sent to participants</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Detailed Notification Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Participant-wise Notification Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {details.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sl.No.</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Participant ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sent</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Delivered</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Opened</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Clicked</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {details.map((detail: any, index: number) => (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{detail.participant_id}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{detail.email}</td>
+                      <td className="px-4 py-3 text-center">
+                        {detail.email_sent ? (
+                          <CheckCircle className="w-5 h-5 text-green-600 mx-auto" />
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {detail.email_delivered ? (
+                          <CheckCircle className="w-5 h-5 text-green-600 mx-auto" />
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {detail.email_opened ? (
+                          <Eye className="w-5 h-5 text-purple-600 mx-auto" />
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {detail.email_clicked ? (
+                          <MousePointer className="w-5 h-5 text-blue-600 mx-auto" />
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="font-medium">No Notification Data Available</p>
+              <p className="text-sm mt-1 max-w-md mx-auto">
+                Detailed notification tracking data will be displayed here once notifications are sent to participants
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -192,7 +192,7 @@ export default function ProgramManagerDashboard() {
   const languageColors: { [key: string]: string } = {
     EN: "bg-blue-100 text-blue-700 border-blue-200",
     ES: "bg-red-100 text-red-700 border-red-200",
-    FR: "bg-purple-100 text-purple-700 border-purple-200",
+    FR: "bg-cyan-50 text-purple-700 border-purple-200",
     DE: "bg-yellow-100 text-yellow-700 border-yellow-200",
     IT: "bg-green-100 text-green-700 border-green-200",
   };
@@ -230,8 +230,8 @@ export default function ProgramManagerDashboard() {
       title: "Completed Activities",
       value: completedActivities.toString(),
       change: completedActivities === 0 ? "0% completion rate" : `${completionRate}% completion rate`,
-      lightColor: "bg-purple-50",
-      textColor: "text-purple-600",
+      lightColor: "bg-qsights-light",
+      textColor: "text-qsights-cyan",
       icon: CheckCircle,
     },
     {
@@ -267,7 +267,7 @@ export default function ProgramManagerDashboard() {
             <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
               Export Data
             </button>
-            <button className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue-dark">
+            <button className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan-dark">
               Send Reminder
             </button>
           </div>
@@ -452,7 +452,7 @@ export default function ProgramManagerDashboard() {
                     <span className="text-sm font-medium text-green-900">Active Activities</span>
                     <span className="text-xl font-bold text-green-900">{activities.filter(a => a.status === 'active').length}</span>
                   </div>
-                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                  <div className="flex items-center justify-between p-3 bg-qsights-light rounded-lg">
                     <span className="text-sm font-medium text-purple-900">Avg. Completion</span>
                     <span className="text-xl font-bold text-purple-900">
                       {activities.length > 0 ? Math.round(activities.reduce((sum, a) => sum + a.progress, 0) / activities.length) : 0}%
@@ -495,7 +495,7 @@ export default function ProgramManagerDashboard() {
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2.5">
                         <div
-                          className="bg-qsights-blue h-2.5 rounded-full transition-all duration-300"
+                          className="bg-qsights-dark h-2.5 rounded-full transition-all duration-300"
                           style={{ width: `${Math.min(lang.percentage, 100)}%` }}
                         ></div>
                       </div>

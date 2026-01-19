@@ -441,7 +441,7 @@ export default function ActivitiesPage() {
             <p className="text-red-600 font-semibold">{error}</p>
             <button 
               onClick={loadActivities}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
             >
               Retry
             </button>
@@ -477,7 +477,7 @@ export default function ActivitiesPage() {
       case "closed":
       case "archived":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-full">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-qsights-light text-purple-700 text-xs font-medium rounded-full">
             <CheckCircle className="w-3 h-3" />
             Closed
           </span>
@@ -505,7 +505,7 @@ export default function ActivitiesPage() {
     const colors: { [key: string]: string } = {
       Survey: "bg-blue-100 text-blue-700",
       Poll: "bg-green-100 text-green-700",
-      Assessment: "bg-purple-100 text-purple-700",
+      Assessment: "bg-cyan-50 text-purple-700",
     };
 
     return (
@@ -523,12 +523,12 @@ export default function ActivitiesPage() {
     const colors: { [key: string]: string } = {
       EN: "bg-blue-100 text-blue-700",
       ES: "bg-red-100 text-red-700",
-      FR: "bg-purple-100 text-purple-700",
+      FR: "bg-cyan-50 text-purple-700",
       DE: "bg-yellow-100 text-yellow-700",
       IT: "bg-green-100 text-green-700",
       PT: "bg-orange-100 text-orange-700",
       ZH: "bg-pink-100 text-pink-700",
-      JA: "bg-indigo-100 text-indigo-700",
+      JA: "bg-cyan-50 text-indigo-700",
     };
 
     return (
@@ -571,7 +571,7 @@ export default function ActivitiesPage() {
             </button>
             <a
               href="/activities/create"
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
             >
               <Plus className="w-4 h-4" />
               Create Event
@@ -872,10 +872,10 @@ export default function ActivitiesPage() {
                                       </div>
                                     </div>
                                     {/* Preview Link */}
-                                    <div className="border border-gray-200 rounded-lg p-3 hover:border-purple-300 hover:bg-purple-50/50 transition-all">
+                                    <div className="border border-gray-200 rounded-lg p-3 hover:border-purple-300 hover:bg-qsights-light/50 transition-all">
                                       <div className="flex items-start gap-3">
-                                        <div className="p-2 bg-purple-100 rounded-lg">
-                                          <Eye className="w-5 h-5 text-purple-600" />
+                                        <div className="p-2 bg-cyan-50 rounded-lg">
+                                          <Eye className="w-5 h-5 text-qsights-cyan" />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                           <p className="text-sm font-semibold text-gray-900">Preview Link</p>
@@ -889,7 +889,7 @@ export default function ActivitiesPage() {
                                             />
                                             <button
                                               onClick={() => setQrModal({ isOpen: true, url: linksDropdown.links.preview.url, title: 'Preview QR', subtitle: 'For testing only - responses not saved', color: 'purple' })}
-                                              className="p-1.5 rounded text-purple-600 hover:bg-purple-100 transition-colors"
+                                              className="p-1.5 rounded text-qsights-cyan hover:bg-cyan-50 transition-colors"
                                               title="View QR Code"
                                             >
                                               <QrCode className="w-4 h-4" />
@@ -899,7 +899,7 @@ export default function ActivitiesPage() {
                                               className={`px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 ${
                                                 copiedLink === 'Preview Link' 
                                                   ? 'bg-green-500 text-white' 
-                                                  : 'bg-purple-600 text-white hover:bg-purple-700'
+                                                  : 'bg-qsights-dark text-white hover:bg-qsights-dark/90'
                                               }`}
                                             >
                                               {copiedLink === 'Preview Link' ? (
@@ -974,7 +974,7 @@ export default function ActivitiesPage() {
                             }}
                             className={`p-1.5 rounded transition-colors ${
                               activity.allow_participant_reminders
-                                ? 'bg-purple-100 text-purple-600' 
+                                ? 'bg-cyan-50 text-qsights-cyan' 
                                 : 'text-gray-400 hover:bg-gray-100'
                             }`}
                             title={activity.allow_participant_reminders ? 'Participant Reminders Enabled' : 'Participant Reminders Disabled'}
@@ -987,7 +987,7 @@ export default function ActivitiesPage() {
                           </button>
                           <button
                             onClick={() => handleSendNotification(activity.id.toString())}
-                            className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                            className="p-1.5 text-qsights-cyan hover:bg-qsights-light rounded transition-colors"
                             title="Send Notification"
                           >
                             <Mail className="w-4 h-4" />

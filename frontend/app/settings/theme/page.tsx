@@ -41,6 +41,14 @@ export default function ThemeSettingsPage() {
     { id: 3, title: 'Data Export', description: 'Export to multiple formats', icon: '', enabled: true, order: 3 },
   ]);
 
+  // Brand Colors State
+  const [brandColors, setBrandColors] = useState({
+    primary_cyan: '#29ABE2',
+    secondary_navy: '#2E3192',
+    dark_navy: '#1E2A5E',
+    light_cyan: '#E3F4F8',
+  });
+
   const brandingSettings = [
     { key: 'logo', label: 'App Logo', type: 'image', category: 'branding' },
     { key: 'favicon', label: 'Favicon', type: 'image', category: 'branding' },
@@ -144,6 +152,16 @@ export default function ThemeSettingsPage() {
       }
       
       setSettings(data);
+      
+      // Load brand colors if they exist
+      if (data.brand_colors) {
+        setBrandColors({
+          primary_cyan: data.brand_colors.primary_cyan?.value || '#29ABE2',
+          secondary_navy: data.brand_colors.secondary_navy?.value || '#2E3192',
+          dark_navy: data.brand_colors.dark_navy?.value || '#1E2A5E',
+          light_cyan: data.brand_colors.light_cyan?.value || '#E3F4F8',
+        });
+      }
       
       // Load feature cards if they exist
       if (data.content?.feature_cards?.value) {
@@ -331,7 +349,7 @@ export default function ThemeSettingsPage() {
           <button
             onClick={handleSaveSettings}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-qsights-blue/90 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-qsights-dark/90 disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             {saving ? 'Saving...' : 'Save All Changes'}
@@ -350,7 +368,7 @@ export default function ThemeSettingsPage() {
             </TabsTrigger>
             <TabsTrigger 
               value="content" 
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
             >
               <FileText className="w-4 h-4 mr-2" />
               Hero & Content
@@ -378,10 +396,17 @@ export default function ThemeSettingsPage() {
             </TabsTrigger>
             <TabsTrigger 
               value="footer" 
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-100 hover:text-gray-900"
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-100 hover:text-gray-900"
             >
               <FileText className="w-4 h-4 mr-2" />
               Footer
+            </TabsTrigger>
+            <TabsTrigger 
+              value="colors" 
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+            >
+              <Palette className="w-4 h-4 mr-2" />
+              Brand Colors
             </TabsTrigger>
           </TabsList>
 
@@ -426,7 +451,7 @@ export default function ThemeSettingsPage() {
                         <div
                           className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
                             getSettingValue('template_style', 'general') === template.value
-                              ? 'border-qsights-blue bg-qsights-blue'
+                              ? 'border-qsights-blue bg-qsights-dark'
                               : 'border-gray-300'
                           }`}
                         >
@@ -771,7 +796,7 @@ export default function ThemeSettingsPage() {
                       };
                       setFeatureCards([...featureCards, newCard]);
                     }}
-                    className="flex items-center gap-2 px-3 py-2 bg-qsights-blue text-white rounded-lg text-sm hover:bg-qsights-blue/90"
+                    className="flex items-center gap-2 px-3 py-2 bg-qsights-dark text-white rounded-lg text-sm hover:bg-qsights-dark/90"
                   >
                     <Plus className="w-4 h-4" />
                     Add Card
@@ -929,6 +954,203 @@ export default function ThemeSettingsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Brand Colors Tab */}
+          <TabsContent value="colors" className="space-y-6">
+            <Card>
+              <CardHeader className="border-b border-gray-200">
+                <CardTitle className="flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-purple-600" />
+                  QSights Brand Colors
+                </CardTitle>
+                <p className="text-sm text-gray-600 mt-2">
+                  Customize your brand colors. These colors will be applied across buttons, navigation, and UI elements.
+                </p>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Primary Cyan */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-900">
+                      Primary Cyan
+                      <span className="text-xs text-gray-500 ml-2">(Main buttons, highlights)</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandColors.primary_cyan}
+                        onChange={(e) => setBrandColors({...brandColors, primary_cyan: e.target.value})}
+                        className="w-16 h-16 rounded-lg border-2 border-gray-300 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={brandColors.primary_cyan}
+                        onChange={(e) => setBrandColors({...brandColors, primary_cyan: e.target.value})}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                        placeholder="#29ABE2"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Secondary Navy */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-900">
+                      Secondary Navy
+                      <span className="text-xs text-gray-500 ml-2">(Login gradient, headers)</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandColors.secondary_navy}
+                        onChange={(e) => setBrandColors({...brandColors, secondary_navy: e.target.value})}
+                        className="w-16 h-16 rounded-lg border-2 border-gray-300 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={brandColors.secondary_navy}
+                        onChange={(e) => setBrandColors({...brandColors, secondary_navy: e.target.value})}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                        placeholder="#2E3192"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dark Navy */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-900">
+                      Dark Navy
+                      <span className="text-xs text-gray-500 ml-2">(Active menu, special buttons)</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandColors.dark_navy}
+                        onChange={(e) => setBrandColors({...brandColors, dark_navy: e.target.value})}
+                        className="w-16 h-16 rounded-lg border-2 border-gray-300 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={brandColors.dark_navy}
+                        onChange={(e) => setBrandColors({...brandColors, dark_navy: e.target.value})}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                        placeholder="#1E2A5E"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Light Cyan */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-900">
+                      Light Cyan
+                      <span className="text-xs text-gray-500 ml-2">(Backgrounds, hover states)</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandColors.light_cyan}
+                        onChange={(e) => setBrandColors({...brandColors, light_cyan: e.target.value})}
+                        className="w-16 h-16 rounded-lg border-2 border-gray-300 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={brandColors.light_cyan}
+                        onChange={(e) => setBrandColors({...brandColors, light_cyan: e.target.value})}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                        placeholder="#E3F4F8"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Color Preview */}
+                <div className="mt-8 p-6 bg-gray-50 rounded-xl border border-gray-200">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-4">Preview</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <button 
+                        style={{backgroundColor: brandColors.primary_cyan}}
+                        className="px-4 py-2 text-white rounded-lg font-medium"
+                      >
+                        Primary Button
+                      </button>
+                      <button 
+                        style={{backgroundColor: brandColors.dark_navy}}
+                        className="px-4 py-2 text-white rounded-lg font-medium"
+                      >
+                        Dark Navy Button
+                      </button>
+                    </div>
+                    <div 
+                      style={{
+                        background: `linear-gradient(to right, ${brandColors.primary_cyan}, ${brandColors.secondary_navy})`
+                      }}
+                      className="h-20 rounded-lg flex items-center justify-center text-white font-semibold"
+                    >
+                      Login Box Gradient Preview
+                    </div>
+                    <div className="flex gap-2">
+                      <div 
+                        style={{backgroundColor: brandColors.dark_navy}}
+                        className="flex-1 h-12 rounded-lg flex items-center justify-center text-white text-sm font-medium"
+                      >
+                        Active Menu
+                      </div>
+                      <div 
+                        style={{backgroundColor: brandColors.light_cyan}}
+                        className="flex-1 h-12 rounded-lg flex items-center justify-center text-gray-700 text-sm font-medium"
+                      >
+                        Hover State
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <div className="mt-6 flex items-center justify-between">
+                  <button
+                    onClick={() => setBrandColors({
+                      primary_cyan: '#29ABE2',
+                      secondary_navy: '#2E3192',
+                      dark_navy: '#1E2A5E',
+                      light_cyan: '#E3F4F8',
+                    })}
+                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
+                  >
+                    Reset to Default
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        setSaving(true);
+                        await themeApi.update('brand_colors', 'primary_cyan', brandColors.primary_cyan, 'color');
+                        await themeApi.update('brand_colors', 'secondary_navy', brandColors.secondary_navy, 'color');
+                        await themeApi.update('brand_colors', 'dark_navy', brandColors.dark_navy, 'color');
+                        await themeApi.update('brand_colors', 'light_cyan', brandColors.light_cyan, 'color');
+                        toast({
+                          title: "Success",
+                          description: "Brand colors saved successfully! Refresh the page to see changes.",
+                          variant: "success",
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Error",
+                          description: "Failed to save brand colors",
+                          variant: "error",
+                        });
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-6 py-2 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 disabled:opacity-50"
+                  >
+                    {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save Colors</>}
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
         </Tabs>
       </div>
 

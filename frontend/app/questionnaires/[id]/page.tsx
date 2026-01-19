@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import RoleBasedLayout from "@/components/role-based-layout";
 import S3ImageUpload from "@/components/S3ImageUpload";
+import BulkImageUpload from "@/components/BulkImageUpload";
+import { ValueDisplayModeConfig } from "@/components/ValueDisplayModeConfig";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +40,7 @@ import {
   TrendingUp,
   Smile,
   Heart,
+  Image as ImageIcon,
 } from "lucide-react";
 import { questionnairesApi, programsApi, type Program } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -150,13 +153,13 @@ export default function ViewQuestionnairePage() {
 
   const questionTypes = [
     { id: "mcq", label: "Multiple Choice", icon: CheckSquare, color: "text-blue-600" },
-    { id: "multi", label: "Multi-Select", icon: List, color: "text-purple-600" },
+    { id: "multi", label: "Multi-Select", icon: List, color: "text-qsights-cyan" },
     { id: "text", label: "Text Input", icon: Type, color: "text-green-600" },
     { id: "slider", label: "Slider", icon: Sliders, color: "text-orange-600" },
     { id: "rating", label: "Rating", icon: Star, color: "text-yellow-600" },
     { id: "matrix", label: "Matrix", icon: LayoutGrid, color: "text-pink-600" },
     { id: "information", label: "Information Block", icon: FileText, color: "text-teal-600" },
-    { id: "slider_scale", label: "Slider Scale", icon: TrendingUp, color: "text-indigo-600" },
+    { id: "slider_scale", label: "Slider Scale", icon: TrendingUp, color: "text-qsights-cyan" },
     { id: "dial_gauge", label: "Dial Gauge", icon: Gauge, color: "text-red-600" },
     { id: "likert_visual", label: "Likert Visual", icon: Smile, color: "text-amber-600" },
     { id: "nps", label: "NPS Scale", icon: ThumbsUp, color: "text-cyan-600" },
@@ -785,7 +788,7 @@ export default function ViewQuestionnairePage() {
                     setSelectedQuestion(question.id);
                     setShowConditionalLogic(true);
                   }}
-                  className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                  className="p-1.5 text-qsights-cyan hover:bg-qsights-light rounded transition-colors"
                   title="Conditional Logic"
                 >
                   <GitBranch className="w-4 h-4" />
@@ -1606,7 +1609,44 @@ export default function ViewQuestionnairePage() {
                       🖼️ Use Custom Images
                     </Label>
                   </div>
+                  {/* Show Image Labels Toggle */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`slider-labels-${question.id}`}
+                      checked={sliderSettings.showImageLabels !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, showImageLabels: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`slider-labels-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      🔢 Show Image Numbers
+                    </Label>
+                  </div>
                 </div>
+
+                {/* Value Display Mode Configuration */}
+                <ValueDisplayModeConfig
+                  settings={sliderSettings}
+                  questionId={question.id}
+                  sectionId={sectionId}
+                  setSections={setSections}
+                />
+
                 {/* Custom Images Section for Slider */}
                 {sliderSettings.useCustomImages && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -1644,6 +1684,7 @@ export default function ViewQuestionnairePage() {
                           folder="questionnaire-images/slider"
                           placeholder="Upload thumb image"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={5}
                         />
                         <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
@@ -1703,6 +1744,7 @@ export default function ViewQuestionnairePage() {
                           folder="questionnaire-images/slider"
                           placeholder="Upload track image"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={5}
                         />
                         <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
@@ -1732,6 +1774,50 @@ export default function ViewQuestionnairePage() {
                       </div>
                     </div>
                     <p className="text-xs text-gray-400 mt-2">💡 Custom thumb replaces the slider handle. Track background appears behind the slider.</p>
+                  </div>
+                )}
+                
+                {/* Sequence Images Section */}
+                {!showPreview && (
+                  <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <ImageIcon className="w-4 h-4 text-qsights-cyan" />
+                      <span className="text-sm font-semibold text-purple-900">Interactive Image Sequence</span>
+                      <span className="text-xs bg-qsights-dark text-white px-2 py-0.5 rounded-full">NEW</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-1">
+                      Upload multiple images that highlight interactively as the slider moves. Each value gets its own image!
+                    </p>
+                    <p className="text-xs text-blue-600 font-medium mb-3">
+                      📐 Recommended Size: 1200 × 675 pixels (16:9 ratio) | Max: 1MB per image
+                    </p>
+                    <BulkImageUpload
+                      value={sliderSettings.customImages?.sequenceImages || []}
+                      onChange={(urls) => {
+                        const newCustomImages = { ...(sliderSettings.customImages || {}), sequenceImages: urls };
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sliderSettings, customImages: newCustomImages } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      maxFiles={20}
+                      maxSize={5}
+                      showUniversalSizeHelper={true}
+                      placeholder="Upload Sequence Images (1-20)"
+                    />
+                    <div className="mt-2 p-2 bg-blue-100 rounded text-xs text-blue-800">
+                      <strong>💡 Pro Tip:</strong> For a 0-10 slider, upload 11 images. Image #0 = value 0, Image #5 = value 5, etc.
+                    </div>
                   </div>
                 )}
               </div>
@@ -1895,14 +1981,51 @@ export default function ViewQuestionnairePage() {
                       🖼️ Use Custom Images
                     </Label>
                   </div>
+                  {/* Show Image Labels Toggle */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`dial-labels-${question.id}`}
+                      checked={dialSettings.showImageLabels !== false}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, showImageLabels: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <Label htmlFor={`dial-labels-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      🔢 Show Image Numbers
+                    </Label>
+                  </div>
                 </div>
+
+                {/* Value Display Mode Configuration */}
+                <ValueDisplayModeConfig
+                  settings={dialSettings}
+                  questionId={question.id}
+                  sectionId={sectionId}
+                  setSections={setSections}
+                />
+
                 {/* Custom Images Section for Dial Gauge */}
                 {dialSettings.useCustomImages && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <Label className="text-xs text-gray-600 block mb-3">Custom Gauge Images</Label>
                     <div className="grid grid-cols-2 gap-4">
                       {/* Gauge Background Image */}
-                      <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="p-3 bg-qsights-light rounded-lg border border-purple-200">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-sm font-medium text-purple-700">Gauge Background</span>
                           {dialSettings.customImages?.backgroundUrl && (
@@ -1931,6 +2054,7 @@ export default function ViewQuestionnairePage() {
                           folder="questionnaire-images/dial-gauge"
                           placeholder="Upload gauge background"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={5}
                         />
                         <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
@@ -1988,6 +2112,7 @@ export default function ViewQuestionnairePage() {
                           folder="questionnaire-images/dial-gauge"
                           placeholder="Upload needle image"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={5}
                         />
                         <div className="text-xs text-gray-400 text-center my-1">— or URL —</div>
@@ -2017,6 +2142,50 @@ export default function ViewQuestionnairePage() {
                       </div>
                     </div>
                     <p className="text-xs text-gray-400 mt-2">💡 Custom background replaces the gauge dial. Needle image replaces the pointer.</p>
+                  </div>
+                )}
+                
+                {/* Sequence Images Section */}
+                {!showPreview && (
+                  <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border-2 border-purple-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <ImageIcon className="w-4 h-4 text-qsights-cyan" />
+                      <span className="text-sm font-semibold text-purple-900">Interactive Image Sequence</span>
+                      <span className="text-xs bg-qsights-dark text-white px-2 py-0.5 rounded-full">NEW</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-1">
+                      Upload multiple images that highlight interactively as the gauge pointer moves. Each value gets its own image!
+                    </p>
+                    <p className="text-xs text-blue-600 font-medium mb-3">
+                      📐 Recommended Size: 1200 × 675 pixels (16:9 ratio) | Max: 1MB per image
+                    </p>
+                    <BulkImageUpload
+                      value={dialSettings.customImages?.sequenceImages || []}
+                      onChange={(urls) => {
+                        const newCustomImages = { ...(dialSettings.customImages || {}), sequenceImages: urls };
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dialSettings, customImages: newCustomImages } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      maxFiles={20}
+                      maxSize={5}
+                      showUniversalSizeHelper={true}
+                      placeholder="Upload Sequence Images (1-20)"
+                    />
+                    <div className="mt-2 p-2 bg-blue-100 rounded text-xs text-blue-800">
+                      <strong>💡 Pro Tip:</strong> For a 0-10 gauge, upload 11 images. Image #0 = value 0, Image #5 = value 5, etc.
+                    </div>
                   </div>
                 )}
               </div>
@@ -2194,6 +2363,7 @@ export default function ViewQuestionnairePage() {
                             folder="questionnaire-images/likert"
                             placeholder={`Upload image for point ${idx + 1}`}
                             showPreview={true}
+                          showUniversalSizeHelper={true}
                             maxSize={10}
                           />
                           <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
@@ -2474,6 +2644,7 @@ export default function ViewQuestionnairePage() {
                           folder="questionnaire-images/star-rating"
                           placeholder="Upload image for selected state"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={10}
                         />
                         <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
@@ -2531,6 +2702,7 @@ export default function ViewQuestionnairePage() {
                           folder="questionnaire-images/star-rating"
                           placeholder="Upload image for unselected state"
                           showPreview={true}
+                          showUniversalSizeHelper={true}
                           maxSize={10}
                         />
                         <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
@@ -2592,7 +2764,7 @@ export default function ViewQuestionnairePage() {
             <p className="text-red-600 font-semibold">{error || 'Questionnaire not found'}</p>
             <button
               onClick={() => router.push('/questionnaires')}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
             >
               Back to Questionnaires
             </button>
@@ -2635,7 +2807,7 @@ export default function ViewQuestionnairePage() {
             <button
               onClick={handleSave}
               disabled={saving || showPreview}
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save Questionnaire'}
@@ -2673,7 +2845,7 @@ export default function ViewQuestionnairePage() {
             </Card>
 
             {/* Question Types */}
-            <Card className="bg-purple-50 border-purple-200">
+            <Card className="bg-qsights-light border-purple-200">
               <CardContent className="p-4">
                 <h4 className="text-sm font-semibold text-purple-900 mb-2">
                   📝 Question Types
@@ -3317,7 +3489,7 @@ export default function ViewQuestionnairePage() {
                     setSelectedQuestionForTranslation(null);
                     setTranslationData({});
                   }}
-                  className="px-4 py-2 bg-qsights-blue text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
                 >
                   Save Translations
                 </button>

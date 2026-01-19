@@ -589,7 +589,7 @@ export default function CreateRoleWizard({
 
                 <div className="bg-white rounded-lg p-5 shadow-sm">
                   <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-purple-600" />
+                    <Calendar className="w-5 h-5 text-qsights-cyan" />
                     Assigned Events
                     <span className="ml-auto text-sm font-normal bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
                       {selectedEvents.length} selected

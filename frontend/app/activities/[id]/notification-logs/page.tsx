@@ -51,7 +51,7 @@ export default function NotificationLogsPage() {
       
       // Fetch notification logs from backend API
       const token = localStorage.getItem('token');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
       
       const response = await fetch(`${API_URL}/notifications/reports/${activityId}`, {
         headers: {
@@ -160,9 +160,9 @@ export default function NotificationLogsPage() {
       case "delivered":
         return <CheckCircle className="w-4 h-4 text-green-600" />;
       case "opened":
-        return <Eye className="w-4 h-4 text-purple-600" />;
+        return <Eye className="w-4 h-4 text-qsights-cyan" />;
       case "clicked":
-        return <MousePointerClick className="w-4 h-4 text-indigo-600" />;
+        return <MousePointerClick className="w-4 h-4 text-qsights-cyan" />;
       case "bounced":
         return <AlertTriangle className="w-4 h-4 text-yellow-600" />;
       case "failed":
@@ -179,9 +179,9 @@ export default function NotificationLogsPage() {
       case "delivered":
         return "bg-green-50 text-green-700 border-green-200";
       case "opened":
-        return "bg-purple-50 text-purple-700 border-purple-200";
+        return "bg-qsights-light text-purple-700 border-purple-200";
       case "clicked":
-        return "bg-indigo-50 text-indigo-700 border-indigo-200";
+        return "bg-qsights-light text-indigo-700 border-cyan-200";
       case "bounced":
         return "bg-yellow-50 text-yellow-700 border-yellow-200";
       case "failed":
@@ -290,7 +290,7 @@ export default function NotificationLogsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Opened</p>
-                  <p className="text-2xl font-bold text-purple-600">{stats.opened}</p>
+                  <p className="text-2xl font-bold text-qsights-cyan">{stats.opened}</p>
                 </div>
                 <Eye className="w-8 h-8 text-purple-400" />
               </div>
@@ -302,7 +302,7 @@ export default function NotificationLogsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Clicked</p>
-                  <p className="text-2xl font-bold text-indigo-600">{stats.clicked}</p>
+                  <p className="text-2xl font-bold text-qsights-cyan">{stats.clicked}</p>
                 </div>
                 <MousePointerClick className="w-8 h-8 text-indigo-400" />
               </div>

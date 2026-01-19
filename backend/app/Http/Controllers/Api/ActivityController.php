@@ -187,6 +187,9 @@ class ActivityController extends Controller
             // Add participants count from program
             // participants_count already calculated by withCount as authenticated + guest
             
+            // Add program name for display
+            $activity->program_name = $activity->program ? $activity->program->name : null;
+            
             // Make additional details fields visible
             $activity->makeVisible([
                 'sender_email',

@@ -285,12 +285,26 @@ class PublicActivityController extends Controller
                     try {
                         $question = \App\Models\Question::find($questionId);
                         if ($question) {
-                            \App\Models\Answer::create([
-                                'response_id' => $response->id,
-                                'question_id' => $questionId,
-                                'value' => is_array($answerValue) ? null : $answerValue,
-                                'value_array' => is_array($answerValue) ? $answerValue : null,
-                            ]);
+                            // Check if answer has enhanced value display mode structure
+                            $isEnhancedPayload = is_array($answerValue) && isset($answerValue['value_type']);
+                            
+                            if ($isEnhancedPayload) {
+                                // Store enhanced payload as JSON in value column
+                                \App\Models\Answer::create([
+                                    'response_id' => $response->id,
+                                    'question_id' => $questionId,
+                                    'value' => json_encode($answerValue),
+                                    'value_array' => null,
+                                ]);
+                            } else {
+                                // Legacy behavior for standard answers
+                                \App\Models\Answer::create([
+                                    'response_id' => $response->id,
+                                    'question_id' => $questionId,
+                                    'value' => is_array($answerValue) ? null : $answerValue,
+                                    'value_array' => is_array($answerValue) ? $answerValue : null,
+                                ]);
+                            }
                         }
                     } catch (\Exception $e) {
                         \Log::warning('Failed to create preview Answer record', [
@@ -476,18 +490,37 @@ class PublicActivityController extends Controller
                 try {
                     $question = \App\Models\Question::find($questionId);
                     if ($question) {
-                        // updateOrCreate = UPDATE if exists, INSERT if not
-                        // This handles back navigation and answer changes perfectly
-                        \App\Models\Answer::updateOrCreate(
-                            [
-                                'response_id' => $response->id,
-                                'question_id' => $questionId,
-                            ],
-                            [
-                                'value' => is_array($answerValue) ? null : $answerValue,
-                                'value_array' => is_array($answerValue) ? $answerValue : null,
-                            ]
-                        );
+                        // Check if answer has enhanced value display mode structure
+                        $isEnhancedPayload = is_array($answerValue) && isset($answerValue['value_type']);
+                        
+                        if ($isEnhancedPayload) {
+                            // Store enhanced payload as JSON in value column
+                            // updateOrCreate = UPDATE if exists, INSERT if not
+                            \App\Models\Answer::updateOrCreate(
+                                [
+                                    'response_id' => $response->id,
+                                    'question_id' => $questionId,
+                                ],
+                                [
+                                    'value' => json_encode($answerValue),
+                                    'value_array' => null,
+                                ]
+                            );
+                        } else {
+                            // Legacy behavior for standard answers
+                            // updateOrCreate = UPDATE if exists, INSERT if not
+                            // This handles back navigation and answer changes perfectly
+                            \App\Models\Answer::updateOrCreate(
+                                [
+                                    'response_id' => $response->id,
+                                    'question_id' => $questionId,
+                                ],
+                                [
+                                    'value' => is_array($answerValue) ? null : $answerValue,
+                                    'value_array' => is_array($answerValue) ? $answerValue : null,
+                                ]
+                            );
+                        }
                     }
                 } catch (\Exception $e) {
                     \Log::warning('Failed to upsert Answer record', [
@@ -670,13 +703,23 @@ class PublicActivityController extends Controller
                 'question_id' => $questionId,
             ]);
 
-            // Update the answer value (handles back navigation / answer changes)
-            if (is_array($answerValue)) {
-                $answer->value = null;
-                $answer->value_array = $answerValue;
-            } else {
-                $answer->value = $answerValue;
+            // Check if answer has enhanced value display mode structure
+            $isEnhancedPayload = is_array($answerValue) && isset($answerValue['value_type']);
+            
+            if ($isEnhancedPayload) {
+                // Store enhanced payload as JSON in value column
+                $answer->value = json_encode($answerValue);
                 $answer->value_array = null;
+            } else {
+                // Legacy behavior for standard answers
+                // Update the answer value (handles back navigation / answer changes)
+                if (is_array($answerValue)) {
+                    $answer->value = null;
+                    $answer->value_array = $answerValue;
+                } else {
+                    $answer->value = $answerValue;
+                    $answer->value_array = null;
+                }
             }
 
             $answer->save(); // INSERT if new, UPDATE if exists
