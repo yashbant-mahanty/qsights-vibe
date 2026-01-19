@@ -50,7 +50,7 @@ return new class extends Migration
             // Publishing
             $table->boolean('is_published')->default(false);
             $table->timestamp('published_at')->nullable();
-            $table->unsignedBigInteger('published_by')->nullable();
+            $table->uuid('published_by')->nullable();
             $table->foreign('published_by')
                   ->references('id')
                   ->on('users')
