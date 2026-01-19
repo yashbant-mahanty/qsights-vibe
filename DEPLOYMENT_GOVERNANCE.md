@@ -286,6 +286,95 @@ STATUS: ✅ SUCCESS
 
 ---
 
+## 🚨 EMERGENCY RECOVERY PROCEDURES (Added 20 Jan 2026)
+
+### If App Becomes Unresponsive:
+
+**Step 1: Check PM2 Status**
+```bash
+ssh -i QSights-Mumbai-12Aug2019.pem ubuntu@13.126.210.220 "pm2 list"
+```
+
+**Step 2: Check for Server Action Errors**
+```bash
+ssh -i QSights-Mumbai-12Aug2019.pem ubuntu@13.126.210.220 "pm2 logs qsights-frontend --lines 50 --nostream | grep 'Server Action'"
+```
+
+**Step 3: If Server Action errors exist - RESTORE FROM BACKUP**
+```bash
+ssh ubuntu@13.126.210.220
+cd /var/www
+pm2 stop qsights-frontend
+sudo mv QSightsOrg2.0 QSightsOrg2.0_broken_$(date +%Y%m%d_%H%M%S)
+sudo tar -xzf /home/ubuntu/backups/QSightsOrg2.0_CHECKPOINT_20_JAN_2026_WORKING.tar.gz
+cd QSightsOrg2.0/frontend
+npm install
+npm run build
+pm2 start qsights-frontend
+```
+
+**Step 4: Verify App Works**
+```bash
+curl -s https://prod.qsights.com | grep '<title>'
+pm2 logs qsights-frontend --lines 5 --nostream
+```
+
+### If Navigation/Sidebar Missing:
+
+**This indicates corrupted Next.js cache. Do NOT rebuild multiple times!**
+
+**Immediate Action: Full frontend restore from local**
+```bash
+# From local machine:
+cd /path/to/QSightsOrg2.0/frontend
+rsync -avz --exclude 'node_modules' --exclude '.next' \
+  -e "ssh -i /path/to/PEM" . ubuntu@13.126.210.220:/tmp/frontend_restore/
+
+# On server:
+ssh ubuntu@13.126.210.220
+pm2 stop qsights-frontend
+sudo mv /var/www/QSightsOrg2.0/frontend /var/www/QSightsOrg2.0/frontend_broken
+sudo mv /tmp/frontend_restore /var/www/QSightsOrg2.0/frontend
+sudo chown -R ubuntu:ubuntu /var/www/QSightsOrg2.0/frontend
+cd /var/www/QSightsOrg2.0/frontend
+npm install
+npm run build  # ONLY ONCE!
+pm2 start qsights-frontend
+```
+
+### Available Backups:
+| Backup Name | Date | Size | Location |
+|-------------|------|------|----------|
+| QSightsOrg2.0_CHECKPOINT_20_JAN_2026_WORKING.tar.gz | 20 Jan 2026 | 528MB | /home/ubuntu/backups/ |
+
+---
+
+## 🎯 LESSONS LEARNED (20 Jan 2026 Incident)
+
+### DO:
+1. ✅ Create checkpoint backup BEFORE any deployment
+2. ✅ Run schema validation BEFORE creating migrations
+3. ✅ Deploy backend completely BEFORE frontend
+4. ✅ Test backend API endpoints BEFORE touching frontend
+5. ✅ Build frontend ONLY ONCE after all changes
+6. ✅ Have rollback plan documented BEFORE starting
+
+### DON'T:
+1. ❌ Never rebuild .next multiple times in quick succession
+2. ❌ Never deploy frontend until backend is confirmed working
+3. ❌ Never assume migration schema matches production
+4. ❌ Never skip schema validation
+5. ❌ Never make changes without a backup
+
+### If Deployment Goes Wrong:
+1. **STOP** - Don't try multiple fixes
+2. **ASSESS** - Check PM2 logs for specific errors
+3. **RESTORE** - Use backup if errors are cache-related
+4. **DOCUMENT** - Record what went wrong
+5. **RETRY** - Plan proper deployment with lessons learned
+
+---
+
 **REMEMBER: SAFETY OVER SPEED**
 
 Better to delay deployment than break production!

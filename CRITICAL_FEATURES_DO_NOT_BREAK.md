@@ -360,6 +360,45 @@ php artisan tinker --execute='
 | 2026-01-17 | Initial response backup system deployed | ✅ All tests passed | System |
 | 2026-01-17 | Data Safety UI with 3 tabs deployed | ✅ No errors | System |
 | 2026-01-18 | Fixed Data Safety settings crash (null health check) | ⏳ Pending | System |
+| 2026-01-20 | **CRITICAL INCIDENT**: Evaluation module deployment broke app | ❌ REVERTED | System |
+
+---
+
+## 🚨 CRITICAL INCIDENT: EVALUATION MODULE DEPLOYMENT FAILURE (20 Jan 2026)
+
+### What Happened:
+1. Evaluation Module MVP was being deployed (roles, staff, hierarchy tables + controllers + UI)
+2. Database migrations had schema mismatch (expected UUID, actual was BIGINT for `users.id` and `organizations.id`)
+3. Multiple rebuild attempts corrupted Next.js Server Actions cache
+4. Frontend became unresponsive - navigation broken, sidebar missing, sign-out not working
+5. **App was down/broken for users during this period**
+
+### Root Causes:
+1. **Schema validation was NOT performed before deployment** (violated governance)
+2. **Production database schema differs from migration expectations**:
+   - `organizations.id` = BIGINT (not UUID)
+   - `users.id` = BIGINT (not UUID)
+   - `programs.id` = UUID ✓
+3. **Multiple .next cache rebuilds** created stale Server Action references
+4. **No rollback plan was documented** before starting deployment
+
+### Resolution:
+- Full frontend restore from local machine using rsync
+- Checkpoint backup created: `QSightsOrg2.0_CHECKPOINT_20_JAN_2026_WORKING.tar.gz`
+
+### Pending Work (Evaluation Module):
+- 4 of 6 database tables were created (evaluation_roles, evaluation_staff, evaluation_hierarchy, evaluation_audit_log)
+- 2 tables pending: evaluation_assignments, evaluation_results (require evaluation_events table)
+- Backend controllers were deployed but need the evaluation_events migration
+- Frontend components exist locally but NOT deployed to production
+
+### Prevention Checklist (MANDATORY for future deployments):
+- [ ] Always run schema validation BEFORE creating migrations
+- [ ] Create backup checkpoint BEFORE any deployment
+- [ ] Document rollback plan BEFORE starting
+- [ ] Test locally with production schema copy
+- [ ] Deploy backend completely BEFORE frontend
+- [ ] Never rebuild .next multiple times in quick succession
 
 ---
 
