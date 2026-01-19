@@ -176,7 +176,7 @@ export default function NotificationsPage() {
                 {unreadCount > 0 && (
                   <button
                     onClick={handleMarkAllRead}
-                    className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-qsights-blue/90 transition-colors text-sm font-medium"
+                    className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-qsights-dark/90 transition-colors text-sm font-medium"
                   >
                     <CheckCheck className="w-4 h-4" />
                     Mark all read
@@ -228,7 +228,7 @@ export default function NotificationsPage() {
                                 {notification.title}
                               </h3>
                               {!notification.is_read && (
-                                <span className="w-2.5 h-2.5 bg-qsights-blue rounded-full flex-shrink-0"></span>
+                                <span className="w-2.5 h-2.5 bg-qsights-dark rounded-full flex-shrink-0"></span>
                               )}
                             </div>
                             

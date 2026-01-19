@@ -26,12 +26,12 @@ import { toast } from "@/components/ui/toast";
 const languageColors: { [key: string]: string } = {
   EN: "bg-blue-100 text-blue-700",
   ES: "bg-red-100 text-red-700",
-  FR: "bg-purple-100 text-purple-700",
+  FR: "bg-cyan-50 text-purple-700",
   DE: "bg-yellow-100 text-yellow-700",
   IT: "bg-green-100 text-green-700",
   PT: "bg-orange-100 text-orange-700",
   ZH: "bg-pink-100 text-pink-700",
-  JA: "bg-indigo-100 text-indigo-700",
+  JA: "bg-cyan-50 text-indigo-700",
 };
 
 interface UserData {
@@ -372,7 +372,7 @@ export default function ProgramAdminDashboard() {
             <button 
               onClick={handleSendReminder}
               disabled={sendingReminder}
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue-dark disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan-dark disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Bell className="w-4 h-4" />
               {sendingReminder ? "Scheduling..." : "Send Reminder"}
@@ -507,7 +507,7 @@ export default function ProgramAdminDashboard() {
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
                           <div
-                            className="bg-qsights-blue h-2 rounded-full transition-all duration-300"
+                            className="bg-qsights-dark h-2 rounded-full transition-all duration-300"
                             style={{ width: `${lang.percentage}%` }}
                           ></div>
                         </div>
@@ -718,8 +718,8 @@ export default function ProgramAdminDashboard() {
                   </div>
                   <span className="text-sm font-medium text-gray-900">Export Report</span>
                 </button>
-                <button className="flex flex-col items-center gap-3 p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-                  <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
+                <button className="flex flex-col items-center gap-3 p-4 bg-qsights-light rounded-lg hover:bg-cyan-50 transition-colors">
+                  <div className="w-12 h-12 bg-qsights-light0 rounded-lg flex items-center justify-center">
                     <Activity className="w-6 h-6 text-white" />
                   </div>
                   <span className="text-sm font-medium text-gray-900">New Activity</span>

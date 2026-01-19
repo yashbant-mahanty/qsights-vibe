@@ -126,8 +126,8 @@ export default function PrivacyPolicyPage() {
         <Card className="shadow-xl">
           <CardHeader className="border-b bg-gradient-to-r from-purple-50 to-blue-50">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Shield className="w-6 h-6 text-purple-600" />
+              <div className="p-2 bg-cyan-50 rounded-lg">
+                <Shield className="w-6 h-6 text-qsights-cyan" />
               </div>
               <div>
                 <CardTitle className="text-3xl font-bold text-gray-900">

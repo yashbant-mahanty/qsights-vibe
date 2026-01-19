@@ -469,58 +469,34 @@ class ResponseController extends Controller
         // Get activity to access participants
         $activity = Activity::findOrFail($activityId);
         
-        // Get valid participant IDs (matching event list logic, exclude preview)
-        $validParticipantIds = $activity->participants()
-            ->where('is_preview', false) // Exclude preview participants
-            ->where(function($query) {
-                // Include registered participants (is_guest=false, not marked as anonymous)
-                $query->where(function($q) {
-                    $q->where('is_guest', false)
-                      ->where(function($q2) {
-                          $q2->whereNull('additional_data')
-                             ->orWhereRaw("(additional_data->>'participant_type' IS NULL OR additional_data->>'participant_type' != 'anonymous')");
-                      });
-                })
-                // OR include anonymous participants (marked with participant_type='anonymous')
-                ->orWhereRaw("additional_data->>'participant_type' = 'anonymous'");
-            })
-            ->pluck('participants.id')
-            ->toArray();
-
-        // Only count responses from valid participants (exclude preview responses)
+        // SIMPLIFIED APPROACH: Count ALL non-preview responses for this activity
+        // Include both registered participants AND guest responses
         $baseQuery = Response::byActivity($activityId)
-            ->where('is_preview', false)
-            ->whereIn('participant_id', $validParticipantIds);
+            ->where('is_preview', false);
         
         $total = $baseQuery->count();
         $submitted = (clone $baseQuery)->submitted()->count();
         $inProgress = (clone $baseQuery)->inProgress()->count();
         
-        // Count anonymous responses specifically (exclude preview)
-        $anonymousParticipantIds = $activity->participants()
+        // Count guest/anonymous responses (responses without participant_id OR marked as guest)
+        $guestResponses = Response::byActivity($activityId)
             ->where('is_preview', false)
-            ->whereRaw("additional_data->>'participant_type' = 'anonymous'")
-            ->pluck('participants.id')
-            ->toArray();
-        $anonymousResponses = Response::byActivity($activityId)
-            ->where('is_preview', false)
-            ->whereIn('participant_id', $anonymousParticipantIds)
+            ->where(function($q) {
+                $q->whereNull('participant_id')
+                  ->orWhereNotNull('guest_identifier');
+            })
             ->count();
 
         $avgCompletion = (clone $baseQuery)->avg('completion_percentage');
-        $avgTimeSpent = Answer::whereHas('response', function($q) use ($activityId, $validParticipantIds) {
-            $q->where('activity_id', $activityId)
-              ->whereIn('participant_id', $validParticipantIds);
-        })->avg('time_spent');
 
         return response()->json([
             'total_responses' => $total,
             'submitted' => $submitted,
             'in_progress' => $inProgress,
-            'anonymous_responses' => $anonymousResponses,
-            'registered_responses' => $total - $anonymousResponses,
+            'guest_responses' => $guestResponses,
+            'registered_responses' => $total - $guestResponses,
             'average_completion' => round($avgCompletion ?? 0, 2),
-            'average_time_per_question' => round($avgTimeSpent ?? 0, 2),
+            'average_time_per_question' => 0, // Time tracking not implemented yet
         ]);
     }
 

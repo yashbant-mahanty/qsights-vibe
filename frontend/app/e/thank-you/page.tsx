@@ -40,7 +40,7 @@ function ThankYouContent() {
 
           {/* Activity Name */}
           {activityName && (
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+            <div className="bg-qsights-light border border-purple-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-purple-700 font-medium">
                 Survey: {decodeURIComponent(activityName)}
               </p>
@@ -70,7 +70,7 @@ function ThankYouContent() {
 
         {/* Powered by */}
         <p className="text-center text-sm text-gray-500 mt-6">
-          Powered by <span className="font-semibold text-purple-600">QSights</span>
+          Powered by <span className="font-semibold text-qsights-cyan">QSights</span>
         </p>
       </div>
     </div>
@@ -82,7 +82,7 @@ export default function ThankYouPage() {
     <Suspense fallback={
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qsights-cyan mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>

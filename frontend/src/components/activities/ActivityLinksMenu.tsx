@@ -19,9 +19,9 @@ import {
  * Props:
  * @param {string} activityId - The UUID of the event
  * @param {string} authToken - Bearer token for authentication
- * @param {string} apiUrl - Base API URL (default: http://localhost:8000/api)
+ * @param {string} apiUrl - Base API URL (default: https://prod.qsights.com/api)
  */
-const ActivityLinksMenu = ({ activityId, authToken, apiUrl = 'http://localhost:8000/api' }) => {
+const ActivityLinksMenu = ({ activityId, authToken, apiUrl = 'https://prod.qsights.com/api' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [links, setLinks] = useState(null);
   const [loading, setLoading] = useState(false);

@@ -121,7 +121,7 @@ export default function EvaluationEventDetailPage() {
     return (
       <AppLayout>
         <div className="p-8 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-qsights-cyan mx-auto"></div>
           <p className="mt-2 text-gray-500">Loading evaluation event...</p>
         </div>
       </AppLayout>
@@ -135,7 +135,7 @@ export default function EvaluationEventDetailPage() {
           <p className="text-red-600">Evaluation event not found</p>
           <button
             onClick={() => router.push('/evaluation-events')}
-            className="mt-4 text-indigo-600 hover:text-indigo-700"
+            className="mt-4 text-qsights-cyan hover:text-indigo-700"
           >
             Back to list
           </button>
@@ -236,7 +236,7 @@ export default function EvaluationEventDetailPage() {
 
           <button
             onClick={() => router.push(`/evaluation-events/${eventId}/reports`)}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-qsights-dark/90 transition-colors"
           >
             <BarChart3 className="w-4 h-4" />
             View Reports
@@ -250,7 +250,7 @@ export default function EvaluationEventDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <ClipboardCheck className="w-5 h-5 text-indigo-600" />
+                  <ClipboardCheck className="w-5 h-5 text-qsights-cyan" />
                   Overview
                 </CardTitle>
               </CardHeader>
@@ -280,7 +280,7 @@ export default function EvaluationEventDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-indigo-600" />
+                  <Calendar className="w-5 h-5 text-qsights-cyan" />
                   Schedule
                 </CardTitle>
               </CardHeader>
@@ -306,7 +306,7 @@ export default function EvaluationEventDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Settings className="w-5 h-5 text-indigo-600" />
+                  <Settings className="w-5 h-5 text-qsights-cyan" />
                   Settings
                 </CardTitle>
               </CardHeader>
@@ -339,7 +339,7 @@ export default function EvaluationEventDetailPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5 text-indigo-600" />
+                    <Users className="w-5 h-5 text-qsights-cyan" />
                     My Team&apos;s Evaluations
                   </CardTitle>
                 </CardHeader>
@@ -372,7 +372,7 @@ export default function EvaluationEventDetailPage() {
                                 <button
                                   onClick={() => handleSendReminder(assignment.id)}
                                   disabled={sendingReminder === assignment.id}
-                                  className="inline-flex items-center gap-1 px-3 py-1 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
+                                  className="inline-flex items-center gap-1 px-3 py-1 text-sm text-qsights-cyan hover:bg-qsights-light rounded-lg transition-colors disabled:opacity-50"
                                 >
                                   <Mail className="w-4 h-4" />
                                   {sendingReminder === assignment.id ? 'Sending...' : 'Remind'}
@@ -395,13 +395,13 @@ export default function EvaluationEventDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-indigo-600" />
+                  <BarChart3 className="w-5 h-5 text-qsights-cyan" />
                   Progress
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="text-center">
-                  <p className="text-4xl font-bold text-indigo-600">
+                  <p className="text-3xl font-bold text-qsights-cyan">
                     {assignments.length > 0 
                       ? Math.round((completedAssignments / assignments.length) * 100)
                       : 0}%
@@ -431,7 +431,7 @@ export default function EvaluationEventDetailPage() {
                 {/* Progress Bar */}
                 <div className="w-full bg-gray-200 rounded-full h-2.5">
                   <div
-                    className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
+                    className="bg-qsights-dark h-2.5 rounded-full transition-all duration-300"
                     style={{ 
                       width: `${assignments.length > 0 
                         ? (completedAssignments / assignments.length) * 100 
@@ -451,7 +451,7 @@ export default function EvaluationEventDetailPage() {
                 {event.status === 'active' && (
                   <button
                     onClick={() => router.push(`/evaluation-events/${eventId}/trigger`)}
-                    className="w-full flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors"
+                    className="w-full flex items-center gap-2 px-4 py-2 bg-qsights-light text-indigo-700 rounded-lg hover:bg-cyan-50 transition-colors"
                   >
                     <Send className="w-4 h-4" />
                     Trigger for Team Members
@@ -459,7 +459,7 @@ export default function EvaluationEventDetailPage() {
                 )}
                 <button
                   onClick={() => router.push(`/evaluation-events/${eventId}/reports`)}
-                  className="w-full flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
+                  className="w-full flex items-center gap-2 px-4 py-2 bg-qsights-light text-purple-700 rounded-lg hover:bg-cyan-50 transition-colors"
                 >
                   <BarChart3 className="w-4 h-4" />
                   View Full Reports

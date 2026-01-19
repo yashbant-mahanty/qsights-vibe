@@ -207,7 +207,7 @@ export default function ImportPreviewModal({
   const getQuestionTypeColor = (type: string) => {
     const colorMap: Record<string, string> = {
       radio: "bg-blue-100 text-blue-700",
-      checkbox: "bg-purple-100 text-purple-700",
+      checkbox: "bg-cyan-50 text-purple-700",
       text: "bg-green-100 text-green-700",
       textarea: "bg-green-100 text-green-700",
       rating: "bg-yellow-100 text-yellow-700",
@@ -324,8 +324,8 @@ export default function ImportPreviewModal({
                   </p>
                   <p className="text-sm text-green-700">Questions</p>
                 </div>
-                <div className="bg-purple-50 rounded-lg p-4 text-center">
-                  <p className="text-2xl font-bold text-purple-600">
+                <div className="bg-qsights-light rounded-lg p-4 text-center">
+                  <p className="text-2xl font-bold text-qsights-cyan">
                     {summary?.total_options || 0}
                   </p>
                   <p className="text-sm text-purple-700">Options</p>

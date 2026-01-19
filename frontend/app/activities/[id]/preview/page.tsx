@@ -173,7 +173,7 @@ export default function ActivityPreviewPage() {
                 onClick={() => handleResponseChange(questionId, rating)}
                 className={`w-12 h-12 rounded-lg border-2 font-semibold transition-all ${
                   responses[questionId] === rating
-                    ? "border-qsights-blue bg-qsights-blue text-white"
+                    ? "border-qsights-blue bg-qsights-dark text-white"
                     : "border-gray-300 text-gray-600 hover:border-qsights-blue"
                 }`}
               >
@@ -268,7 +268,7 @@ export default function ActivityPreviewPage() {
           <p className="text-red-600">{error || "Activity not found"}</p>
           <button
             onClick={() => router.push("/activities")}
-            className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg"
+            className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg"
           >
             Back to Activities
           </button>
@@ -325,7 +325,7 @@ export default function ActivityPreviewPage() {
           </div>
           <button
             onClick={() => router.push(`/activities/${activityId}/edit`)}
-            className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+            className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
           >
             Edit Activity
           </button>
@@ -339,7 +339,7 @@ export default function ActivityPreviewPage() {
               {activity.description && <p className="text-sm text-white/90">{activity.description}</p>}
             </div>
           </CardHeader>
-          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-6 relative overflow-hidden">
+          <div className="bg-gradient-to-r bg-qsights-dark p-6 relative overflow-hidden">
             {/* Decorative Background Pattern */}
             <div className="absolute inset-0 opacity-10">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -mr-32 -mt-16 blur-3xl"></div>
@@ -456,7 +456,7 @@ export default function ActivityPreviewPage() {
                       <div
                         key={index}
                         className={`h-2 rounded-full transition-all ${
-                          index === currentSectionIndex ? "w-8 bg-qsights-blue" : "w-2 bg-gray-300"
+                          index === currentSectionIndex ? "w-8 bg-qsights-dark" : "w-2 bg-gray-300"
                         }`}
                       />
                     ))}
@@ -478,7 +478,7 @@ export default function ActivityPreviewPage() {
                   currentSectionFiltered.map((question: any, index: number) => (
                     <div key={question.id || index} className="space-y-3 pb-6 border-b border-gray-200 last:border-0">
                       <div className="flex items-start gap-3">
-                        <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-blue text-white rounded-full text-sm font-semibold">
+                        <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
                           {index + 1}
                         </span>
                         <div className="flex-1 space-y-3">
@@ -524,7 +524,7 @@ export default function ActivityPreviewPage() {
               {currentSectionIndex < totalSections - 1 ? (
                 <button
                   onClick={() => setCurrentSectionIndex(currentSectionIndex + 1)}
-                  className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center gap-2"
+                  className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
                 >
                   Next
                   <ChevronRight className="w-4 h-4" />
@@ -550,7 +550,7 @@ export default function ActivityPreviewPage() {
               </p>
               <button
                 onClick={() => router.push(`/activities/${activityId}/edit`)}
-                className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+                className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
               >
                 Assign Questionnaire
               </button>

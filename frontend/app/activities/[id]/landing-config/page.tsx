@@ -2057,7 +2057,7 @@ export default function LandingPageConfigPage() {
           {activeTab === "post-landing" && (
             <>
               {/* Tab Info */}
-                <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="mb-6 p-4 bg-qsights-light border border-purple-200 rounded-lg">
                   <h3 className="text-sm font-semibold text-purple-900 mb-1">Post Landing Page</h3>
                   <p className="text-sm text-purple-700">Configure the page shown after participants log in but before they start the activity. This includes background styling and layout controls.</p>
                 </div>
@@ -2866,7 +2866,7 @@ export default function LandingPageConfigPage() {
           {/* CSS & Fonts Tab */}
           {activeTab === "css-fonts" && (
             <>
-              <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="mb-6 p-4 bg-qsights-light border border-purple-200 rounded-lg">
                 <h3 className="text-sm font-semibold text-purple-900 mb-1">CSS & Fonts</h3>
                 <p className="text-sm text-purple-700">Customize typography and add custom CSS for advanced styling.</p>
               </div>
@@ -2942,7 +2942,7 @@ export default function LandingPageConfigPage() {
                           }}
                           className={`p-3 border-2 rounded-lg text-left transition-all ${
                             config.cssThemePreset === preset.id
-                              ? "border-purple-600 bg-purple-50"
+                              ? "border-qsights-cyan bg-qsights-light"
                               : "border-gray-200 hover:border-purple-400"
                           }`}
                         >
@@ -3342,7 +3342,7 @@ export default function LandingPageConfigPage() {
                                 ...prev,
                                 cssScopeControl: { ...prev.cssScopeControl, [item.key]: e.target.checked }
                               }))}
-                              className="w-4 h-4 text-purple-600 rounded"
+                              className="w-4 h-4 text-qsights-cyan rounded"
                             />
                             <span className="text-sm text-gray-700">{item.label}</span>
                           </label>
@@ -3365,7 +3365,7 @@ export default function LandingPageConfigPage() {
                                 ...prev,
                                 cssScopeControl: { ...prev.cssScopeControl, [item.key]: e.target.checked }
                               }))}
-                              className="w-4 h-4 text-purple-600 rounded"
+                              className="w-4 h-4 text-qsights-cyan rounded"
                             />
                             <span className="text-sm text-gray-700">{item.label}</span>
                           </label>

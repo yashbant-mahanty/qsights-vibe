@@ -340,7 +340,12 @@ function getBackendToken(): string | null {
   
   const encodedToken = tokenCookie.split('=')[1];
   // Decode URL-encoded token
-  return decodeURIComponent(encodedToken);
+  const token = decodeURIComponent(encodedToken);
+  
+  // Return null if token is invalid (null, undefined, empty, or literal "null" string)
+  if (!token || token === 'null' || token === 'undefined') return null;
+  
+  return token;
 }
 
 // Get CSRF token cookie from Laravel

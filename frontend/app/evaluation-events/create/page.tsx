@@ -146,7 +146,7 @@ export default function CreateEvaluationEventPage() {
 
         {loading ? (
           <div className="p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-qsights-cyan mx-auto"></div>
             <p className="mt-2 text-gray-500">Loading...</p>
           </div>
         ) : (
@@ -155,7 +155,7 @@ export default function CreateEvaluationEventPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <ClipboardCheck className="w-5 h-5 text-indigo-600" />
+                  <ClipboardCheck className="w-5 h-5 text-qsights-cyan" />
                   Basic Information
                 </CardTitle>
               </CardHeader>
@@ -170,7 +170,7 @@ export default function CreateEvaluationEventPage() {
                     value={formData.name}
                     onChange={handleInputChange}
                     placeholder="e.g., Q1 2026 Staff Performance Evaluation"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                   />
                 </div>
 
@@ -184,7 +184,7 @@ export default function CreateEvaluationEventPage() {
                     onChange={handleInputChange}
                     rows={3}
                     placeholder="Describe the purpose of this evaluation..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                   />
                 </div>
 
@@ -196,7 +196,7 @@ export default function CreateEvaluationEventPage() {
                     name="questionnaire_id"
                     value={formData.questionnaire_id}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                   >
                     <option value="">Select a questionnaire</option>
                     {questionnaires.map((q) => (
@@ -219,7 +219,7 @@ export default function CreateEvaluationEventPage() {
                       name="organization_id"
                       value={formData.organization_id}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                     >
                       <option value="">All Organizations</option>
                       {organizations.map((org) => (
@@ -239,7 +239,7 @@ export default function CreateEvaluationEventPage() {
                       value={formData.program_id}
                       onChange={handleInputChange}
                       disabled={!formData.organization_id}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500 disabled:opacity-50"
                     >
                       <option value="">All Programs</option>
                       {programs.map((prog) => (
@@ -257,7 +257,7 @@ export default function CreateEvaluationEventPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-indigo-600" />
+                  <Calendar className="w-5 h-5 text-qsights-cyan" />
                   Schedule
                 </CardTitle>
               </CardHeader>
@@ -272,7 +272,7 @@ export default function CreateEvaluationEventPage() {
                       name="start_date"
                       value={formData.start_date}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                     />
                   </div>
 
@@ -286,7 +286,7 @@ export default function CreateEvaluationEventPage() {
                       value={formData.end_date}
                       onChange={handleInputChange}
                       min={formData.start_date}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                     />
                   </div>
                 </div>
@@ -297,7 +297,7 @@ export default function CreateEvaluationEventPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Settings className="w-5 h-5 text-indigo-600" />
+                  <Settings className="w-5 h-5 text-qsights-cyan" />
                   Evaluation Settings
                 </CardTitle>
               </CardHeader>
@@ -309,7 +309,7 @@ export default function CreateEvaluationEventPage() {
                     name="allow_self_evaluation"
                     checked={formData.allow_self_evaluation}
                     onChange={handleInputChange}
-                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    className="w-4 h-4 text-qsights-cyan border-gray-300 rounded focus:ring-qsights-cyan"
                   />
                   <label htmlFor="allow_self_evaluation" className="text-sm text-gray-700">
                     Allow self-evaluation (staff can also evaluate themselves)
@@ -323,7 +323,7 @@ export default function CreateEvaluationEventPage() {
                     name="is_anonymous"
                     checked={formData.is_anonymous}
                     onChange={handleInputChange}
-                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    className="w-4 h-4 text-qsights-cyan border-gray-300 rounded focus:ring-qsights-cyan"
                   />
                   <label htmlFor="is_anonymous" className="text-sm text-gray-700">
                     Anonymous evaluations (hide evaluator identity in reports)
@@ -338,7 +338,7 @@ export default function CreateEvaluationEventPage() {
                     checked={formData.show_individual_responses}
                     onChange={handleInputChange}
                     disabled={formData.is_anonymous}
-                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 disabled:opacity-50"
+                    className="w-4 h-4 text-qsights-cyan border-gray-300 rounded focus:ring-qsights-cyan disabled:opacity-50"
                   />
                   <label htmlFor="show_individual_responses" className="text-sm text-gray-700">
                     Show individual responses in reports
@@ -353,7 +353,7 @@ export default function CreateEvaluationEventPage() {
                     name="hierarchy_levels"
                     value={formData.hierarchy_levels}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                   >
                     <option value={1}>Direct Reports Only</option>
                     <option value={2}>Up to 2 Levels</option>
@@ -371,7 +371,7 @@ export default function CreateEvaluationEventPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-indigo-600" />
+                  <FileText className="w-5 h-5 text-qsights-cyan" />
                   Email Template
                 </CardTitle>
               </CardHeader>
@@ -400,7 +400,7 @@ export default function CreateEvaluationEventPage() {
                     name="email_subject"
                     value={formData.email_subject}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                   />
                 </div>
 
@@ -413,7 +413,7 @@ export default function CreateEvaluationEventPage() {
                     value={formData.email_body}
                     onChange={handleInputChange}
                     rows={8}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500 font-mono text-sm"
                   />
                 </div>
               </CardContent>
@@ -431,7 +431,7 @@ export default function CreateEvaluationEventPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-6 py-2 bg-qsights-dark text-white rounded-lg hover:bg-qsights-dark/90 transition-colors disabled:opacity-50"
               >
                 {saving ? (
                   <>

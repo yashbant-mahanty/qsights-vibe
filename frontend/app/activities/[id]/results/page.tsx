@@ -468,7 +468,7 @@ export default function ActivityResultsPage() {
             <p className="text-red-600">{error || "Activity not found"}</p>
             <button
               onClick={() => router.push("/activities")}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg"
             >
               Back to Activities
             </button>
@@ -503,7 +503,7 @@ export default function ActivityResultsPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-700" />
               </button>
               <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-qsights-cyan to-qsights-navy bg-clip-text text-transparent">
                   Event Results
                 </h1>
                 <p className="text-base text-gray-600 font-medium mt-1">{activity.name}</p>
@@ -601,7 +601,7 @@ export default function ActivityResultsPage() {
 
         {/* Modern Activity Details Card */}
         <Card className="overflow-hidden border-2 border-gray-200 hover:border-blue-300 transition-all shadow-md hover:shadow-xl">
-          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-6 relative overflow-hidden">
+          <div className="bg-gradient-to-r bg-qsights-dark p-6 relative overflow-hidden">
             {/* Decorative Background Pattern */}
             <div className="absolute inset-0 opacity-10">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -mr-32 -mt-16 blur-3xl"></div>
@@ -814,7 +814,7 @@ export default function ActivityResultsPage() {
                               response.guest_identifier || 
                               response.participant?.additional_data?.participant_type === 'anonymous' ||
                               (response.participant?.email && response.participant.email.includes('@anonymous.local'))
-                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                ? 'bg-cyan-50 text-purple-700 border border-purple-200'
                                 : 'bg-blue-100 text-blue-700 border border-blue-200'
                             }`}>
                               {response.guest_identifier || 
@@ -1140,7 +1140,7 @@ export default function ActivityResultsPage() {
                                       </div>
                                       <div className="text-center">
                                         <p className="text-xs text-gray-600 mb-1">Unique Answers</p>
-                                        <p className="text-2xl font-bold text-purple-600">{Object.keys(stats).length}</p>
+                                        <p className="text-2xl font-bold text-qsights-cyan">{Object.keys(stats).length}</p>
                                       </div>
                                     </>
                                   )}
@@ -1159,10 +1159,10 @@ export default function ActivityResultsPage() {
                                         const colors = [
                                           'from-blue-500 to-blue-600',
                                           'from-green-500 to-green-600',
-                                          'from-purple-500 to-purple-600',
+                                          'from-qsights-cyan to-qsights-cyan',
                                           'from-orange-500 to-orange-600',
                                           'from-pink-500 to-pink-600',
-                                          'from-indigo-500 to-indigo-600',
+                                          'from-qsights-cyan to-qsights-cyan',
                                           'from-teal-500 to-teal-600',
                                           'from-red-500 to-red-600'
                                         ];
@@ -1394,7 +1394,7 @@ export default function ActivityResultsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <GradientStatCard
                   title="Total Notifications"
-                  value={notificationReports.length}
+                  value={notificationReports.filter((r:any) => r.status === 'sent' || r.status === 'delivered' || r.status === 'opened' || r.status === 'read' || r.status === 'clicked').length}
                   subtitle="Email notifications sent"
                   icon={Mail}
                   variant="blue"
@@ -1402,7 +1402,7 @@ export default function ActivityResultsPage() {
 
                 <GradientStatCard
                   title="Delivered"
-                  value={notificationReports.filter((r:any) => ['delivered', 'opened', 'read', 'clicked'].includes(r.status)).length}
+                  value={notificationReports.filter((r:any) => r.status === 'delivered' || r.status === 'opened' || r.status === 'read' || r.status === 'clicked').length}
                   subtitle="Successfully delivered"
                   icon={CheckCircle}
                   variant="green"
@@ -1410,7 +1410,7 @@ export default function ActivityResultsPage() {
 
                 <GradientStatCard
                   title="Opened"
-                  value={notificationReports.filter((r:any) => ['opened', 'read', 'clicked'].includes(r.status)).length}
+                  value={notificationReports.filter((r:any) => r.status === 'opened' || r.status === 'read' || r.status === 'clicked').length}
                   subtitle="Emails opened by recipients"
                   icon={Eye}
                   variant="purple"
@@ -1419,8 +1419,8 @@ export default function ActivityResultsPage() {
                 <GradientStatCard
                   title="Failed"
                   value={notificationReports.filter((r:any) => r.status === 'failed').length}
-                  subtitle={`${notificationReports.length > 0
-                    ? ((notificationReports.filter((r:any) => r.status === 'failed').length / notificationReports.length) * 100).toFixed(1)
+                  subtitle={`${notificationReports.filter((r:any) => r.status === 'sent' || r.status === 'delivered' || r.status === 'opened' || r.status === 'read' || r.status === 'clicked').length > 0
+                    ? ((notificationReports.filter((r:any) => r.status === 'failed').length / notificationReports.filter((r:any) => r.status === 'sent' || r.status === 'delivered' || r.status === 'opened' || r.status === 'read' || r.status === 'clicked').length) * 100).toFixed(1)
                     : 0}% failure rate`}
                   icon={X}
                   variant="red"
@@ -1506,7 +1506,7 @@ export default function ActivityResultsPage() {
                                 ) : log.status === 'opened' || log.status === 'read' || log.status === 'clicked' ? (
                                   <div className="flex items-center gap-2">
                                     <Eye className="w-4 h-4 text-purple-500" />
-                                    <span className="text-sm font-semibold text-purple-600 capitalize">{log.status}</span>
+                                    <span className="text-sm font-semibold text-qsights-cyan capitalize">{log.status}</span>
                                   </div>
                                 ) : log.status === 'failed' ? (
                                   <div className="flex items-center gap-2">

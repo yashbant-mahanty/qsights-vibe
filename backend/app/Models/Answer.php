@@ -54,6 +54,79 @@ class Answer extends Model
             return $this->file_path;
         }
         
+        // Check if value is enhanced payload JSON
+        if ($this->value && $this->isEnhancedPayload()) {
+            $decoded = json_decode($this->value, true);
+            return $decoded;
+        }
+        
+        return $this->value;
+    }
+
+    /**
+     * Check if the answer contains an enhanced value display mode payload
+     */
+    public function isEnhancedPayload()
+    {
+        if (!$this->value || !is_string($this->value)) {
+            return false;
+        }
+        
+        $decoded = json_decode($this->value, true);
+        return is_array($decoded) && isset($decoded['value_type']);
+    }
+
+    /**
+     * Get the enhanced payload data if available
+     */
+    public function getEnhancedPayload()
+    {
+        if ($this->isEnhancedPayload()) {
+            return json_decode($this->value, true);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get the raw numeric value for reporting/analytics
+     * Returns raw_value for enhanced payloads, or the plain value for legacy answers
+     */
+    public function getRawValue()
+    {
+        if ($this->isEnhancedPayload()) {
+            $payload = json_decode($this->value, true);
+            return $payload['raw_value'] ?? null;
+        }
+        
+        return $this->value;
+    }
+
+    /**
+     * Get the display value for reporting
+     * Returns display_value for enhanced payloads, or the plain value for legacy answers
+     */
+    public function getDisplayValue()
+    {
+        if ($this->isEnhancedPayload()) {
+            $payload = json_decode($this->value, true);
+            return $payload['display_value'] ?? null;
+        }
+        
+        return $this->value;
+    }
+
+    /**
+     * Get the resolved value for analytics grouping
+     * Returns resolved_value for enhanced payloads, or the plain value for legacy answers
+     */
+    public function getResolvedValue()
+    {
+        if ($this->isEnhancedPayload()) {
+            $payload = json_decode($this->value, true);
+            return $payload['resolved_value'] ?? $payload['raw_value'] ?? null;
+        }
+        
         return $this->value;
     }
 

@@ -203,10 +203,11 @@ class DataSafetyController extends Controller
             $health = [
                 'response_backup_enabled' => $this->isSettingEnabled('data_safety_enable_response_backup'),
                 'notification_logging_enabled' => $this->isSettingEnabled('data_safety_enable_notification_logging'),
-                'retention_policy' => SystemSetting::getValue('data_safety_retention_policy'),
+                'retention_policy' => SystemSetting::getValue('data_safety_retention_policy') ?? 'never',
                 'tables_exist' => [
                     'response_audit_logs' => \Schema::hasTable('response_audit_logs'),
                     'notification_logs' => \Schema::hasTable('notification_logs'),
+                    'response_backups' => \Schema::hasTable('response_backups'),
                 ],
                 'timestamp' => now()->toIso8601String(),
             ];
@@ -265,6 +266,147 @@ class DataSafetyController extends Controller
             return filter_var($value, FILTER_VALIDATE_BOOLEAN);
         } catch (\Exception $e) {
             return false;
+        }
+    }
+
+    /**
+     * Get migration statistics for JSON to backups
+     */
+    public function migrationStats()
+    {
+        try {
+            // Total responses
+            $totalResponses = \App\Models\Response::count();
+            
+            // Responses with JSON answers - PostgreSQL compatible
+            $withJson = \App\Models\Response::whereNotNull('answers')
+                ->whereRaw("answers::text != '{}'")
+                ->whereRaw("answers::text != 'null'")
+                ->count();
+            
+            // Responses with backup records
+            $backedUp = \DB::table('response_backups')
+                ->distinct('response_id')
+                ->count('response_id');
+            
+            // Total backup records
+            $totalBackups = \DB::table('response_backups')->count();
+            
+            return response()->json([
+                'total_responses' => $totalResponses,
+                'with_json' => $withJson,
+                'backed_up' => $backedUp,
+                'total_backups' => $totalBackups,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to fetch migration stats',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get recent backup records
+     */
+    public function getBackups(Request $request)
+    {
+        try {
+            $limit = $request->input('limit', 50);
+            
+            $backups = \DB::table('response_backups')
+                ->orderBy('created_at', 'desc')
+                ->limit($limit)
+                ->get();
+            
+            return response()->json([
+                'data' => $backups,
+                'count' => $backups->count(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to fetch backups',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Migrate JSON answers to backup table
+     */
+    public function migrateJsonToBackups()
+    {
+        try {
+            \DB::beginTransaction();
+            
+            // Get responses with JSON answers - PostgreSQL compatible
+            $responses = \App\Models\Response::whereNotNull('answers')
+                ->whereRaw("answers::text != '{}'")
+                ->whereRaw("answers::text != 'null'")
+                ->get();
+            
+            $migratedCount = 0;
+            $errorCount = 0;
+            $errors = [];
+            
+            foreach ($responses as $response) {
+                try {
+                    $jsonAnswers = is_string($response->answers) 
+                        ? json_decode($response->answers, true) 
+                        : $response->answers;
+                    
+                    if (empty($jsonAnswers) || !is_array($jsonAnswers)) {
+                        continue;
+                    }
+                    
+                    // Check if already backed up
+                    $existingBackup = \DB::table('response_backups')
+                        ->where('response_id', $response->id)
+                        ->exists();
+                    
+                    if ($existingBackup) {
+                        continue; // Skip if already backed up
+                    }
+                    
+                    foreach ($jsonAnswers as $questionId => $value) {
+                        \DB::table('response_backups')->insert([
+                            'response_id' => $response->id,
+                            'activity_id' => $response->activity_id,
+                            'participant_id' => $response->participant_id,
+                            'question_id' => $questionId,
+                            'question_type' => 'unknown',
+                            'raw_value' => is_array($value) ? json_encode($value) : $value,
+                            'display_label' => is_array($value) ? json_encode($value) : $value,
+                            'source' => 'json_migration',
+                            'created_at' => $response->created_at ?? now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                    
+                    $migratedCount++;
+                } catch (\Exception $e) {
+                    $errorCount++;
+                    $errors[] = [
+                        'response_id' => $response->id,
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+            
+            \DB::commit();
+            
+            return response()->json([
+                'message' => 'Migration completed',
+                'migrated' => $migratedCount,
+                'errors' => $errorCount,
+                'error_details' => $errors,
+            ]);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return response()->json([
+                'message' => 'Migration failed',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 }

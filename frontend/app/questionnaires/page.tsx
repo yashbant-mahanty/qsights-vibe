@@ -283,7 +283,7 @@ export default function QuestionnairesPage() {
             <p className="text-red-600 font-semibold">{error}</p>
             <button 
               onClick={loadQuestionnaires}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
             >
               Retry
             </button>
@@ -329,10 +329,10 @@ export default function QuestionnairesPage() {
   const getTypeBadge = (type: string) => {
     const colors: { [key: string]: string } = {
       Survey: "bg-blue-100 text-blue-700",
-      Feedback: "bg-purple-100 text-purple-700",
+      Feedback: "bg-cyan-50 text-purple-700",
       Assessment: "bg-orange-100 text-orange-700",
       Review: "bg-pink-100 text-pink-700",
-      Evaluation: "bg-indigo-100 text-indigo-700",
+      Evaluation: "bg-cyan-50 text-indigo-700",
       Checklist: "bg-teal-100 text-teal-700",
       Audit: "bg-cyan-100 text-cyan-700",
     };
@@ -352,12 +352,12 @@ export default function QuestionnairesPage() {
     const colors: { [key: string]: string } = {
       EN: "bg-blue-100 text-blue-700",
       ES: "bg-red-100 text-red-700",
-      FR: "bg-purple-100 text-purple-700",
+      FR: "bg-cyan-50 text-purple-700",
       DE: "bg-yellow-100 text-yellow-700",
       IT: "bg-green-100 text-green-700",
       PT: "bg-orange-100 text-orange-700",
       ZH: "bg-pink-100 text-pink-700",
-      JA: "bg-indigo-100 text-indigo-700",
+      JA: "bg-cyan-50 text-indigo-700",
     };
 
     return (
@@ -396,7 +396,7 @@ export default function QuestionnairesPage() {
             {currentUser && canCreateResource(currentUser.role, 'questionnaires') && (
               <a
                 href="/questionnaires/create"
-                className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 Create Questionnaire

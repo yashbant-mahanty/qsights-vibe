@@ -186,7 +186,7 @@ export default function ApprovalReviewPage() {
 
         {/* Modern Activity Details Card */}
         <Card className="overflow-hidden border-0 shadow-lg">
-          <div className="relative bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-8">
+          <div className="relative bg-gradient-to-r bg-qsights-cyan p-8">
             {/* Decorative background patterns */}
             <div className="absolute inset-0 overflow-hidden">
               <div className="absolute -top-1/2 -right-1/2 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>

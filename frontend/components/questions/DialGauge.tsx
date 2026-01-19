@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { resolveDisplayValue } from '@/lib/valueDisplayUtils';
 
 interface DialGaugeProps {
   value: number | null;
@@ -16,6 +17,22 @@ interface DialGaugeProps {
     showValue?: boolean;
     colorStops?: Array<{ percent: number; color: string }>;
     size?: 'sm' | 'md' | 'lg';
+    customImages?: {
+      backgroundUrl?: string | null;
+      needleUrl?: string | null;
+      sequenceImages?: string[];
+    };
+    valueDisplayMode?: 'number' | 'range' | 'text';
+    rangeMappings?: Array<{
+      min: number;
+      max: number;
+      label: string;
+    }>;
+    textMappings?: Array<{
+      value: number;
+      label: string;
+    }>;
+    showImageLabels?: boolean;
   };
   disabled?: boolean;
   className?: string;
@@ -44,7 +61,33 @@ export function DialGauge({
       { percent: 100, color: '#dbeafe' },
     ],
     size = 'md',
+    customImages,
+    valueDisplayMode = 'number',
+    rangeMappings = [],
+    textMappings = [],
+    showImageLabels = true,
   } = settings;
+
+  // Check for custom background image
+  const backgroundImageUrl = customImages?.backgroundUrl || '';
+  const hasBackgroundImage = !!backgroundImageUrl;
+  
+  // Sequence images for interactive highlighting
+  const sequenceImages = customImages?.sequenceImages || [];
+  const hasSequenceImages = sequenceImages.length > 0;
+
+  console.log('🎨 [DIAL GAUGE] Rendering:', {
+    hasCustomImages: !!customImages,
+    customImages,
+    backgroundImageUrl,
+    hasBackgroundImage,
+    hasSequenceImages,
+    sequenceCount: sequenceImages.length,
+    min,
+    max,
+    step,
+    allSettings: settings,
+  });
 
   const [isDragging, setIsDragging] = useState(false);
   const [localValue, setLocalValue] = useState(value ?? min);
@@ -74,6 +117,9 @@ export function DialGauge({
   const safeMax = typeof max === 'number' && !isNaN(max) && max > safeMin ? max : safeMin + 10;
   
   const percentage = Math.max(0, Math.min(100, ((safeLocalValue - safeMin) / (safeMax - safeMin)) * 100)) || 0;
+  
+  // Calculate which sequence image should be active
+  const activeImageIndex = hasSequenceImages ? Math.round((percentage / 100) * (sequenceImages.length - 1)) : -1;
 
   // Calculate angle for the pointer (semi-circle: 180° to 0°, i.e., left to right)
   const startAngle = gaugeType === 'semi-circle' ? 180 : 225;
@@ -236,6 +282,25 @@ export function DialGauge({
 
   return (
     <div className={cn('flex flex-col items-center gap-4', className)}>
+      {/* Background Image (displayed above gauge) - Universal 16:9 aspect ratio */}
+      {hasBackgroundImage && (
+        <div className="w-full max-w-md mb-2 flex justify-center items-center bg-gray-50 rounded-lg">
+          <img
+            src={backgroundImageUrl}
+            alt="Gauge background"
+            className="w-full h-auto rounded-lg"
+            style={{ 
+              maxHeight: '300px',
+              objectFit: 'contain',
+              aspectRatio: '16 / 9',
+              display: 'block'
+            }}
+            crossOrigin="anonymous"
+            draggable={false}
+          />
+        </div>
+      )}
+
       {/* Current Label Display */}
       {currentLabel && (
         <div className="text-lg font-semibold text-gray-700 uppercase tracking-wide">
@@ -243,101 +308,308 @@ export function DialGauge({
         </div>
       )}
 
-      {/* Gauge SVG */}
-      <svg
-        ref={gaugeRef}
-        width={width}
-        height={gaugeType === 'semi-circle' ? height : width}
-        viewBox={`0 0 ${width} ${gaugeType === 'semi-circle' ? height : width}`}
-        className={cn(
-          'select-none',
-          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-        )}
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={() => setIsDragging(false)}
-        role="slider"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={localValue}
-      >
-        {/* Background arc segments with gradient colors */}
-        {gradientSegments.map((segment, i) => (
-          <path
-            key={i}
-            d={segment!.path}
-            fill="none"
-            stroke={segment!.color}
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-          />
-        ))}
+      {/* Combined Gauge + Sequence Images Layout */}
+      {hasSequenceImages ? (
+        <div className="w-full max-w-4xl">
+          <div 
+            className="relative mx-auto"
+            style={{
+              width: `${width + 240}px`,
+              height: `${height + 140}px`,
+            }}
+          >
+            {/* Sequence Images - Positioned AROUND the gauge */}
+            {sequenceImages.map((imageUrl, index) => {
+              const isActive = index === activeImageIndex;
+              const imageValue = min + (index * (max - min) / (sequenceImages.length - 1));
+              
+              // Calculate position along semicircular arc
+              const totalImages = sequenceImages.length;
+              const angleStart = 180; // Left side (180°)
+              const angleEnd = 0; // Right side (0°)
+              const angleRangeImages = angleStart - angleEnd; // 180°
+              
+              // Calculate this image's angle
+              const angleFraction = totalImages === 1 ? 0.5 : index / (totalImages - 1);
+              const imageAngle = angleStart - (angleFraction * angleRangeImages); // 180° to 0°
+              const imageAngleRad = (imageAngle * Math.PI) / 180;
+              
+              // Image dimensions
+              const imageSize = size === 'sm' ? 70 : size === 'lg' ? 110 : 90;
+              
+              // Position images AROUND the arc - increased radius for better spacing
+              const imageRadius = radius + strokeWidth + 80; // More distance from center
+              const containerCenterX = (width + 240) / 2;
+              const containerCenterY = height - 20 + 70; // Adjusted for top padding
+              const imageX = containerCenterX + imageRadius * Math.cos(imageAngleRad);
+              const imageY = containerCenterY - imageRadius * Math.sin(imageAngleRad);
+              
+              return (
+                <div
+                  key={index}
+                  className={cn(
+                    'absolute rounded-lg overflow-hidden border-4 transition-all duration-300',
+                    isActive 
+                      ? 'border-blue-500 shadow-xl shadow-blue-500/50 z-10' 
+                      : 'border-gray-300 opacity-60'
+                  )}
+                  style={{
+                    left: `${imageX - imageSize / 2}px`,
+                    top: `${imageY - imageSize / 2}px`,
+                    width: `${imageSize}px`,
+                    height: `${imageSize}px`,
+                    filter: isActive ? 'grayscale(0%) brightness(1)' : 'grayscale(100%) brightness(0.7)',
+                    transform: `scale(${isActive ? 1.15 : 0.95})`,
+                  }}
+                >
+                  <img
+                    src={imageUrl}
+                    alt={`Value ${imageValue}`}
+                    className="w-full h-full object-cover"
+                    style={{
+                      display: 'block'
+                    }}
+                    crossOrigin="anonymous"
+                    onError={(e) => {
+                      console.error(`❌ [DIAL] Image ${index} failed to load:`, imageUrl);
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      if (target.parentElement) {
+                        target.parentElement.style.backgroundColor = '#f3f4f6';
+                      }
+                    }}
+                  />
+                  {/* Value label overlay - conditionally shown */}
+                  {showImageLabels && (
+                    <div
+                      className={cn(
+                        'absolute bottom-0 left-0 right-0 py-1 text-center text-sm font-bold transition-colors duration-300',
+                        isActive
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-800/70 text-gray-200'
+                      )}
+                    >
+                      {Math.round(imageValue)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
-        {/* Pointer */}
-        {showPointer && (
-          <g>
-            {/* Pointer needle */}
-            <line
-              x1={centerX}
-              y1={centerY}
-              x2={pointerX}
-              y2={pointerY}
-              stroke="#1e3a5f"
-              strokeWidth={4}
-              strokeLinecap="round"
-              className="transition-all duration-100"
-            />
-            {/* Center circle */}
-            <circle
-              cx={centerX}
-              cy={centerY}
-              r={12}
-              fill="#1e3a5f"
-            />
-            {/* Inner center */}
-            <circle
-              cx={centerX}
-              cy={centerY}
-              r={6}
-              fill="#fff"
-            />
-          </g>
-        )}
-
-        {/* Tick marks and labels around the gauge */}
-        {labels.map((label, i) => {
-          const labelPct = ((label.value - min) / (max - min)) * 100;
-          const labelAngle = startAngle - (labelPct / 100) * angleRange;
-          const labelRad = (labelAngle * Math.PI) / 180;
-          const labelRadius = radius + strokeWidth / 2 + 20;
-          const labelX = centerX + labelRadius * Math.cos(labelRad);
-          const labelY = centerY - labelRadius * Math.sin(labelRad);
-
-          return (
-            <text
-              key={i}
-              x={labelX}
-              y={labelY}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              className="text-xs fill-gray-500"
+            {/* Gauge SVG - Centered in the layout */}
+            <svg
+              ref={gaugeRef}
+              width={width}
+              height={gaugeType === 'semi-circle' ? height : width}
+              viewBox={`0 0 ${width} ${gaugeType === 'semi-circle' ? height : width}`}
+              className={cn(
+                'absolute select-none',
+                disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              )}
+              style={{
+                left: '50%',
+                top: '70px',
+                transform: 'translateX(-50%)',
+                zIndex: 5,
+              }}
+              onMouseDown={handleMouseDown}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={() => setIsDragging(false)}
+              role="slider"
+              aria-valuemin={min}
+              aria-valuemax={max}
+              aria-valuenow={localValue}
             >
-              {label.value}
-            </text>
-          );
-        })}
-      </svg>
+              {/* Background arc segments with gradient colors */}
+              {gradientSegments.map((segment, i) => (
+                <path
+                  key={i}
+                  d={segment!.path}
+                  fill="none"
+                  stroke={segment!.color}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                />
+              ))}
 
-      {/* Value and drag instruction */}
-      <div className="flex flex-col items-center gap-2">
-        {showValue && (
-          <div className="text-2xl font-bold text-gray-800">{localValue}</div>
-        )}
-        <div className="text-xs text-gray-400 uppercase tracking-wider">
-          Drag the pointer to select
+              {/* Pointer */}
+              {showPointer && (
+                <g>
+                  {/* Pointer needle */}
+                  <line
+                    x1={centerX}
+                    y1={centerY}
+                    x2={pointerX}
+                    y2={pointerY}
+                    stroke="#1e3a5f"
+                    strokeWidth={4}
+                    strokeLinecap="round"
+                    className="transition-all duration-100"
+                  />
+                  {/* Center circle */}
+                  <circle
+                    cx={centerX}
+                    cy={centerY}
+                    r={12}
+                    fill="#1e3a5f"
+                  />
+                  {/* Inner center */}
+                  <circle
+                    cx={centerX}
+                    cy={centerY}
+                    r={6}
+                    fill="#fff"
+                  />
+                </g>
+              )}
+
+              {/* Tick marks and labels around the gauge */}
+              {labels.map((label, i) => {
+                const labelPct = ((label.value - min) / (max - min)) * 100;
+                const labelAngle = startAngle - (labelPct / 100) * angleRange;
+                const labelRad = (labelAngle * Math.PI) / 180;
+                const labelRadius = radius + strokeWidth / 2 + 20;
+                const labelX = centerX + labelRadius * Math.cos(labelRad);
+                const labelY = centerY - labelRadius * Math.sin(labelRad);
+
+                return (
+                  <text
+                    key={i}
+                    x={labelX}
+                    y={labelY}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="text-xs fill-gray-500"
+                  >
+                    {label.value}
+                  </text>
+                );
+              })}
+            </svg>
+
+            {/* Current value display below the gauge */}
+            <div 
+              className="absolute text-center"
+              style={{
+                left: '50%',
+                bottom: '20px',
+                transform: 'translateX(-50%)',
+                zIndex: 5,
+              }}
+            >
+              {showValue && (
+                <div className="text-2xl font-bold text-gray-800 mb-1">
+                  {resolveDisplayValue(localValue, valueDisplayMode, rangeMappings, textMappings)}
+                </div>
+              )}
+              <div className="text-xs text-gray-400 uppercase tracking-wider">
+                Drag the pointer to select
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        // Original layout when no sequence images
+        <>
+          <svg
+            ref={gaugeRef}
+            width={width}
+            height={gaugeType === 'semi-circle' ? height : width}
+            viewBox={`0 0 ${width} ${gaugeType === 'semi-circle' ? height : width}`}
+            className={cn(
+              'select-none',
+              disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            )}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={() => setIsDragging(false)}
+            role="slider"
+            aria-valuemin={min}
+            aria-valuemax={max}
+            aria-valuenow={localValue}
+          >
+            {/* Background arc segments with gradient colors */}
+            {gradientSegments.map((segment, i) => (
+              <path
+                key={i}
+                d={segment!.path}
+                fill="none"
+                stroke={segment!.color}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+              />
+            ))}
+
+            {/* Pointer */}
+            {showPointer && (
+              <g>
+                {/* Pointer needle */}
+                <line
+                  x1={centerX}
+                  y1={centerY}
+                  x2={pointerX}
+                  y2={pointerY}
+                  stroke="#1e3a5f"
+                  strokeWidth={4}
+                  strokeLinecap="round"
+                  className="transition-all duration-100"
+                />
+                {/* Center circle */}
+                <circle
+                  cx={centerX}
+                  cy={centerY}
+                  r={12}
+                  fill="#1e3a5f"
+                />
+                {/* Inner center */}
+                <circle
+                  cx={centerX}
+                  cy={centerY}
+                  r={6}
+                  fill="#fff"
+                />
+              </g>
+            )}
+
+            {/* Tick marks and labels around the gauge */}
+            {labels.map((label, i) => {
+              const labelPct = ((label.value - min) / (max - min)) * 100;
+              const labelAngle = startAngle - (labelPct / 100) * angleRange;
+              const labelRad = (labelAngle * Math.PI) / 180;
+              const labelRadius = radius + strokeWidth / 2 + 20;
+              const labelX = centerX + labelRadius * Math.cos(labelRad);
+              const labelY = centerY - labelRadius * Math.sin(labelRad);
+
+              return (
+                <text
+                  key={i}
+                  x={labelX}
+                  y={labelY}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="text-xs fill-gray-500"
+                >
+                  {label.value}
+                </text>
+              );
+            })}
+          </svg>
+
+          {/* Value and drag instruction */}
+          <div className="flex flex-col items-center gap-2">
+            {showValue && (
+              <div className="text-2xl font-bold text-gray-800">
+                {resolveDisplayValue(localValue, valueDisplayMode, rangeMappings, textMappings)}
+              </div>
+            )}
+            <div className="text-xs text-gray-400 uppercase tracking-wider">
+              Drag the pointer to select
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

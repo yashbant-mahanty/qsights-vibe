@@ -131,8 +131,8 @@ export default function ProgramModeratorLayout({ children }: ProgramModeratorLay
                   !sidebarOpen && "justify-center"
                 } ${
                   isActive 
-                    ? "bg-qsights-blue text-white" 
-                    : "text-gray-700 hover:bg-qsights-blue hover:text-white"
+                    ? "bg-qsights-dark text-white" 
+                    : "text-gray-700 hover:bg-qsights-cyan/10 hover:text-qsights-dark"
                 }`}
                 title={!sidebarOpen ? item.label : ""}
               >
@@ -193,7 +193,7 @@ export default function ProgramModeratorLayout({ children }: ProgramModeratorLay
                   {isLoading ? (
                     <div className="w-8 h-8 bg-gray-300 rounded-full animate-pulse"></div>
                   ) : (
-                    <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                    <div className="w-8 h-8 bg-qsights-cyan rounded-full flex items-center justify-center text-white text-sm font-semibold">
                       {currentUser?.name ? currentUser.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) : 'PM'}
                     </div>
                   )}
@@ -242,8 +242,8 @@ export default function ProgramModeratorLayout({ children }: ProgramModeratorLay
                         className="flex items-center gap-3 px-5 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
                         onClick={() => setUserDropdownOpen(false)}
                       >
-                        <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
-                          <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-qsights-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>

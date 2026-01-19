@@ -154,7 +154,7 @@ export default function HelpSupportPage() {
 
   return (
     <RoleBasedLayout>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
           <button
@@ -305,8 +305,8 @@ export default function HelpSupportPage() {
             </button>
             <a href={`tel:${supportPhone.replace(/[^+\\d]/g, '')}`} className="block">
               <CardContent className="p-6 text-center cursor-pointer">
-                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Phone className="w-6 h-6 text-purple-600" />
+                <div className="w-12 h-12 bg-cyan-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Phone className="w-6 h-6 text-qsights-cyan" />
                 </div>
                 <h3 className="font-semibold text-gray-900">Phone Support</h3>
                 <p className="text-sm text-gray-600 mt-1">{supportPhone}</p>

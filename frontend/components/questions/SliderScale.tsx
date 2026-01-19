@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { resolveDisplayValue } from '@/lib/valueDisplayUtils';
 
 interface SliderScaleProps {
   value: number | null;
@@ -20,6 +21,24 @@ interface SliderScaleProps {
     showTicks?: boolean;
     trackColor?: string;
     thumbColor?: string;
+    useCustomImages?: boolean;
+    customImages?: {
+      thumbUrl?: string;
+      trackUrl?: string;
+      backgroundUrl?: string; // Main background image displayed above slider
+      sequenceImages?: string[]; // Array of image URLs for interactive sequence
+    };
+    valueDisplayMode?: 'number' | 'range' | 'text';
+    rangeMappings?: Array<{
+      min: number;
+      max: number;
+      label: string;
+    }>;
+    textMappings?: Array<{
+      value: number;
+      label: string;
+    }>;
+    showImageLabels?: boolean;
   };
   disabled?: boolean;
   className?: string;
@@ -34,6 +53,9 @@ export function SliderScale({
 }: SliderScaleProps) {
   const {
     min = 0,
+    valueDisplayMode = 'number',
+    rangeMappings = [],
+    textMappings = [],
     max = 10,
     step = 1,
     orientation = 'horizontal',
@@ -42,6 +64,9 @@ export function SliderScale({
     showTicks = true,
     trackColor = '#0ea5e9',
     thumbColor = '#0284c7',
+    useCustomImages = false,
+    customImages = {},
+    showImageLabels = true,
   } = settings;
 
   const [isDragging, setIsDragging] = useState(false);
@@ -77,6 +102,7 @@ export function SliderScale({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      console.log('🖱️ [SLIDER] handleMouseDown called, disabled:', disabled);
       if (disabled) return;
       e.preventDefault();
       setIsDragging(true);
@@ -142,10 +168,51 @@ export function SliderScale({
   const safeStep = typeof step === 'number' && !isNaN(step) && step > 0 ? step : 1;
   
   const percentage = Math.max(0, Math.min(100, ((safeLocalValue - safeMin) / (safeMax - safeMin)) * 100)) || 0;
-  const tickCount = Math.max(1, Math.floor((safeMax - safeMin) / safeStep) + 1);
-  const ticks = Array.from({ length: tickCount }, (_, i) => safeMin + i * safeStep);
+  
+  // Calculate ticks - limit to max 11 ticks for readability
+  const range = safeMax - safeMin;
+  const rawTickCount = Math.floor(range / safeStep) + 1;
+  const MAX_TICKS = 11;
+  
+  let ticks: number[] = [];
+  if (rawTickCount <= MAX_TICKS) {
+    // Show all ticks if within limit
+    ticks = Array.from({ length: rawTickCount }, (_, i) => safeMin + i * safeStep);
+  } else {
+    // Show limited ticks evenly distributed
+    const tickStep = range / (MAX_TICKS - 1);
+    ticks = Array.from({ length: MAX_TICKS }, (_, i) => {
+      const val = safeMin + i * tickStep;
+      // Round to nearest step value
+      return Math.round(val / safeStep) * safeStep;
+    });
+    // Ensure min and max are included
+    ticks[0] = safeMin;
+    ticks[ticks.length - 1] = safeMax;
+    // Remove duplicates and sort
+    ticks = [...new Set(ticks)].sort((a, b) => a - b);
+  }
 
   const isVertical = orientation === 'vertical';
+  // Show background image if URL exists - use backgroundUrl or trackUrl for display above slider
+  // Note: trackUrl is displayed as image above, not used as actual track background (keep colored track)
+  const backgroundImageUrl = customImages?.backgroundUrl || customImages?.trackUrl || '';
+  const hasBackgroundImage = !!backgroundImageUrl;
+  
+  // Sequence images for interactive highlighting
+  const sequenceImages = customImages?.sequenceImages || [];
+  const hasSequenceImages = sequenceImages.length > 0;
+  
+  // Calculate which sequence image should be active based on current value
+  const activeImageIndex = hasSequenceImages ? Math.round(((localValue - safeMin) / (safeMax - safeMin)) * (sequenceImages.length - 1)) : -1;
+
+  console.log('🎨 [SLIDER] hasSequenceImages:', hasSequenceImages);
+  console.log('🎨 [SLIDER] sequenceImages:', sequenceImages);
+  console.log('🎨 [SLIDER] sequenceImages.length:', sequenceImages.length);
+  console.log('🎨 [SLIDER] isVertical:', isVertical);
+  console.log('🎨 [SLIDER] orientation:', orientation);
+  console.log('🎨 [SLIDER] customImages:', customImages);
+  console.log('🎨 [SLIDER] WILL RENDER SEQUENCE:', hasSequenceImages && !isVertical);
 
   return (
     <div
@@ -155,8 +222,118 @@ export function SliderScale({
         className
       )}
     >
-      {/* Start Label */}
-      {labels.start && (
+      {/* Background Image (displayed above slider) - Universal 16:9 aspect ratio */}
+      {hasBackgroundImage && !isVertical && (
+        <div className="w-full mb-4 flex justify-center items-center bg-gray-50 rounded-lg">
+          <img
+            src={backgroundImageUrl}
+            alt="Scale background"
+            className="w-full h-auto rounded-lg"
+            style={{ 
+              maxHeight: '400px',
+              objectFit: 'contain',
+              aspectRatio: '16 / 9',
+              display: 'block'
+            }}
+            crossOrigin="anonymous"
+            draggable={false}
+          />
+        </div>
+      )}
+
+      {/* Sequence Images with Interactive Highlighting */}
+      {hasSequenceImages && !isVertical && (() => {
+        console.log('✅ [SLIDER] RENDERING SEQUENCE IMAGES BLOCK');
+        return (
+        <div className="w-full mb-6">
+          <div className="flex justify-between items-center gap-2">
+            {sequenceImages.map((imageUrl, index) => {
+              console.log(`🖼️ [SLIDER] Rendering image ${index}:`, imageUrl);
+              return (
+              <div
+                key={index}
+                className={cn(
+                  'relative flex-1 rounded-lg overflow-hidden transition-all duration-300 ease-out',
+                  'border-2',
+                  index === activeImageIndex 
+                    ? 'border-blue-500 scale-105 shadow-lg shadow-blue-200' 
+                    : 'border-transparent scale-95 opacity-40'
+                )}
+                style={{
+                  filter: index === activeImageIndex ? 'grayscale(0%)' : 'grayscale(100%)',
+                }}
+              >
+                <img
+                  src={imageUrl}
+                  alt={`Value ${index}`}
+                  className="w-full h-auto bg-gray-50"
+                  style={{ 
+                    maxHeight: '120px',
+                    objectFit: 'contain',
+                    aspectRatio: '16 / 9',
+                    display: 'block'
+                  }}
+                  crossOrigin="anonymous"
+                  draggable={false}
+                  onLoad={() => console.log(`✅ [SLIDER] Image ${index} loaded successfully`)}
+                  onError={(e) => {
+                    console.error(`❌ [SLIDER] Image ${index} failed to load:`, imageUrl, e);
+                    // Set a placeholder background on error
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    if (target.parentElement) {
+                      target.parentElement.style.backgroundColor = '#f3f4f6';
+                      target.parentElement.style.minHeight = '120px';
+                    }
+                  }}
+                />
+                {/* Value label overlay - conditionally shown */}
+                {showImageLabels && (
+                  <div className={cn(
+                    'absolute bottom-0 left-0 right-0 text-center py-1 text-xs font-semibold transition-colors duration-300',
+                    index === activeImageIndex 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-800/60 text-gray-300'
+                  )}>
+                    {Math.round(safeMin + (index / (sequenceImages.length - 1)) * (safeMax - safeMin))}
+                  </div>
+                )}
+              </div>
+              );
+            })}
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* Labels Row (when using custom background) */}
+      {hasBackgroundImage && !isVertical && (labels.start || labels.end) && (
+        <div className="flex justify-between items-center w-full px-2 mb-2">
+          <div className="text-sm font-medium text-gray-600 uppercase tracking-wide">
+            {labels.start || ''}
+          </div>
+          <div className="flex-1 flex justify-center">
+            <div className="h-px w-full bg-gray-300 relative">
+              <div className="absolute left-0 top-1/2 -translate-y-1/2">
+                <svg width="8" height="8" viewBox="0 0 8 8">
+                  <path d="M8 4 L0 0 L0 8 Z" fill="#9CA3AF" />
+                </svg>
+              </div>
+              <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                <svg width="8" height="8" viewBox="0 0 8 8">
+                  <path d="M0 4 L8 0 L8 8 Z" fill="#9CA3AF" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="text-sm font-medium text-gray-600 uppercase tracking-wide">
+            {labels.end || ''}
+          </div>
+        </div>
+      )}
+
+      {/* Start Label (standard mode without background image) */}
+      {!hasBackgroundImage && labels.start && (
         <div
           className={cn(
             'text-sm font-medium text-gray-600',
@@ -229,12 +406,13 @@ export function SliderScale({
           {/* Thumb */}
           <div
             className={cn(
-              'absolute w-6 h-6 rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 border-2 border-white',
+              'absolute transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75',
+              useCustomImages && customImages.thumbUrl ? 'w-10 h-10' : 'w-6 h-6 rounded-full shadow-lg border-2 border-white',
               isDragging && 'scale-110',
               !disabled && 'hover:scale-105'
             )}
             style={{
-              backgroundColor: thumbColor,
+              backgroundColor: useCustomImages && customImages.thumbUrl ? 'transparent' : thumbColor,
               ...(isVertical
                 ? {
                     bottom: `${percentage}%`,
@@ -247,14 +425,24 @@ export function SliderScale({
                   }),
             }}
           >
-            {/* Drag Handle Icon */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex gap-0.5">
-                <div className="w-0.5 h-2 bg-white/60 rounded-full" />
-                <div className="w-0.5 h-2 bg-white/60 rounded-full" />
-                <div className="w-0.5 h-2 bg-white/60 rounded-full" />
+            {useCustomImages && customImages.thumbUrl ? (
+              /* Custom Thumb Image */
+              <img
+                src={customImages.thumbUrl}
+                alt="Slider thumb"
+                className="w-full h-full object-contain"
+                draggable={false}
+              />
+            ) : (
+              /* Default Drag Handle Icon */
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex gap-0.5">
+                  <div className="w-0.5 h-2 bg-white/60 rounded-full" />
+                  <div className="w-0.5 h-2 bg-white/60 rounded-full" />
+                  <div className="w-0.5 h-2 bg-white/60 rounded-full" />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Tick Marks */}
@@ -265,8 +453,8 @@ export function SliderScale({
                 isVertical ? 'left-full ml-2 h-full' : 'top-full mt-2 w-full'
               )}
             >
-              {ticks.map((tick, i) => {
-                const tickPercentage = ((tick - min) / (max - min)) * 100;
+              {ticks.map((tick) => {
+                const tickPercentage = ((tick - safeMin) / (safeMax - safeMin)) * 100;
                 return (
                   <div
                     key={tick}
@@ -291,13 +479,20 @@ export function SliderScale({
         </div>
       </div>
 
-      {/* Mid Label */}
-      {labels.mid && !isVertical && (
+      {/* Helper Text (when using custom background) */}
+      {hasBackgroundImage && !isVertical && (
+        <div className="text-center text-sm text-gray-500 font-medium tracking-wide mt-1">
+          DRAG THE SLIDER TO SELECT
+        </div>
+      )}
+
+      {/* Mid Label (standard mode) */}
+      {!hasBackgroundImage && labels.mid && !isVertical && (
         <div className="text-xs text-gray-500 text-center">{labels.mid}</div>
       )}
 
-      {/* End Label */}
-      {labels.end && (
+      {/* End Label (standard mode without background image) */}
+      {!hasBackgroundImage && labels.end && (
         <div
           className={cn(
             'text-sm font-medium text-gray-600',
@@ -317,7 +512,7 @@ export function SliderScale({
           )}
           style={{ color: thumbColor }}
         >
-          {localValue}
+          {resolveDisplayValue(localValue, valueDisplayMode, rangeMappings, textMappings)}
         </div>
       )}
     </div>

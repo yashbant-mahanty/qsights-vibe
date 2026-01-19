@@ -154,8 +154,13 @@ class SendGridWebhookController extends Controller
         // Also update notification log (new audit system)
         if ($sendgridMessageId) {
             try {
+                // Extract base message ID (before the dot if present)
+                $baseMessageId = strpos($sendgridMessageId, '.') !== false 
+                    ? substr($sendgridMessageId, 0, strpos($sendgridMessageId, '.'))
+                    : $sendgridMessageId;
+                
                 $this->notificationLogService->handleWebhook(
-                    $sendgridMessageId,
+                    $baseMessageId,
                     $eventType,
                     [
                         'email' => $email,

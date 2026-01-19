@@ -40,10 +40,10 @@ function getLanguageBadgeColor(code: string): string {
   const colors: { [key: string]: string } = {
     'EN': 'bg-blue-100 text-blue-700 border-blue-300',
     'ES': 'bg-green-100 text-green-700 border-green-300',
-    'FR': 'bg-purple-100 text-purple-700 border-purple-300',
+    'FR': 'bg-cyan-50 text-purple-700 border-purple-300',
     'DE': 'bg-orange-100 text-orange-700 border-orange-300',
     'IT': 'bg-pink-100 text-pink-700 border-pink-300',
-    'PT': 'bg-indigo-100 text-indigo-700 border-indigo-300',
+    'PT': 'bg-cyan-50 text-indigo-700 border-indigo-300',
     'ZH': 'bg-red-100 text-red-700 border-red-300',
     'JA': 'bg-yellow-100 text-yellow-700 border-yellow-300',
     'KO': 'bg-teal-100 text-teal-700 border-teal-300',
@@ -92,8 +92,8 @@ export default function ProgramModeratorDashboard() {
       change: activities.length > 0 ? `${activities.length} total events` : '0 total events',
       trend: 'up' as const,
       icon: CheckCircle,
-      bgColor: 'bg-purple-50',
-      color: 'text-purple-600',
+      bgColor: 'bg-qsights-light',
+      color: 'text-qsights-cyan',
     },
     {
       title: 'Pending Responses',
@@ -174,8 +174,8 @@ export default function ProgramModeratorDashboard() {
         'tr': 'Turkish', 'vi': 'Vietnamese', 'th': 'Thai', 'id': 'Indonesian', 'ro': 'Romanian'
       };
       const languageColors = [
-        'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500',
-        'bg-indigo-500', 'bg-red-500', 'bg-yellow-500', 'bg-teal-500', 'bg-cyan-500'
+        'bg-blue-500', 'bg-green-500', 'bg-qsights-light0', 'bg-orange-500', 'bg-pink-500',
+        'bg-qsights-light0', 'bg-red-500', 'bg-yellow-500', 'bg-teal-500', 'bg-cyan-500'
       ];
 
       transformedActivities.forEach((activity: any) => {
@@ -255,7 +255,7 @@ export default function ProgramModeratorDashboard() {
               <Calendar className="w-4 h-4 inline mr-2" />
               Last 30 Days
             </button>
-            <button className="px-4 py-2 text-sm font-medium text-white bg-qsights-blue rounded-lg hover:bg-qsights-blue/90 transition-colors">
+            <button className="px-4 py-2 text-sm font-medium text-white bg-qsights-dark rounded-lg hover:bg-qsights-dark/90 transition-colors">
               Export Report
             </button>
           </div>
@@ -497,7 +497,7 @@ export default function ProgramModeratorDashboard() {
                       <span className="text-sm font-medium text-green-900">Active Activities</span>
                       <span className="text-xl font-bold text-green-900">{activities.filter(a => a.status === 'active').length}</span>
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                    <div className="flex items-center justify-between p-3 bg-qsights-light rounded-lg">
                       <span className="text-sm font-medium text-purple-900">Avg. Completion</span>
                       <span className="text-xl font-bold text-purple-900">
                         {activities.length > 0 ? Math.round(activities.reduce((sum, a) => sum + a.progress, 0) / activities.length) : 0}%

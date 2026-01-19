@@ -261,8 +261,10 @@ export default function DashboardPage() {
     setSendingReminder(true);
 
     try {
-      const selectedEvent = activities.find((a: any) => a.id === parseInt(selectedEventId));
+      console.log('Looking for event:', selectedEventId, 'in activities:', activities);
+      const selectedEvent = activities.find((a: any) => String(a.id) === String(selectedEventId));
       if (!selectedEvent) {
+        console.error('Event not found. Available activities:', activities.map((a: any) => ({ id: a.id, name: a.name })));
         throw new Error("Event not found");
       }
 
@@ -275,9 +277,9 @@ export default function DashboardPage() {
       };
 
       const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
-        `Reminder: ${selectedEvent.title}`
+        `Reminder: ${selectedEvent.name}`
       )}&dates=${formatDateForGoogle(eventDate)}/${formatDateForGoogle(endDate)}&details=${encodeURIComponent(
-        reminderMessage || `Remember to complete the event: ${selectedEvent.title}`
+        reminderMessage || `Remember to complete the event: ${selectedEvent.name}`
       )}&sf=true&output=xml`;
 
       // Open Google Calendar
@@ -285,7 +287,7 @@ export default function DashboardPage() {
 
       toast({
         title: "Reminder Scheduled!",
-        description: `Calendar reminder has been opened for ${selectedEvent.title}`,
+        description: `Calendar reminder has been opened for ${selectedEvent.name}`,
         variant: "success"
       });
 
@@ -503,7 +505,7 @@ export default function DashboardPage() {
             </button>
             <button 
               onClick={exportReport}
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90"
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90"
             >
               <Download className="w-4 h-4" />
               Export Report
@@ -602,7 +604,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl border border-purple-200 shadow-sm">
                       <p className="text-sm text-gray-600 font-medium">Assessments</p>
-                      <p className="text-3xl font-bold text-purple-600">{assessmentCount}</p>
+                      <p className="text-3xl font-bold text-qsights-cyan">{assessmentCount}</p>
                     </div>
                   </div>
                   <div className="space-y-3 bg-gray-50 rounded-xl p-4">
@@ -693,9 +695,9 @@ export default function DashboardPage() {
 
           {/* Platform Statistics */}
           <Card className="border-0 shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader className="border-b border-gray-100 bg-gradient-to-r from-purple-50 to-pink-50">
+            <CardHeader className="border-b border-gray-100 bg-gradient-to-r from-qsights-light to-cyan-50">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-500 rounded-lg">
+                <div className="p-2 bg-qsights-light0 rounded-lg">
                   <BarChart3 className="w-5 h-5 text-white" />
                 </div>
                 <div>
@@ -721,7 +723,7 @@ export default function DashboardPage() {
                       <p className="text-3xl font-bold text-gray-900">{totalPrograms}</p>
                     </div>
                     <div className="p-5 bg-gradient-to-br from-purple-50 via-fuchsia-50 to-purple-100 rounded-xl border border-purple-200 shadow-sm hover:shadow-md transition-shadow">
-                      <Users className="w-8 h-8 text-purple-600 mb-2" />
+                      <Users className="w-8 h-8 text-qsights-cyan mb-2" />
                       <p className="text-sm text-gray-600 font-medium mb-1">Participants</p>
                       <p className="text-3xl font-bold text-gray-900">
                         {totalParticipants.toLocaleString()}
@@ -983,7 +985,7 @@ export default function DashboardPage() {
                                 {freq.frequency || 'Not specified'}
                               </span>
                             </div>
-                            <span className="bg-qsights-blue/10 text-qsights-blue text-xs font-medium px-2 py-1 rounded-full">
+                            <span className="bg-qsights-dark/10 text-qsights-blue text-xs font-medium px-2 py-1 rounded-full">
                               {freq.count} {freq.count === 1 ? 'event' : 'events'}
                             </span>
                           </div>
@@ -1175,7 +1177,7 @@ export default function DashboardPage() {
                           <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs ${
                             activity.type === 'survey' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
                             activity.type === 'poll' ? 'bg-green-100 text-green-700 border border-green-200' :
-                            'bg-purple-100 text-purple-700 border border-purple-200'
+                            'bg-cyan-50 text-purple-700 border border-purple-200'
                           }`}>
                             {activity.type}
                           </span>
@@ -1243,8 +1245,8 @@ export default function DashboardPage() {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Bell className="w-5 h-5 text-purple-600" />
+                    <div className="p-2 bg-cyan-50 rounded-lg">
+                      <Bell className="w-5 h-5 text-qsights-cyan" />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-gray-900">Set Reminder</h3>
@@ -1269,7 +1271,7 @@ export default function DashboardPage() {
                   <select
                     value={selectedEventId}
                     onChange={(e) => setSelectedEventId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-cyan"
                   >
                     {activities.map((activity: any) => (
                       <option key={activity.id} value={activity.id}>
@@ -1289,7 +1291,7 @@ export default function DashboardPage() {
                       type="date"
                       value={reminderDate}
                       onChange={(e) => setReminderDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-cyan"
                     />
                   </div>
                   <div>
@@ -1300,7 +1302,7 @@ export default function DashboardPage() {
                       type="time"
                       value={reminderTime}
                       onChange={(e) => setReminderTime(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-cyan"
                     />
                   </div>
                 </div>
@@ -1314,7 +1316,7 @@ export default function DashboardPage() {
                     value={reminderMessage}
                     onChange={(e) => setReminderMessage(e.target.value)}
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-cyan"
                     placeholder="Add a custom message..."
                   />
                 </div>
@@ -1337,7 +1339,7 @@ export default function DashboardPage() {
                   <button
                     onClick={scheduleReminder}
                     disabled={sendingReminder}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50"
                   >
                     {sendingReminder ? "Opening Calendar..." : "Open Calendar"}
                   </button>

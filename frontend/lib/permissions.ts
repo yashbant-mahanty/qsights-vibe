@@ -194,23 +194,34 @@ export function hasFullAccess(role: UserRole): boolean {
   return ['super-admin', 'admin'].includes(role);
 }
 
-// Get navigation items based on role
-export function getNavigationItems(role: UserRole) {
+// Get navigation items based on role and services (for custom roles)
+export function getNavigationItems(role: UserRole, services?: string[]) {
   const items = [];
 
+  // Helper function to check if service is allowed
+  const hasService = (serviceId: string) => {
+    // If no services specified or user is super-admin/admin, allow all
+    if (!services || services.length === 0 || hasFullAccess(role)) {
+      return true;
+    }
+    return services.includes(serviceId);
+  };
+
   // Dashboard - all roles except moderator have dashboard
-  if (role === 'super-admin' || role === 'admin') {
-    items.push({ label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard' });
-  } else if (role === 'program-admin') {
-    items.push({ label: 'Dashboard', href: '/program-admin', icon: 'LayoutDashboard' });
-  } else if (role === 'program-manager') {
-    items.push({ label: 'Dashboard', href: '/program-manager', icon: 'LayoutDashboard' });
-  } else if (role === 'program-moderator') {
-    items.push({ label: 'Dashboard', href: '/program-moderator', icon: 'LayoutDashboard' });
+  if (hasService('dashboard')) {
+    if (role === 'super-admin' || role === 'admin') {
+      items.push({ label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard' });
+    } else if (role === 'program-admin') {
+      items.push({ label: 'Dashboard', href: '/program-admin', icon: 'LayoutDashboard' });
+    } else if (role === 'program-manager') {
+      items.push({ label: 'Dashboard', href: '/program-manager', icon: 'LayoutDashboard' });
+    } else if (role === 'program-moderator') {
+      items.push({ label: 'Dashboard', href: '/program-moderator', icon: 'LayoutDashboard' });
+    }
   }
 
   // Organizations - only super admin/admin
-  if (hasFullAccess(role)) {
+  if (hasFullAccess(role) && hasService('list_organization')) {
     items.push({ label: 'Organizations', href: '/organizations', icon: 'Building2' });
   }
 
@@ -220,12 +231,12 @@ export function getNavigationItems(role: UserRole) {
   }
 
   // Programs - super admin, admin, program admin can manage; program manager can view
-  if (canAccessResource(role, 'programs')) {
+  if (canAccessResource(role, 'programs') && hasService('list_programs')) {
     items.push({ label: 'Programs', href: '/programs', icon: 'FolderTree' });
   }
 
   // Participants - all except moderator
-  if (canAccessResource(role, 'participants')) {
+  if (canAccessResource(role, 'participants') && hasService('list_participants')) {
     items.push({ label: 'Participants', href: '/participants', icon: 'UserCheck' });
   }
 
@@ -235,7 +246,7 @@ export function getNavigationItems(role: UserRole) {
   }
 
   // Activities - all roles can access
-  if (canAccessResource(role, 'activities')) {
+  if (canAccessResource(role, 'activities') && hasService('list_activity')) {
     items.push({ label: 'Events', href: '/activities', icon: 'Activity' });
   }
 
@@ -245,7 +256,7 @@ export function getNavigationItems(role: UserRole) {
   }
 
   // Reports & Analytics - all roles can access
-  if (canAccessResource(role, 'reports')) {
+  if (canAccessResource(role, 'reports') && hasService('view_report')) {
     items.push({ label: 'Reports & Analytics', href: '/analytics', icon: 'BarChart3' });
   }
 

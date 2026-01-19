@@ -352,7 +352,7 @@ export default function ReportsPage() {
             <button 
               onClick={exportToExcel}
               disabled={!hasData}
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
               Export Excel
@@ -493,7 +493,7 @@ export default function ReportsPage() {
             <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-200">
               <button
                 onClick={() => setFilters({...filters})}
-                className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+                className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
               >
                 Apply Filters
               </button>
@@ -564,7 +564,7 @@ export default function ReportsPage() {
                 <div className="flex items-center justify-center gap-3">
                   <a
                     href="/activities/create"
-                    className="px-6 py-3 bg-qsights-blue text-white rounded-lg font-medium hover:bg-qsights-blue/90 transition-colors"
+                    className="px-6 py-3 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 transition-colors"
                   >
                     Create Activity
                   </a>
@@ -641,7 +641,7 @@ export default function ReportsPage() {
                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                               activity.type === 'survey' ? 'bg-blue-100 text-blue-700' :
                               activity.type === 'poll' ? 'bg-green-100 text-green-700' :
-                              'bg-purple-100 text-purple-700'
+                              'bg-cyan-50 text-purple-700'
                             }`}>
                               {activity.type}
                             </span>
@@ -689,7 +689,7 @@ export default function ReportsPage() {
                               activity.status === 'draft' ? 'bg-gray-100 text-gray-700' :
                               activity.status === 'closed' ? 'bg-blue-100 text-blue-700' :
                               activity.status === 'expired' ? 'bg-red-100 text-red-700' :
-                              'bg-purple-100 text-purple-700'
+                              'bg-cyan-50 text-purple-700'
                             }`}>
                               {activity.status}
                             </span>

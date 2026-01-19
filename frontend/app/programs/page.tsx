@@ -328,7 +328,7 @@ export default function ProgramsPage() {
             <p className="text-red-600 font-semibold">{error}</p>
             <button 
               onClick={loadPrograms}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
             >
               Retry
             </button>
@@ -369,7 +369,7 @@ export default function ProgramsPage() {
           {currentUser && canCreateResource(currentUser.role, 'programs') && (
             <a
               href="/programs/create"
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
             >
               <Plus className="w-4 h-4" />
               Create Program
@@ -485,7 +485,7 @@ export default function ProgramsPage() {
                       >
                         <td className="px-6 py-4">
                           <div className="flex items-center">
-                            <div className="w-10 h-10 bg-qsights-blue rounded-lg flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+                            <div className="w-10 h-10 bg-qsights-dark rounded-lg flex items-center justify-center text-white font-bold text-sm overflow-hidden">
                               {program.logo ? (
                                 <img src={program.logo} alt={program.name} className="w-full h-full object-cover" />
                               ) : (
@@ -638,7 +638,7 @@ export default function ProgramsPage() {
                           onClick={() => setCurrentPage(page)}
                           className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
                             currentPage === page
-                              ? "bg-qsights-blue text-white"
+                              ? "bg-qsights-dark text-white"
                               : "text-gray-700 hover:bg-gray-100"
                           }`}
                         >
@@ -850,7 +850,7 @@ export default function ProgramsPage() {
               <button
                 onClick={handleSaveEdit}
                 disabled={!editFormData.name || !editFormData.code || !editFormData.organization_id}
-                className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save Changes
               </button>
@@ -863,7 +863,7 @@ export default function ProgramsPage() {
       {showUsersModal && selectedProgram && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full my-8 max-h-[calc(100vh-4rem)] flex flex-col">
-            <div className="p-6 border-b border-gray-200 flex-shrink-0 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="p-6 border-b border-gray-200 flex-shrink-0 bg-gradient-to-r from-qsights-light to-cyan-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -955,7 +955,7 @@ export default function ProgramsPage() {
                             <td className="px-4 py-4">
                               <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold ${
                                 user.role === 'program-admin' 
-                                  ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                  ? 'bg-cyan-50 text-purple-700 border border-purple-200'
                                   : user.role === 'program-manager'
                                   ? 'bg-blue-100 text-blue-700 border border-blue-200'
                                   : 'bg-green-100 text-green-700 border border-green-200'
@@ -1055,7 +1055,7 @@ export default function ProgramsPage() {
 
             <div className="p-6 flex-1 overflow-y-auto">
               <div className="space-y-4">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-6">
+                <div className="bg-gradient-to-br from-qsights-light to-cyan-50 border-2 border-blue-200 rounded-lg p-6">
                   <div className="grid grid-cols-1 gap-4">
                     <div>
                       <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">User Name</label>
@@ -1102,7 +1102,7 @@ export default function ProgramsPage() {
                       <p className="mt-1">
                         <span className={`inline-flex px-3 py-1.5 rounded-full text-sm font-bold ${
                           resetCredentials.role === 'program-admin' 
-                            ? 'bg-purple-100 text-purple-800'
+                            ? 'bg-cyan-50 text-purple-800'
                             : resetCredentials.role === 'program-manager'
                             ? 'bg-blue-100 text-blue-800'
                             : 'bg-green-100 text-green-800'

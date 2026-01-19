@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\ProgramRoleController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\QuestionnaireImportController;
 use App\Http\Controllers\Api\SendGridWebhookController;
+use App\Http\Controllers\Api\HierarchyController;
 
 // Public Authentication Routes
 Route::post('/auth/validate-email', [AuthController::class, 'validateEmail']);
@@ -153,9 +154,26 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::delete('/programs/{programId}/roles/{roleId}', [ProgramRoleController::class, 'destroy']);
         Route::post('/programs/{programId}/roles/{roleId}/restore', [ProgramRoleController::class, 'restore']);
     });
+
+    // System-wide Roles Routes (Super Admin only)
+    Route::middleware(['role:super-admin'])->group(function () {
+        Route::get('/system-roles', [ProgramRoleController::class, 'indexSystemRoles']);
+        Route::post('/system-roles', [ProgramRoleController::class, 'storeSystemRole']);
+        Route::get('/system-roles/{roleId}', [ProgramRoleController::class, 'showSystemRole']);
+        Route::put('/system-roles/{roleId}', [ProgramRoleController::class, 'updateSystemRole']);
+        Route::delete('/system-roles/{roleId}', [ProgramRoleController::class, 'destroySystemRole']);
+    });
+
+    // Hierarchy Mapping Routes (Super Admin and Program Admin)
+    Route::middleware(['role:super-admin,program-admin'])->group(function () {
+        Route::get('/hierarchy-mappings', [\App\Http\Controllers\Api\HierarchyMappingController::class, 'index']);
+        Route::post('/hierarchy-mappings', [\App\Http\Controllers\Api\HierarchyMappingController::class, 'store']);
+        Route::delete('/hierarchy-mappings/{id}', [\App\Http\Controllers\Api\HierarchyMappingController::class, 'destroy']);
+        Route::get('/hierarchy-mappings/program/{programId}', [\App\Http\Controllers\Api\HierarchyMappingController::class, 'getHierarchyTree']);
+    });
     
     // Admin and Group Head can manage programs
-    Route::middleware(['role:super-admin,admin'])->group(function () {
+    Route::middleware(['role:super-admin,admin,group-head'])->group(function () {
         Route::post('/programs', [ProgramController::class, 'store']);
         Route::put('/programs/{id}', [ProgramController::class, 'update']);
         Route::patch('/programs/{id}', [ProgramController::class, 'update']);
@@ -180,7 +198,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/participants/template/download', [ParticipantController::class, 'downloadTemplate']);
     
     // Admin and Program roles can manage participants
-    Route::middleware(['role:super-admin,admin,program-admin,program-manager'])->group(function () {
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
         Route::post('/participants', [ParticipantController::class, 'store']);
         Route::post('/participants/bulk-import', [ParticipantController::class, 'bulkImport']);
         Route::post('/participants/bulk-delete', [ParticipantController::class, 'bulkDelete']);
@@ -204,6 +222,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 Route::middleware(['auth:sanctum'])->prefix('uploads/s3')->group(function () {
     Route::get('/config', [App\Http\Controllers\Api\S3UploadController::class, 'checkConfig']);
     Route::post('/', [App\Http\Controllers\Api\S3UploadController::class, 'upload']);
+    Route::post('/bulk', [App\Http\Controllers\Api\S3UploadController::class, 'uploadBulk']);
     Route::delete('/', [App\Http\Controllers\Api\S3UploadController::class, 'delete']);
     Route::post('/presigned-url', [App\Http\Controllers\Api\S3UploadController::class, 'getPresignedUrl']);
     Route::post('/view-url', [App\Http\Controllers\Api\S3UploadController::class, 'getViewUrl']);
@@ -218,7 +237,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/questionnaires/{id}', [QuestionnaireController::class, 'show']);
     
     // Admin and Program roles can manage questionnaires
-    Route::middleware(['role:super-admin,admin,program-admin,program-manager'])->group(function () {
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
         Route::post('/questionnaires', [QuestionnaireController::class, 'store']);
         Route::put('/questionnaires/{id}', [QuestionnaireController::class, 'update']);
         Route::patch('/questionnaires/{id}', [QuestionnaireController::class, 'update']);
@@ -273,7 +292,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/activities/{id}/links', [ActivityController::class, 'getActivityLinks']);
     
     // Admin and Program roles can manage activities
-    Route::middleware(['role:super-admin,admin,program-admin,program-manager'])->group(function () {
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
         Route::post('/activities', [ActivityController::class, 'store']);
         Route::put('/activities/{id}', [ActivityController::class, 'update']);
         Route::patch('/activities/{id}', [ActivityController::class, 'update']);
@@ -335,7 +354,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/responses/{response}/progress', [App\Http\Controllers\Api\ResponseController::class, 'getProgress']);
     
     // Admin/Moderator routes
-    Route::middleware('role:super-admin,admin,program-admin,program-manager,program-moderator')->group(function () {
+    Route::middleware('role:super-admin,admin,group-head,program-admin,program-manager,program-moderator')->group(function () {
         Route::get('/activities/{activity}/responses', [App\Http\Controllers\Api\ResponseController::class, 'index']);
         Route::get('/activities/{activity}/responses/statistics', [App\Http\Controllers\Api\ResponseController::class, 'statistics']);
     });
@@ -588,7 +607,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/{id}', [App\Http\Controllers\Api\EvaluationEventController::class, 'show']);
         
         // Admin-only operations (create, update, delete)
-        Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+        Route::middleware(['role:super-admin,admin,group-head,program-admin'])->group(function () {
             Route::post('/', [App\Http\Controllers\Api\EvaluationEventController::class, 'store']);
             Route::put('/{id}', [App\Http\Controllers\Api\EvaluationEventController::class, 'update']);
             Route::patch('/{id}', [App\Http\Controllers\Api\EvaluationEventController::class, 'update']);
@@ -633,11 +652,133 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
     
     // Data Safety Settings (Super Admin only)
-    Route::middleware(['role:super-admin'])->prefix('data-safety')->group(function () {
+    Route::middleware(['auth:sanctum', 'role:super-admin'])->prefix('data-safety')->group(function () {
         Route::get('/settings', [App\Http\Controllers\Api\DataSafetyController::class, 'getSettings']);
         Route::post('/settings', [App\Http\Controllers\Api\DataSafetyController::class, 'updateSettings']);
         Route::get('/health', [App\Http\Controllers\Api\DataSafetyController::class, 'getHealthCheck']);
         Route::get('/response-audit/stats', [App\Http\Controllers\Api\DataSafetyController::class, 'getResponseAuditStats']);
         Route::get('/notifications/stats', [App\Http\Controllers\Api\DataSafetyController::class, 'getNotificationStats']);
+        Route::get('/migration-stats', [App\Http\Controllers\Api\DataSafetyController::class, 'migrationStats']);
+        Route::get('/backups', [App\Http\Controllers\Api\DataSafetyController::class, 'getBackups']);
+        Route::post('/migrate', [App\Http\Controllers\Api\DataSafetyController::class, 'migrateJsonToBackups']);
+    });
+    
+    // System Design Document (SDD) & Engineering Governance (Super Admin only)
+    Route::middleware(['auth:sanctum', 'role:super-admin'])->prefix('system-design')->group(function () {
+        // SDD Generation & Management
+        Route::get('/data', [App\Http\Controllers\Api\SystemDesignController::class, 'getSDDData']);
+        Route::post('/generate-pdf', [App\Http\Controllers\Api\SystemDesignController::class, 'generatePDF']);
+        Route::get('/download/{filename}', [App\Http\Controllers\Api\SystemDesignController::class, 'downloadPDF']);
+        
+        // Critical Features Management
+        Route::get('/critical-features', [App\Http\Controllers\Api\SystemDesignController::class, 'getCriticalFeatures']);
+        Route::post('/critical-features', [App\Http\Controllers\Api\SystemDesignController::class, 'updateCriticalFeatures']);
+        
+        // Pre-Deployment Testing
+        Route::post('/run-tests', [App\Http\Controllers\Api\SystemDesignController::class, 'runPreDeploymentTests']);
+        
+        // Schema Validation
+        Route::post('/validate-schema', [App\Http\Controllers\Api\SystemDesignController::class, 'validateSchema']);
+        
+        // Rollback Procedures
+        Route::get('/rollback-procedures', [App\Http\Controllers\Api\SystemDesignController::class, 'getRollbackProcedures']);
+    });
+});
+
+// ============================================
+// HIERARCHY & REPORTING MANAGEMENT ROUTES
+// ============================================
+
+// Hierarchy Routes - Admin and Program Admin access (with audit logging)
+Route::middleware(['auth:sanctum', 'role:super-admin,admin,group-head,program-admin', 'log.manager.actions'])->prefix('hierarchy')->group(function () {
+    // Roles
+    Route::get('/roles', [HierarchyController::class, 'getRoles']);
+    
+    // Manager Assignment
+    Route::post('/assign-manager', [HierarchyController::class, 'assignManager']);
+    Route::delete('/remove-manager', [HierarchyController::class, 'removeManager']);
+    Route::post('/validate-assignment', [HierarchyController::class, 'validateAssignment']);
+    
+    // Hierarchy Tree & User Info
+    Route::get('/programs/{programId}/tree', [HierarchyController::class, 'getHierarchyTree']);
+    Route::get('/programs/{programId}/available-managers', [HierarchyController::class, 'getAvailableManagers']);
+    Route::get('/users/{userId}/info', [HierarchyController::class, 'getUserHierarchy']);
+    
+    // Dashboard Access Management
+    Route::get('/managers/{managerId}/dashboard-access', [HierarchyController::class, 'getDashboardAccess']);
+    Route::put('/managers/{managerId}/dashboard-access', [HierarchyController::class, 'updateDashboardAccess']);
+    
+    // Change Logs (Audit Trail)
+    Route::get('/change-logs', [HierarchyController::class, 'getChangeLogs']);
+});
+
+// Manager Dashboard Routes - Managers only (with data scoping and audit logging)
+Route::middleware(['auth:sanctum', 'log.manager.actions', 'validate.data.scope'])->prefix('hierarchy/managers')->group(function () {
+    Route::get('/{managerId}/team', [HierarchyController::class, 'getManagerTeam']);
+    Route::get('/{managerId}/analytics', [HierarchyController::class, 'getTeamAnalytics']);
+    Route::post('/{managerId}/send-notification', [HierarchyController::class, 'sendTeamNotification'])
+        ->middleware('rate.limit.notifications'); // Rate limit notification sending
+});
+
+// Team Member Details - Managers only (with data scoping and audit logging)
+Route::middleware(['auth:sanctum', 'log.manager.actions', 'validate.data.scope'])->prefix('hierarchy')->group(function () {
+    Route::get('/team-members/{memberId}', [HierarchyController::class, 'getTeamMemberDetails']);
+});
+
+// ==========================================
+// EVALUATION MODULE ROUTES
+// ==========================================
+
+Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
+    
+    // Evaluation Roles (Admin-only for create/update/delete)
+    Route::get('/roles', [App\Http\Controllers\Api\EvaluationRoleController::class, 'index']);
+    Route::get('/roles/{id}', [App\Http\Controllers\Api\EvaluationRoleController::class, 'show']);
+    
+    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+        Route::post('/roles', [App\Http\Controllers\Api\EvaluationRoleController::class, 'store']);
+        Route::put('/roles/{id}', [App\Http\Controllers\Api\EvaluationRoleController::class, 'update']);
+        Route::delete('/roles/{id}', [App\Http\Controllers\Api\EvaluationRoleController::class, 'destroy']);
+    });
+    
+    // Evaluation Staff (Admin-only for create/update/delete)
+    Route::get('/staff', [App\Http\Controllers\Api\EvaluationStaffController::class, 'index']);
+    Route::get('/staff/{id}', [App\Http\Controllers\Api\EvaluationStaffController::class, 'show']);
+    
+    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+        Route::post('/staff', [App\Http\Controllers\Api\EvaluationStaffController::class, 'store']);
+        Route::put('/staff/{id}', [App\Http\Controllers\Api\EvaluationStaffController::class, 'update']);
+        Route::delete('/staff/{id}', [App\Http\Controllers\Api\EvaluationStaffController::class, 'destroy']);
+    });
+    
+    // Evaluation Hierarchy (Admin-only for create/update/delete)
+    Route::get('/hierarchy', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'index']);
+    Route::get('/hierarchy/tree', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'getTree']);
+    
+    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+        Route::post('/hierarchy', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'store']);
+        Route::put('/hierarchy/{id}', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'update']);
+        Route::delete('/hierarchy/{id}', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'destroy']);
+    });
+    
+    // Evaluation Assignments (Admin-only for create/update/delete)
+    Route::get('/assignments', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'index']);
+    Route::get('/assignments/{id}', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'show']);
+    
+    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+        Route::post('/assignments', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'store']);
+        Route::post('/assignments/auto-assign', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'autoAssign']);
+        Route::put('/assignments/{id}', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'update']);
+        Route::delete('/assignments/{id}', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'destroy']);
+    });
+    
+    // Evaluation Results (Admin-only for calculate/publish/delete)
+    Route::get('/results', [App\Http\Controllers\Api\EvaluationResultsController::class, 'index']);
+    Route::get('/results/{id}', [App\Http\Controllers\Api\EvaluationResultsController::class, 'show']);
+    
+    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+        Route::post('/results/calculate', [App\Http\Controllers\Api\EvaluationResultsController::class, 'calculate']);
+        Route::post('/results/{id}/publish', [App\Http\Controllers\Api\EvaluationResultsController::class, 'publish']);
+        Route::delete('/results/{id}', [App\Http\Controllers\Api\EvaluationResultsController::class, 'destroy']);
     });
 });

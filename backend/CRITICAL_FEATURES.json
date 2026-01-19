@@ -1,0 +1,107 @@
+{
+  "critical_features": [
+    {
+      "id": 1,
+      "name": "User Authentication & Authorization",
+      "description": "Laravel Sanctum token-based authentication with role-based access control",
+      "impact": "CRITICAL - Without this, no user can access the system",
+      "testing_required": true
+    },
+    {
+      "id": 2,
+      "name": "Event Participation (User & Anonymous)",
+      "description": "Users and anonymous participants can join and complete events/activities",
+      "impact": "CRITICAL - Core functionality for data collection",
+      "testing_required": true
+    },
+    {
+      "id": 3,
+      "name": "Response Saving (Question & Option Level)",
+      "description": "Individual responses saved with full question and option tracking",
+      "impact": "CRITICAL - Data loss if not working",
+      "testing_required": true
+    },
+    {
+      "id": 4,
+      "name": "Notification Lifecycle Tracking",
+      "description": "Complete tracking of notifications: sent → delivered → opened → read",
+      "impact": "CRITICAL - Required for engagement metrics and compliance",
+      "testing_required": true
+    },
+    {
+      "id": 5,
+      "name": "Reports & Analytics",
+      "description": "Comprehensive reporting system with real-time analytics",
+      "impact": "CRITICAL - Business intelligence and decision making",
+      "testing_required": true
+    },
+    {
+      "id": 6,
+      "name": "Role-Based Access Control (RBAC)",
+      "description": "Six roles with granular permissions: super-admin, admin, program-admin, program-manager, program-moderator, participant",
+      "impact": "CRITICAL - Security and data isolation",
+      "testing_required": true
+    },
+    {
+      "id": 7,
+      "name": "Data Audit Logging",
+      "description": "Response audit logs and notification logs for compliance",
+      "impact": "CRITICAL - Legal and compliance requirements",
+      "testing_required": true
+    },
+    {
+      "id": 8,
+      "name": "S3 Image Upload & Storage",
+      "description": "AWS S3 integration for secure image storage with presigned URLs",
+      "impact": "HIGH - Image-based questionnaires will fail",
+      "testing_required": true
+    },
+    {
+      "id": 9,
+      "name": "Email Campaign System",
+      "description": "SendGrid integration with tracking and reporting",
+      "impact": "HIGH - Communication with participants",
+      "testing_required": true
+    },
+    {
+      "id": 10,
+      "name": "Data Safety Settings",
+      "description": "Configurable backup, retention, and logging policies",
+      "impact": "HIGH - Data protection and recovery",
+      "testing_required": false
+    }
+  ],
+  "non_critical_features": [
+    {
+      "id": 1,
+      "name": "Landing Page CMS",
+      "description": "Content management for public-facing landing pages",
+      "impact": "LOW - Marketing feature, doesn't affect core functionality",
+      "testing_required": false
+    },
+    {
+      "id": 2,
+      "name": "Theme Customization",
+      "description": "Branding and color scheme customization",
+      "impact": "LOW - Aesthetic feature only",
+      "testing_required": false
+    },
+    {
+      "id": 3,
+      "name": "Contact Forms",
+      "description": "Demo requests, contact sales, and general contact forms",
+      "impact": "LOW - Lead generation, not critical for existing users",
+      "testing_required": false
+    },
+    {
+      "id": 4,
+      "name": "Event Contact Messages",
+      "description": "Contact form for specific events",
+      "impact": "LOW - Optional communication channel",
+      "testing_required": false
+    }
+  ],
+  "version": "2.0.0",
+  "last_updated": "2026-01-18",
+  "notes": "This list MUST be updated before any major release. All critical features MUST pass pre-deployment tests."
+}

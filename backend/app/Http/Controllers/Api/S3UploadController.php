@@ -271,6 +271,127 @@ class S3UploadController extends Controller
     }
 
     /**
+     * Upload multiple images (bulk upload for image sequences)
+     */
+    public function uploadBulk(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'files' => 'required|array|min:1|max:20',
+                'files.*' => 'required|file|mimes:jpeg,jpg,png,gif,webp,svg|max:5120',
+                'folder' => 'nullable|string',
+                'questionnaire_id' => 'nullable|string',
+                'question_id' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Get S3 configuration
+            $config = $this->getS3Config();
+            
+            if (empty($config['s3_bucket']) || empty($config['s3_region']) || 
+                empty($config['s3_access_key']) || empty($config['s3_secret_key'])) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'S3 is not configured. Please configure AWS S3 in System Settings.'
+                ], 400);
+            }
+
+            $files = $request->file('files');
+            $folder = $request->input('folder', 'questionnaire-images');
+            $questionnaireId = $request->input('questionnaire_id');
+            
+            $baseFolder = !empty($config['s3_folder']) ? rtrim($config['s3_folder'], '/') : '';
+            $uploadedFiles = [];
+            
+            // Create S3 client once
+            $s3Client = new S3Client([
+                'region' => $config['s3_region'],
+                'version' => 'latest',
+                'credentials' => [
+                    'key' => $config['s3_access_key'],
+                    'secret' => $config['s3_secret_key'],
+                ],
+            ]);
+
+            foreach ($files as $index => $file) {
+                $originalName = $file->getClientOriginalName();
+                $extension = $file->getClientOriginalExtension();
+                $mimeType = $file->getMimeType();
+                
+                $timestamp = now()->format('Ymd_His');
+                $uniqueId = Str::random(8);
+                $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
+                $filename = "{$timestamp}_{$uniqueId}_seq{$index}_{$safeName}.{$extension}";
+                
+                // Construct S3 key
+                if ($baseFolder) {
+                    if ($questionnaireId) {
+                        $s3Key = "{$baseFolder}/{$folder}/questionnaire_{$questionnaireId}/sequence/{$filename}";
+                    } else {
+                        $s3Key = "{$baseFolder}/{$folder}/sequence/{$filename}";
+                    }
+                } else {
+                    if ($questionnaireId) {
+                        $s3Key = "{$folder}/questionnaire_{$questionnaireId}/sequence/{$filename}";
+                    } else {
+                        $s3Key = "{$folder}/sequence/{$filename}";
+                    }
+                }
+
+                // Upload to S3
+                $result = $s3Client->putObject([
+                    'Bucket' => $config['s3_bucket'],
+                    'Key' => $s3Key,
+                    'Body' => fopen($file->getPathname(), 'rb'),
+                    'ContentType' => $mimeType,
+                    'CacheControl' => 'max-age=31536000',
+                ]);
+
+                $s3Url = $result['ObjectURL'] ?? "https://{$config['s3_bucket']}.s3.{$config['s3_region']}.amazonaws.com/{$s3Key}";
+                
+                $publicUrl = $s3Url;
+                if (!empty($config['s3_cloudfront_url'])) {
+                    $cloudfrontUrl = rtrim($config['s3_cloudfront_url'], '/');
+                    $publicUrl = "{$cloudfrontUrl}/{$s3Key}";
+                }
+
+                $uploadedFiles[] = [
+                    'url' => $publicUrl,
+                    's3_url' => $s3Url,
+                    'key' => $s3Key,
+                    'filename' => $filename,
+                    'original_name' => $originalName,
+                    'index' => $index,
+                ];
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Images uploaded successfully',
+                'data' => [
+                    'files' => $uploadedFiles,
+                    'count' => count($uploadedFiles),
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('S3 bulk upload failed', ['error' => $e->getMessage()]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to upload images: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get presigned URL for direct upload (optional - for large files)
      */
     public function getPresignedUrl(Request $request)

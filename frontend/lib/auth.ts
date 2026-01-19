@@ -84,7 +84,7 @@ export function getRedirectUrl(role?: string): string {
 }
 
 // Backend API URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
 
 // Validate email exists in backend
 export async function getUserByEmail(email: string): Promise<User | null> {

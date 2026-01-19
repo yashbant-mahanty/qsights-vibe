@@ -105,7 +105,7 @@ export default function EditQuestionnairePage() {
             <p className="text-red-600 font-semibold">{error || 'Questionnaire not found'}</p>
             <button
               onClick={() => router.push('/questionnaires')}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
             >
               Back to Questionnaires
             </button>
@@ -138,7 +138,7 @@ export default function EditQuestionnairePage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             {saving ? 'Saving...' : 'Save Changes'}
@@ -221,7 +221,7 @@ export default function EditQuestionnairePage() {
           </Card>
 
           {/* Question Types */}
-          <Card className="bg-purple-50 border-purple-200">
+          <Card className="bg-qsights-light border-purple-200">
             <CardContent className="p-4">
               <h4 className="text-sm font-semibold text-purple-900 mb-2">
                 📝 Question Types

@@ -192,7 +192,7 @@ export default function EvaluationEventsPage() {
           </div>
           <button
             onClick={() => router.push('/evaluation-events/create')}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-qsights-dark/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Create Evaluation
@@ -247,7 +247,7 @@ export default function EvaluationEventsPage() {
                     setSearchQuery(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
                 />
               </div>
               <select
@@ -256,7 +256,7 @@ export default function EvaluationEventsPage() {
                   setSelectedStatus(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
               >
                 <option value="all">All Statuses</option>
                 <option value="draft">Draft</option>
@@ -273,7 +273,7 @@ export default function EvaluationEventsPage() {
           <CardContent className="p-0">
             {loading ? (
               <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-qsights-cyan mx-auto"></div>
                 <p className="mt-2 text-gray-500">Loading evaluation events...</p>
               </div>
             ) : error ? (
@@ -284,7 +284,7 @@ export default function EvaluationEventsPage() {
                 <p>No evaluation events found</p>
                 <button
                   onClick={() => router.push('/evaluation-events/create')}
-                  className="mt-4 text-indigo-600 hover:text-indigo-700"
+                  className="mt-4 text-qsights-cyan hover:text-indigo-700"
                 >
                   Create your first evaluation event
                 </button>
@@ -345,7 +345,7 @@ export default function EvaluationEventsPage() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleView(event.id)}
-                              className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              className="p-2 text-gray-500 hover:text-qsights-cyan hover:bg-qsights-light rounded-lg transition-colors"
                               title="View Details"
                             >
                               <Eye className="w-4 h-4" />
@@ -403,7 +403,7 @@ export default function EvaluationEventsPage() {
 
                             <button
                               onClick={() => handleReports(event.id)}
-                              className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                              className="p-2 text-gray-500 hover:text-qsights-cyan hover:bg-qsights-light rounded-lg transition-colors"
                               title="View Reports"
                             >
                               <BarChart3 className="w-4 h-4" />

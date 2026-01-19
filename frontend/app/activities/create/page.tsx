@@ -276,12 +276,12 @@ export default function CreateActivityPage() {
   const availableLanguages = [
     { code: "EN", name: "English", color: "bg-blue-100 text-blue-700" },
     { code: "ES", name: "Español", color: "bg-red-100 text-red-700" },
-    { code: "FR", name: "Français", color: "bg-purple-100 text-purple-700" },
+    { code: "FR", name: "Français", color: "bg-cyan-50 text-purple-700" },
     { code: "DE", name: "Deutsch", color: "bg-yellow-100 text-yellow-700" },
     { code: "IT", name: "Italiano", color: "bg-green-100 text-green-700" },
     { code: "PT", name: "Português", color: "bg-orange-100 text-orange-700" },
     { code: "ZH", name: "中文", color: "bg-pink-100 text-pink-700" },
-    { code: "JA", name: "日本語", color: "bg-indigo-100 text-indigo-700" },
+    { code: "JA", name: "日本語", color: "bg-cyan-50 text-indigo-700" },
     { code: "HI", name: "हिन्दी (Hindi)", color: "bg-amber-100 text-amber-700" },
     { code: "BN", name: "বাংলা (Bengali)", color: "bg-teal-100 text-teal-700" },
     { code: "TA", name: "தமிழ் (Tamil)", color: "bg-rose-100 text-rose-700" },
@@ -1569,7 +1569,7 @@ export default function CreateActivityPage() {
                         }
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                     </label>
                   </div>
                   {activityData.allowGuests && (
@@ -1608,7 +1608,7 @@ export default function CreateActivityPage() {
                         }
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                     </label>
                   </div>
                   {activityData.contactUsEnabled && (
@@ -1647,7 +1647,7 @@ export default function CreateActivityPage() {
                         }
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-blue"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
                     </label>
                   </div>
 
@@ -1732,7 +1732,7 @@ export default function CreateActivityPage() {
                         }
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                           activityData.enablePerQuestionLanguageSwitch
-                            ? 'bg-qsights-blue'
+                            ? 'bg-qsights-dark'
                             : 'bg-gray-200'
                         }`}
                       >
@@ -1756,7 +1756,7 @@ export default function CreateActivityPage() {
                 <button
                   onClick={handlePublish}
                   disabled={saving}
-                  className="w-full px-4 py-2.5 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full px-4 py-2.5 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
                   {saving ? "Publishing..." : "Publish Event"}

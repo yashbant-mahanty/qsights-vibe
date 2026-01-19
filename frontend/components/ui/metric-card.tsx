@@ -39,7 +39,7 @@ const variantStyles: Record<MetricCardVariant, {
   },
   purple: {
     border: 'border-l-purple-500',
-    gradient: 'from-purple-500 to-purple-600',
+    gradient: 'from-qsights-cyan to-qsights-cyan',
   },
   orange: {
     border: 'border-l-orange-500',
@@ -55,7 +55,7 @@ const variantStyles: Record<MetricCardVariant, {
   },
   indigo: {
     border: 'border-l-indigo-500',
-    gradient: 'from-indigo-500 to-indigo-600',
+    gradient: 'from-qsights-cyan to-qsights-cyan',
   },
   amber: {
     border: 'border-l-amber-500',

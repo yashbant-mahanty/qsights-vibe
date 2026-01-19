@@ -145,7 +145,7 @@ export default function AdminDashboard() {
               <option>Last 7 days</option>
               <option>Last 90 days</option>
             </select>
-            <button className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue-dark">
+            <button className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan-dark">
               Create Program
             </button>
           </div>
@@ -262,7 +262,7 @@ export default function AdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="p-6">
-            <div className="h-80 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+            <div className="h-80 bg-gradient-to-br from-qsights-light to-cyan-50 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
               <div className="text-center">
                 <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-500 font-medium">Area Chart Placeholder</p>
@@ -311,7 +311,7 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-2">
                             <div className="flex-1 bg-gray-200 rounded-full h-2">
                               <div
-                                className="bg-qsights-blue h-2 rounded-full"
+                                className="bg-qsights-dark h-2 rounded-full"
                                 style={{ width: `${program.completion}%` }}
                               ></div>
                             </div>

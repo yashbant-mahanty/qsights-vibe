@@ -219,7 +219,7 @@ export default function CmsManagementPage() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-qsights-blue hover:bg-qsights-blue/90"
+            className="bg-qsights-dark hover:bg-qsights-dark/90"
           >
             {saving ? (
               <>
@@ -583,9 +583,9 @@ export default function CmsManagementPage() {
           {/* Privacy Policy Tab */}
           <TabsContent value="privacy" className="space-y-6">
             {/* Info Box */}
-            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+            <div className="p-4 bg-qsights-light border border-purple-200 rounded-lg">
               <div className="flex items-start gap-2">
-                <Shield className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                <Shield className="w-5 h-5 text-qsights-cyan flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-purple-900">HTML Content Editor</p>
                   <p className="text-xs text-purple-800 mt-1">

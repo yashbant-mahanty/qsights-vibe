@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from '@/components/ui/toast';
 import DeleteConfirmationModal from '@/components/delete-confirmation-modal';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
 
 const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
   const [participants, setParticipants] = useState([]);
@@ -1122,7 +1122,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
           </TabsTrigger>
           <TabsTrigger 
             value="embedded" 
-            className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
           >
             <Inbox className="w-4 h-4 mr-2" />
             Email-Embedded Survey
@@ -1147,10 +1147,10 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                     <span className="font-semibold text-green-700">{participants.filter(p => p.status === 'active' && (!p.type || p.type === 'registered')).length}</span>
                     <span className="text-green-600">Active</span>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-lg border border-purple-100">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-qsights-light rounded-lg border border-purple-100">
+                    <div className="w-2 h-2 bg-qsights-light0 rounded-full"></div>
                     <span className="font-semibold text-purple-700">{participants.filter(p => p.type === 'anonymous').length}</span>
-                    <span className="text-purple-600">Anonymous</span>
+                    <span className="text-qsights-cyan">Anonymous</span>
                   </div>
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
                     <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
@@ -1327,7 +1327,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                               <td className="px-6 py-5">
                                 {participant.type === 'anonymous' ? (
                                   <span className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 rounded-full border border-purple-200">
-                                    <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mr-1.5"></span>
+                                    <span className="w-1.5 h-1.5 bg-qsights-light0 rounded-full mr-1.5"></span>
                                     Anonymous
                                   </span>
                                 ) : (
@@ -1583,15 +1583,15 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               {/* Features Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-gradient-to-br from-purple-50 to-white border border-purple-100 rounded-xl">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
-                    <CheckCircle className="h-5 w-5 text-purple-600" />
+                  <div className="w-10 h-10 bg-cyan-50 rounded-lg flex items-center justify-center mb-3">
+                    <CheckCircle className="h-5 w-5 text-qsights-cyan" />
                   </div>
                   <h4 className="font-semibold text-gray-900 mb-1">Single Choice</h4>
                   <p className="text-xs text-gray-500">Radio buttons, dropdowns, and select options</p>
                 </div>
                 <div className="p-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl">
-                  <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mb-3">
-                    <CheckCircle className="h-5 w-5 text-indigo-600" />
+                  <div className="w-10 h-10 bg-cyan-50 rounded-lg flex items-center justify-center mb-3">
+                    <CheckCircle className="h-5 w-5 text-qsights-cyan" />
                   </div>
                   <h4 className="font-semibold text-gray-900 mb-1">Yes/No Questions</h4>
                   <p className="text-xs text-gray-500">Simple binary choice questions</p>
@@ -1613,15 +1613,15 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                   <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
+                    <div className="w-6 h-6 bg-qsights-cyan text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
                     <p className="text-gray-600">Select one or more questions to embed in the email</p>
                   </div>
                   <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">2</div>
+                    <div className="w-6 h-6 bg-qsights-cyan text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">2</div>
                     <p className="text-gray-600">Recipients see questions with clickable answer buttons</p>
                   </div>
                   <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</div>
+                    <div className="w-6 h-6 bg-qsights-cyan text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</div>
                     <p className="text-gray-600">One-click response records their answer instantly</p>
                   </div>
                 </div>
@@ -1819,7 +1819,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                               </div>
                               <span className={`px-3 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
                                 participant.additional_data?.participant_type === 'anonymous'
-                                  ? 'bg-purple-100 text-purple-700'
+                                  ? 'bg-cyan-50 text-purple-700'
                                   : 'bg-blue-100 text-blue-700'
                               }`}>
                                 {participant.additional_data?.participant_type === 'anonymous' ? 'Anonymous' : 'Registered'}
@@ -2085,7 +2085,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                             </td>
                             <td className="px-4 py-3">
                               {participant.type === 'anonymous' ? (
-                                <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded">
+                                <span className="px-2 py-1 text-xs font-medium bg-cyan-50 text-purple-700 rounded">
                                   Anonymous
                                 </span>
                               ) : (
@@ -2376,10 +2376,10 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                    <span className="w-6 h-6 bg-qsights-cyan text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
                     <h3 className="font-semibold text-gray-900">Select Questions</h3>
                     {selectedEmbeddedQuestions.length > 0 && (
-                      <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
+                      <span className="text-xs px-2 py-1 bg-cyan-50 text-purple-700 rounded-full">
                         {selectedEmbeddedQuestions.length} selected
                       </span>
                     )}
@@ -2398,7 +2398,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                 
                 {loadingQuestions ? (
                   <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+                    <Loader2 className="h-6 w-6 animate-spin text-qsights-cyan" />
                     <span className="ml-2 text-gray-500">Loading questions...</span>
                   </div>
                 ) : embeddedQuestions.length === 0 ? (
@@ -2417,14 +2417,14 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                         onClick={() => handleToggleEmbeddedQuestion(question)}
                         className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
                           selectedEmbeddedQuestions.some(q => q.id === question.id)
-                            ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+                            ? 'border-purple-500 bg-qsights-light ring-2 ring-purple-200'
                             : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           <div className={`w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${
                             selectedEmbeddedQuestions.some(q => q.id === question.id)
-                              ? 'border-purple-600 bg-purple-600'
+                              ? 'border-qsights-cyan bg-qsights-cyan'
                               : 'border-gray-300'
                           }`}>
                             {selectedEmbeddedQuestions.some(q => q.id === question.id) && (
@@ -2453,7 +2453,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                    <span className="w-6 h-6 bg-qsights-cyan text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
                     <h3 className="font-semibold text-gray-900">Select Recipients</h3>
                   </div>
                   <Button
@@ -2500,7 +2500,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                               key={participant.id}
                               onClick={() => handleToggleEmbeddedRecipient(participant.id)}
                               className={`cursor-pointer hover:bg-gray-50 transition ${
-                                embeddedRecipients.includes(participant.id) ? 'bg-indigo-50' : ''
+                                embeddedRecipients.includes(participant.id) ? 'bg-qsights-light' : ''
                               }`}
                             >
                               <td className="px-4 py-3 w-12">
@@ -2508,7 +2508,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
                                   type="checkbox"
                                   checked={embeddedRecipients.includes(participant.id)}
                                   onChange={() => {}}
-                                  className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                                  className="h-4 w-4 rounded border-gray-300 text-qsights-cyan"
                                 />
                               </td>
                               <td className="px-4 py-3">

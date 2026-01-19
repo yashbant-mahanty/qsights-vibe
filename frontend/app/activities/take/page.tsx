@@ -187,7 +187,7 @@ export default function TakeActivityPage() {
               <div className="flex gap-3 justify-center">
                 <a
                   href="/participant"
-                  className="px-6 py-3 bg-qsights-blue text-white rounded-lg font-medium hover:bg-qsights-blue/90 transition-colors"
+                  className="px-6 py-3 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 transition-colors"
                 >
                   Back to Dashboard
                 </a>
@@ -239,7 +239,7 @@ export default function TakeActivityPage() {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2.5">
                   <div
-                    className="bg-qsights-blue h-2.5 rounded-full transition-all duration-300"
+                    className="bg-qsights-dark h-2.5 rounded-full transition-all duration-300"
                     style={{ width: `${progress}%` }}
                   ></div>
                 </div>
@@ -253,7 +253,7 @@ export default function TakeActivityPage() {
               {/* Question Header */}
               <div className="mb-6">
                 <div className="flex items-start gap-3 mb-4">
-                  <div className="flex items-center justify-center w-10 h-10 bg-qsights-blue text-white rounded-full font-bold flex-shrink-0">
+                  <div className="flex items-center justify-center w-10 h-10 bg-qsights-dark text-white rounded-full font-bold flex-shrink-0">
                     {currentQuestion + 1}
                   </div>
                   <div className="flex-1">
@@ -389,7 +389,7 @@ export default function TakeActivityPage() {
                 {currentQ.type === "slider" && (
                   <div className="space-y-4 py-4">
                     <div className="text-center">
-                      <span className="text-4xl font-bold text-qsights-blue">
+                      <span className="text-3xl font-bold text-qsights-blue">
                         {answers[currentQ.id] || 50}
                       </span>
                     </div>
@@ -489,7 +489,7 @@ export default function TakeActivityPage() {
                     <button
                       onClick={handleNext}
                       disabled={currentQ.required && !canProceed()}
-                      className="flex items-center gap-2 px-6 py-3 bg-qsights-blue text-white rounded-lg font-medium hover:bg-qsights-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="flex items-center gap-2 px-6 py-3 bg-qsights-cyan text-white rounded-lg font-medium hover:bg-qsights-cyan/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       Next
                       <ChevronRight className="w-5 h-5" />
@@ -530,7 +530,7 @@ export default function TakeActivityPage() {
                     onClick={() => setCurrentQuestion(idx)}
                     className={`w-10 h-10 rounded-lg font-medium text-sm transition-all ${
                       idx === currentQuestion
-                        ? "bg-qsights-blue text-white"
+                        ? "bg-qsights-dark text-white"
                         : answers[q.id] !== undefined
                         ? "bg-green-100 text-green-700 border-2 border-green-300"
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200"

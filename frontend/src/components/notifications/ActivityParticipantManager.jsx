@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import DeleteConfirmationModal from '@/components/delete-confirmation-modal';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
 
 const ActivityParticipantManager = ({ activityId, authToken }) => {
   const [participants, setParticipants] = useState([]);

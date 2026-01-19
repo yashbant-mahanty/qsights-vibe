@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
             // Override default auth middleware to avoid redirect-to-login for API requests
             'auth' => \App\Http\Middleware\ApiAuthenticate::class,
+            // Phase 6: Security middleware
+            'log.manager.actions' => \App\Http\Middleware\LogManagerActions::class,
+            'rate.limit.notifications' => \App\Http\Middleware\RateLimitNotifications::class,
+            'validate.data.scope' => \App\Http\Middleware\ValidateDataScope::class,
         ]);
 
         // Ensure backendToken cookie is decoded to Bearer FIRST (before Sanctum checks auth)

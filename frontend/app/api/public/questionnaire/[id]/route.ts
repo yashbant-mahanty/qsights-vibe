@@ -9,7 +9,7 @@ export async function GET(
 
     // Fetch public questionnaire data from backend
     // Use full backend URL for server-side fetch (BACKEND_URL) or fallback to public URL
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000/api';
+    const backendUrl = process.env.BACKEND_URL || 'https://prod.qsights.com/api';
     const response = await fetch(`${backendUrl}/public/questionnaires/${questionnaireId}`, {
       method: "GET",
       headers: {

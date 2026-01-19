@@ -28,10 +28,15 @@ module.exports = {
         'destructive-foreground': 'hsl(var(--destructive-foreground))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
-        'qsights-blue': '#1565C0',
-        'qsights-primary': '#0D47A1',
-        'qsights-secondary': '#1976D2',
-        'qsights-light': '#BBDEFB',
+        // QSights Official Brand Colors (from logo)
+        'qsights-cyan': '#29ABE2',      // Primary - Q magnifying glass (exact logo color)
+        'qsights-navy': '#2E3192',      // Secondary - Sights text (exact logo color)
+        'qsights-dark': '#1E2A5E',      // Dark Navy variant
+        'qsights-light': '#E3F4F8',     // Light cyan background
+        // Aliases for backward compatibility
+        'qsights-blue': '#29ABE2',      // Maps to cyan
+        'qsights-primary': '#2D3E7C',   // Maps to navy
+        'qsights-secondary': '#1BB5D3', // Maps to cyan
       },
     },
   },

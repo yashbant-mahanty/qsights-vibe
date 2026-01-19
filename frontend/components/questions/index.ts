@@ -25,6 +25,25 @@ export interface SliderScaleSettings {
   trackColor?: string;
   activeColor?: string;
   height?: number;
+  useCustomImages?: boolean;
+  customImages?: {
+    thumbUrl?: string;
+    trackUrl?: string;
+    backgroundUrl?: string; // Main background image displayed above slider
+    sequenceImages?: string[]; // Array of image URLs for interactive sequence highlighting
+  };
+  // Value Display Mode Configuration
+  valueDisplayMode?: 'number' | 'range' | 'text';
+  rangeMappings?: Array<{
+    min: number;
+    max: number;
+    label: string;
+  }>;
+  textMappings?: Array<{
+    value: number;
+    label: string;
+  }>;
+  showImageLabels?: boolean;
 }
 
 export interface DialGaugeSettings {
@@ -35,6 +54,23 @@ export interface DialGaugeSettings {
   colorStops?: Array<{ offset: number; color: string }>;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showValue?: boolean;
+  customImages?: {
+    backgroundUrl?: string | null;
+    needleUrl?: string | null;
+    sequenceImages?: string[];
+  };
+  // Value Display Mode Configuration
+  valueDisplayMode?: 'number' | 'range' | 'text';
+  rangeMappings?: Array<{
+    min: number;
+    max: number;
+    label: string;
+  }>;
+  textMappings?: Array<{
+    value: number;
+    label: string;
+  }>;
+  showImageLabels?: boolean;
 }
 
 export interface LikertVisualSettings {

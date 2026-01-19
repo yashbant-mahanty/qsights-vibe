@@ -166,7 +166,7 @@ export default function ParticipantDashboard() {
     const colors: { [key: string]: string } = {
       EN: "border-blue-500 text-blue-700 bg-blue-50",
       ES: "border-red-500 text-red-700 bg-red-50",
-      FR: "border-purple-500 text-purple-700 bg-purple-50",
+      FR: "border-purple-500 text-purple-700 bg-qsights-light",
       DE: "border-yellow-600 text-yellow-800 bg-yellow-50",
       IT: "border-green-500 text-green-700 bg-green-50",
     };
@@ -346,7 +346,7 @@ export default function ParticipantDashboard() {
                       </div>
                       <div className="flex items-center gap-2">
                         {activity.status === "not-started" && (
-                          <button className="px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors">
+                          <button className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors">
                             Start Activity
                           </button>
                         )}

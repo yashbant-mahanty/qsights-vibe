@@ -240,7 +240,7 @@ export default function LandingPagesManagement() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEdit(page)}
-                        className="flex-1 px-4 py-2 text-sm bg-qsights-blue text-white rounded-lg hover:bg-qsights-blue/90"
+                        className="flex-1 px-4 py-2 text-sm bg-qsights-dark text-white rounded-lg hover:bg-qsights-dark/90"
                       >
                         <Edit className="w-4 h-4 inline mr-2" />
                         Edit
@@ -320,7 +320,7 @@ export default function LandingPagesManagement() {
                 <div className="flex gap-3">
                   <button
                     onClick={handleSave}
-                    className="flex-1 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-qsights-blue/90"
+                    className="flex-1 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-qsights-dark/90"
                   >
                     <Save className="w-4 h-4 inline mr-2" />
                     Save Changes

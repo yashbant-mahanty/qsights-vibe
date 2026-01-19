@@ -55,7 +55,7 @@ export default function PreviewQuestionnairePage() {
             <p className="text-red-600 font-semibold">{error || 'Questionnaire not found'}</p>
             <button
               onClick={() => router.push('/questionnaires')}
-              className="mt-4 px-4 py-2 bg-qsights-blue text-white rounded-lg hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
             >
               Back to Questionnaires
             </button>
@@ -97,7 +97,7 @@ export default function PreviewQuestionnairePage() {
           </div>
           <button
             onClick={() => router.push(`/questionnaires/${questionnaireId}/edit`)}
-            className="flex items-center gap-2 px-4 py-2 bg-qsights-blue text-white rounded-lg text-sm font-medium hover:bg-qsights-blue/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
           >
             <Edit className="w-4 h-4" />
             Edit

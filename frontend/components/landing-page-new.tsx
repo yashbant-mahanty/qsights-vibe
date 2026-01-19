@@ -32,7 +32,7 @@ import {
 
 const solutions = [
 	{ icon: ClipboardList, title: "Survey", description: "Create comprehensive surveys with advanced logic and branching", gradient: "from-blue-500 to-blue-600" },
-	{ icon: BarChart3, title: "Poll", description: "Quick polls to gather instant feedback from your audience", gradient: "from-purple-500 to-purple-600" },
+	{ icon: BarChart3, title: "Poll", description: "Quick polls to gather instant feedback from your audience", gradient: "from-qsights-cyan to-qsights-cyan" },
 	{ icon: FileText, title: "Assessment", description: "Build assessments with automatic scoring and analytics", gradient: "from-green-500 to-green-600" },
 	{ icon: Mail, title: "Emailer/Reminder", description: "Automated email campaigns and reminder notifications", gradient: "from-orange-500 to-orange-600" },
 	{ icon: PieChart, title: "Reports", description: "Detailed analytics and customizable reporting dashboards", gradient: "from-pink-500 to-pink-600" },
@@ -156,13 +156,13 @@ export default function LandingPage() {
 						)}
 					</div>
 
-					<nav className="hidden md:flex items-center space-x-8">
+				<div className="hidden md:flex items-center ml-auto gap-8">
+					<nav className="flex items-center space-x-8">
 						<a href="#features" className="text-gray-600 hover:text-blue-600 transition-colors font-medium">Features</a>
 						<a href="#benefits" className="text-gray-600 hover:text-blue-600 transition-colors font-medium">Benefits</a>
 						<a href="#compliance" className="text-gray-600 hover:text-blue-600 transition-colors font-medium">Compliance</a>
 					</nav>
 
-					<div className="hidden md:block">
 						<Link href="/request-demo">
 							<Button variant="outline" className="border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-medium">
 								<Mail className="w-4 h-4 mr-2" />
@@ -201,9 +201,8 @@ export default function LandingPage() {
 					</div>
 
 					<div className="order-1 md:order-2 relative">
-						<div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-3xl blur opacity-60" aria-hidden />
-						<Card className="relative shadow-2xl border-0 overflow-hidden rounded-3xl bg-white">
-							<div className="bg-gradient-to-r from-blue-600 to-purple-500 text-white px-8 py-7">
+						<Card className="relative border-0 overflow-hidden rounded-3xl bg-white">
+							<div className="bg-gradient-to-r from-qsights-cyan to-qsights-navy text-white px-8 py-7">
 								<div className="flex items-center gap-3">
 									<Shield className="w-6 h-6" />
 									<div>
@@ -211,7 +210,7 @@ export default function LandingPage() {
 										<h2 className="text-2xl font-bold">Sign in to QSights</h2>
 									</div>
 								</div>
-								<p className="text-sm text-blue-50 mt-2">Use your email or username to continue.</p>
+									<p className="text-sm text-cyan-50 mt-2">Use your email or username to continue.</p>
 							</div>
 							<CardContent className="p-8 space-y-6">
 								<form className="space-y-5" onSubmit={handleLogin}>
@@ -265,7 +264,7 @@ export default function LandingPage() {
 										Forgot Password?
 									</Link>
 								</div>
-									<Button type="submit" className="w-full h-11 text-base font-semibold" disabled={isLoading}>
+									<Button type="submit" className="w-full h-11 text-base font-semibold bg-qsights-dark hover:bg-qsights-dark/90" disabled={isLoading}>
 										{isLoading ? (
 											<span className="flex items-center justify-center gap-2">
 												<Loader2 className="w-4 h-4 animate-spin" />
