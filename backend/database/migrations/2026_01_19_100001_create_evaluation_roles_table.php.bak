@@ -26,7 +26,7 @@ return new class extends Migration
                   ->onDelete('cascade');
             
             // Program scope (optional - if roles are program-specific)
-            $table->uuid('program_id')->nullable();
+            $table->unsignedBigInteger('program_id')->nullable();
             $table->foreign('program_id')
                   ->references('id')
                   ->on('programs')
