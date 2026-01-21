@@ -546,7 +546,7 @@ export default function EditActivityPage() {
         const activityPayload = {
           name: activityData.title,
           description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
+          type: activityData.type as "survey" | "poll" | "assessment" | "evaluation",
           program_id: activityData.programId,
           organization_id: selectedProgram.organization_id,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
@@ -588,7 +588,7 @@ export default function EditActivityPage() {
           name: activityData.title,
           sender_email: activityData.senderEmail || undefined,
           description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
+          type: activityData.type as "survey" | "poll" | "assessment" | "evaluation",
           program_id: activityData.programId,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
@@ -631,7 +631,7 @@ export default function EditActivityPage() {
         const activityPayload = {
           name: activityData.title,
           description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
+          type: activityData.type as "survey" | "poll" | "assessment" | "evaluation",
           program_id: activityData.programId,
           organization_id: selectedProgram.organization_id,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
@@ -661,7 +661,7 @@ export default function EditActivityPage() {
         const activityPayload = {
           name: activityData.title,
           description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
+          type: activityData.type as "survey" | "poll" | "assessment" | "evaluation",
           program_id: activityData.programId,
           organization_id: selectedProgram.organization_id,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
@@ -738,7 +738,7 @@ export default function EditActivityPage() {
       const activityPayload = {
         name: activityData.title,
         description: activityData.description,
-        type: activityData.type as "survey" | "poll" | "assessment",
+        type: activityData.type as "survey" | "poll" | "assessment" | "evaluation",
         program_id: activityData.programId,
         organization_id: selectedProgram.organization_id,
         start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
@@ -958,6 +958,7 @@ export default function EditActivityPage() {
                     <option value="survey">Survey</option>
                     <option value="poll">Poll</option>
                     <option value="assessment">Assessment</option>
+                    <option value="evaluation">Evaluation</option>
                   </select>
                 </div>
 

@@ -14,7 +14,6 @@ interface EvaluationStaff {
   role_name?: string;
   status: string;
   phone: string | null;
-  department: string | null;
   reports_to_count?: number;
   subordinates_count?: number;
   user_id?: string | null;
@@ -41,7 +40,6 @@ export default function StaffManagement() {
     employee_id: '',
     role_id: '',
     phone: '',
-    department: '',
     status: 'active'
   });
 
@@ -135,7 +133,6 @@ export default function StaffManagement() {
       employee_id: staffMember.employee_id || '',
       role_id: staffMember.role_id,
       phone: staffMember.phone || '',
-      department: staffMember.department || '',
       status: staffMember.status
     });
     setShowModal(true);
@@ -149,7 +146,6 @@ export default function StaffManagement() {
       employee_id: '',
       role_id: '',
       phone: '',
-      department: '',
       status: 'active'
     });
   };
@@ -274,9 +270,6 @@ export default function StaffManagement() {
                 Role
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Department
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Hierarchy
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -290,13 +283,13 @@ export default function StaffManagement() {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                   Loading staff...
                 </td>
               </tr>
             ) : filteredStaff.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                   No staff found
                 </td>
               </tr>
@@ -323,9 +316,6 @@ export default function StaffManagement() {
                     <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
                       {member.role_name || 'N/A'}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {member.department || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2 text-xs">
@@ -458,33 +448,20 @@ export default function StaffManagement() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Department
+                    Status *
                   </label>
-                  <input
-                    type="text"
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  <select
+                    required
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Engineering"
-                  />
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="on_leave">On Leave</option>
+                    <option value="terminated">Terminated</option>
+                  </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status *
-                </label>
-                <select
-                  required
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="on_leave">On Leave</option>
-                  <option value="terminated">Terminated</option>
-                </select>
               </div>
 
               <div className="flex gap-3 justify-end mt-6">

@@ -147,6 +147,13 @@ interface Questionnaire {
   title: string;
   type?: string;
   languages?: string[];
+  settings?: {
+    show_header_in_participant_view?: boolean;
+    custom_header_text?: string;
+    show_section_header?: boolean;
+    section_header_format?: 'numbered' | 'titleOnly';
+    [key: string]: any;
+  };
   sections?: Array<{
     id: string;
     title: string;
@@ -2068,27 +2075,6 @@ export default function TakeActivityPage() {
           </div>
         );
 
-      case "star_rating":
-        const maxStars = question.max_value || 5;
-        return (
-          <div className="flex items-center gap-1">
-            {Array.from({ length: maxStars }, (_, i) => i + 1).map((star) => (
-              <button
-                key={star}
-                onClick={() => !isSubmitted && handleResponseChange(questionId, star)}
-                disabled={isSubmitted}
-                className="p-1 hover:scale-110 transition-transform disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <Star
-                  className={`w-8 h-8 ${
-                    responses[questionId] >= star ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
-                  }`}
-                />
-              </button>
-            ))}
-          </div>
-        );
-
       case "date":
         return (
           <Input
@@ -3735,14 +3721,31 @@ export default function TakeActivityPage() {
               </div>
             )}
 
+            {/* Questionnaire Header (Main Title) - respects show_header_in_participant_view */}
+            {questionnaire?.settings?.show_header_in_participant_view !== false && (
+              <div className="mb-4 p-4 bg-gradient-to-r from-qsights-blue to-qsights-navy rounded-xl shadow-md">
+                <h2 className="text-xl font-bold text-white text-center">
+                  {questionnaire?.settings?.custom_header_text || questionnaire?.title || "Questionnaire"}
+                </h2>
+              </div>
+            )}
+
             {/* Current Section */}
             <Card>
-              <CardHeader className="border-b border-gray-200">
-                <CardTitle className="text-lg font-bold">{currentSection?.title || "Questions"}</CardTitle>
-                {currentSection?.description && (
-                  <p className="text-sm text-gray-600 mt-2">{currentSection.description}</p>
-                )}
-              </CardHeader>
+              {/* Section Header - only show for single/section modes, not all mode */}
+              {displayMode !== 'all' && questionnaire?.settings?.show_section_header !== false && (
+                <CardHeader className="border-b border-gray-200">
+                  <CardTitle className="text-lg font-bold">
+                    {questionnaire?.settings?.section_header_format === 'titleOnly' 
+                      ? (currentSection?.title || "Questions")
+                      : `Section ${currentSectionIndex + 1}: ${currentSection?.title || "Questions"}`
+                    }
+                  </CardTitle>
+                  {currentSection?.description && (
+                    <p className="text-sm text-gray-600 mt-2">{currentSection.description}</p>
+                  )}
+                </CardHeader>
+              )}
               <CardContent className="p-6 space-y-6">
                 {displayMode === 'single' ? (
                   // Single Question Mode - show one question at a time
@@ -3864,15 +3867,20 @@ export default function TakeActivityPage() {
                     {allFilteredSections && allFilteredSections.length > 0 ? (
                       allFilteredSections.map((section: any, sectionIdx: number) => (
                         <div key={section.id || sectionIdx} className="space-y-4">
-                          {/* Section Header */}
-                          <div className="border-b-2 border-qsights-blue pb-2">
-                            <h3 className="text-lg font-bold text-gray-900">
-                              Section {sectionIdx + 1}: {section.title || "Untitled Section"}
-                            </h3>
-                            {section.description && (
-                              <p className="text-sm text-gray-600 mt-1">{section.description}</p>
-                            )}
-                          </div>
+                          {/* Section Header - respects show_section_header setting */}
+                          {questionnaire?.settings?.show_section_header !== false && (
+                            <div className="border-b-2 border-qsights-blue pb-2">
+                              <h3 className="text-lg font-bold text-gray-900">
+                                {questionnaire?.settings?.section_header_format === 'titleOnly' 
+                                  ? (section.title || "Untitled Section")
+                                  : `Section ${sectionIdx + 1}: ${section.title || "Untitled Section"}`
+                                }
+                              </h3>
+                              {section.description && (
+                                <p className="text-sm text-gray-600 mt-1">{section.description}</p>
+                              )}
+                            </div>
+                          )}
                           
                           {/* Section Questions */}
                           {section.questions && section.questions.length > 0 ? (

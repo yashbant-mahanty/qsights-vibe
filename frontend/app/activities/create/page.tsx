@@ -458,7 +458,7 @@ export default function CreateActivityPage() {
         const activityPayload = {
           name: activityData.title,
           description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
+          type: activityData.type as "survey" | "poll" | "assessment" | "evaluation" | "feedback",
           status: "draft" as const, // Created as draft, will become live upon approval
           program_id: activityData.programId,
           organization_id: selectedProgram.organization_id,
@@ -501,7 +501,7 @@ export default function CreateActivityPage() {
           name: activityData.title,
           sender_email: activityData.senderEmail || undefined,
           description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
+          type: activityData.type as "survey" | "poll" | "assessment" | "evaluation" | "feedback",
           program_id: activityData.programId,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
@@ -544,7 +544,7 @@ export default function CreateActivityPage() {
         const activityPayload = {
           name: activityData.title,
           description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment",
+          type: activityData.type as "survey" | "poll" | "assessment" | "evaluation" | "feedback",
           status: "live" as const,
           program_id: activityData.programId,
           organization_id: selectedProgram.organization_id,
@@ -622,7 +622,7 @@ export default function CreateActivityPage() {
       const activityPayload = {
         name: activityData.title,
         description: activityData.description,
-        type: activityData.type as "survey" | "poll" | "assessment",
+        type: activityData.type as "survey" | "poll" | "assessment" | "evaluation" | "feedback",
         status: "draft" as const,
         program_id: activityData.programId,
         organization_id: selectedProgram.organization_id,
@@ -701,7 +701,7 @@ export default function CreateActivityPage() {
               Create Event
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Set up a new survey, poll, or assessment
+              Set up a new survey, poll, assessment, or evaluation
             </p>
           </div>
         </div>
@@ -843,6 +843,8 @@ export default function CreateActivityPage() {
                     <option value="survey">Survey</option>
                     <option value="poll">Poll</option>
                     <option value="assessment">Assessment</option>
+                    <option value="evaluation">Evaluation</option>
+                    <option value="feedback">Feedback</option>
                   </select>
                 </div>
 

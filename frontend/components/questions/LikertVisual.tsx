@@ -15,8 +15,8 @@ interface LikertVisualProps {
   value: number | null;
   onChange: (value: number) => void;
   settings?: {
-    scale?: 5 | 7;
-    labels?: LikertLabel[];
+    scale?: 2 | 3 | 5 | 7 | 10;
+    labels?: LikertLabel[] | string[]; // Support both formats
     showLabels?: boolean;
     showIcons?: boolean;
     iconStyle?: 'emoji' | 'filled' | 'outline' | 'custom'; // Added 'custom' for images
@@ -28,6 +28,17 @@ interface LikertVisualProps {
   disabled?: boolean;
   className?: string;
 }
+
+const defaultLabels2: LikertLabel[] = [
+  { value: 1, label: 'Disagree', icon: 'frown' },
+  { value: 2, label: 'Agree', icon: 'smile' },
+];
+
+const defaultLabels3: LikertLabel[] = [
+  { value: 1, label: 'Disagree', icon: 'frown' },
+  { value: 2, label: 'Neutral', icon: 'meh' },
+  { value: 3, label: 'Agree', icon: 'smile' },
+];
 
 const defaultLabels5: LikertLabel[] = [
   { value: 1, label: 'Strongly Disagree', icon: 'angry' },
@@ -46,6 +57,12 @@ const defaultLabels7: LikertLabel[] = [
   { value: 6, label: 'Agree', icon: 'smile' },
   { value: 7, label: 'Strongly Agree', icon: 'smileplus' },
 ];
+
+const defaultLabels10: LikertLabel[] = Array.from({ length: 10 }, (_, i) => ({
+  value: i + 1,
+  label: String(i + 1),
+  icon: i < 3 ? 'angry' : i < 5 ? 'frown' : i < 7 ? 'meh' : i < 9 ? 'smile' : 'smileplus',
+}));
 
 const iconMap = {
   angry: Angry,
@@ -81,7 +98,43 @@ export function LikertVisual({
     setLocalValue(value);
   }, [value]);
 
-  const labels = customLabels || (scale === 7 ? defaultLabels7 : defaultLabels5);
+  // Select default labels based on scale
+  let defaultLabelsForScale: LikertLabel[];
+  switch(scale) {
+    case 2:
+      defaultLabelsForScale = defaultLabels2;
+      break;
+    case 3:
+      defaultLabelsForScale = defaultLabels3;
+      break;
+    case 7:
+      defaultLabelsForScale = defaultLabels7;
+      break;
+    case 10:
+      defaultLabelsForScale = defaultLabels10;
+      break;
+    default:
+      defaultLabelsForScale = defaultLabels5;
+  }
+  
+  // Handle both string[] and LikertLabel[] formats
+  let labels: LikertLabel[];
+  if (customLabels && Array.isArray(customLabels)) {
+    // Check if it's a string array
+    if (typeof customLabels[0] === 'string') {
+      // Convert string array to LikertLabel array
+      labels = (customLabels as unknown as string[]).map((label, idx) => ({
+        value: idx + 1,
+        label: label,
+        icon: idx < 1 ? 'angry' : idx < 2 ? 'frown' : idx < Math.floor(scale / 2) ? 'meh' : idx < scale - 1 ? 'smile' : 'smileplus'
+      }));
+    } else {
+      // Already LikertLabel array
+      labels = customLabels;
+    }
+  } else {
+    labels = defaultLabelsForScale;
+  }
 
   // Check if we have custom images
   const useCustomImages = iconStyle === 'custom' && customImages.length > 0;
