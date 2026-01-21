@@ -10,7 +10,6 @@ interface EvaluationRole {
   name: string;
   code: string;
   description: string | null;
-  hierarchy_level: number;
   category: string;
   organization_id: string;
   program_id: string | null;
@@ -28,7 +27,6 @@ export default function RoleManagement() {
     name: '',
     code: '',
     description: '',
-    hierarchy_level: 1,
     category: 'operational',
     is_active: true
   });
@@ -109,7 +107,6 @@ export default function RoleManagement() {
       name: role.name,
       code: role.code,
       description: role.description || '',
-      hierarchy_level: role.hierarchy_level,
       category: role.category,
       is_active: role.is_active
     });
@@ -122,7 +119,6 @@ export default function RoleManagement() {
       name: '',
       code: '',
       description: '',
-      hierarchy_level: 1,
       category: 'operational',
       is_active: true
     });
@@ -191,9 +187,6 @@ export default function RoleManagement() {
                 Category
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Level
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Staff Count
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -207,13 +200,13 @@ export default function RoleManagement() {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                   Loading roles...
                 </td>
               </tr>
             ) : filteredRoles.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                   No roles found
                 </td>
               </tr>
@@ -233,13 +226,6 @@ export default function RoleManagement() {
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getCategoryBadge(role.category)}`}>
                       {role.category}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center text-xs font-bold">
-                        L{role.hierarchy_level}
-                      </div>
-                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {role.staff_count || 0}
@@ -341,22 +327,6 @@ export default function RoleManagement() {
                   <option value="operational">Operational</option>
                   <option value="support">Support</option>
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hierarchy Level *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  max="20"
-                  value={formData.hierarchy_level}
-                  onChange={(e) => setFormData({ ...formData, hierarchy_level: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Lower numbers = higher in hierarchy</p>
               </div>
 
               <div className="flex items-center">

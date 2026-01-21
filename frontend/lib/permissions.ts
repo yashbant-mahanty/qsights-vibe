@@ -260,6 +260,11 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
     items.push({ label: 'Reports & Analytics', href: '/analytics', icon: 'BarChart3' });
   }
 
+  // Evaluation Module - super-admin, admin, and program-admin can manage
+  if (role === 'super-admin' || role === 'admin' || role === 'program-admin') {
+    items.push({ label: 'Evaluation', href: '/evaluation-new', icon: 'ClipboardCheck' });
+  }
+
   // Settings - only super-admin
   if (role === 'super-admin') {
     items.push({ label: 'Settings', href: '/settings', icon: 'Settings' });

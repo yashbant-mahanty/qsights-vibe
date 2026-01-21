@@ -453,4 +453,346 @@ class EvaluationAssignmentController extends Controller
             \Log::error('Failed to log audit: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Get assignments for the current logged-in user (as evaluator)
+     */
+    public function myAssignments(Request $request)
+    {
+        try {
+            $user = $request->user();
+            
+            // Find staff record for current user
+            $staffRecord = DB::table('evaluation_staff')
+                ->where('user_id', $user->id)
+                ->where('status', 'active')
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if (!$staffRecord) {
+                return response()->json([
+                    'success' => true,
+                    'assignments' => [],
+                    'message' => 'No staff record found for this user'
+                ]);
+            }
+            
+            $assignments = DB::table('evaluation_assignments as ea')
+                ->join('evaluation_events as ee', 'ea.evaluation_event_id', '=', 'ee.id')
+                ->join('evaluation_staff as evaluatee', 'ea.evaluatee_id', '=', 'evaluatee.id')
+                ->where('ea.evaluator_id', $staffRecord->id)
+                ->where('ee.status', 'active')
+                ->whereNull('ea.deleted_at')
+                ->select(
+                    'ea.*',
+                    'ee.title as evaluation_title',
+                    'ee.status as evaluation_status',
+                    'ee.start_date',
+                    'ee.end_date',
+                    'evaluatee.name as evaluatee_name',
+                    'evaluatee.email as evaluatee_email'
+                )
+                ->orderByRaw("CASE WHEN ea.status = 'pending' THEN 1 WHEN ea.status = 'in_progress' THEN 2 ELSE 3 END")
+                ->orderBy('ea.due_date', 'asc')
+                ->get();
+            
+            return response()->json([
+                'success' => true,
+                'assignments' => $assignments
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch assignments: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get evaluation assignment details for taking the evaluation
+     */
+    public function takeEvaluation(Request $request, $id)
+    {
+        try {
+            $user = $request->user();
+            
+            // Get assignment with all related data
+            $assignment = DB::table('evaluation_assignments as ea')
+                ->join('evaluation_events as ee', 'ea.evaluation_event_id', '=', 'ee.id')
+                ->join('evaluation_staff as evaluator', 'ea.evaluator_id', '=', 'evaluator.id')
+                ->join('evaluation_staff as evaluatee', 'ea.evaluatee_id', '=', 'evaluatee.id')
+                ->where('ea.id', $id)
+                ->whereNull('ea.deleted_at')
+                ->select(
+                    'ea.*',
+                    'ee.title as evaluation_title',
+                    'ee.questionnaire_id',
+                    'evaluator.user_id as evaluator_user_id',
+                    'evaluatee.name as evaluatee_name',
+                    'evaluatee.email as evaluatee_email'
+                )
+                ->first();
+            
+            if (!$assignment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Assignment not found'
+                ], 404);
+            }
+            
+            // Verify the current user is the evaluator
+            if ($assignment->evaluator_user_id !== $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not authorized to take this evaluation'
+                ], 403);
+            }
+            
+            // Check if evaluation event is active
+            $event = DB::table('evaluation_events')->where('id', $assignment->evaluation_event_id)->first();
+            if ($event->status !== 'active') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This evaluation event is not currently active'
+                ], 400);
+            }
+            
+            // Get questionnaire with questions
+            $questionnaire = DB::table('questionnaires')
+                ->where('id', $assignment->questionnaire_id)
+                ->first();
+            
+            if (!$questionnaire) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Questionnaire not found'
+                ], 404);
+            }
+            
+            // Get questions
+            $questions = DB::table('questions')
+                ->where('questionnaire_id', $questionnaire->id)
+                ->whereNull('deleted_at')
+                ->orderBy('order', 'asc')
+                ->get()
+                ->map(function ($q) {
+                    return [
+                        'id' => $q->id,
+                        'text' => $q->text,
+                        'type' => $q->type,
+                        'options' => $q->options ? json_decode($q->options, true) : null,
+                        'required' => (bool) $q->is_required,
+                        'section' => $q->section
+                    ];
+                });
+            
+            // Get existing response if any (for resuming)
+            $existingResponses = null;
+            if ($assignment->response_id) {
+                $response = DB::table('responses')->where('id', $assignment->response_id)->first();
+                if ($response && $response->answers) {
+                    $existingResponses = json_decode($response->answers, true);
+                }
+            }
+            
+            // Update status to in_progress if pending
+            if ($assignment->status === 'pending') {
+                DB::table('evaluation_assignments')
+                    ->where('id', $id)
+                    ->update([
+                        'status' => 'in_progress',
+                        'started_at' => now(),
+                        'updated_at' => now()
+                    ]);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'assignment' => [
+                        'id' => $assignment->id,
+                        'evaluation_event_id' => $assignment->evaluation_event_id,
+                        'evaluator_id' => $assignment->evaluator_id,
+                        'evaluatee_id' => $assignment->evaluatee_id,
+                        'evaluator_type' => $assignment->evaluator_type,
+                        'status' => $assignment->status === 'pending' ? 'in_progress' : $assignment->status,
+                        'evaluation_title' => $assignment->evaluation_title,
+                        'evaluatee_name' => $assignment->evaluatee_name,
+                        'evaluatee_email' => $assignment->evaluatee_email,
+                        'questionnaire_id' => $assignment->questionnaire_id
+                    ],
+                    'questionnaire' => [
+                        'id' => $questionnaire->id,
+                        'title' => $questionnaire->title,
+                        'description' => $questionnaire->description ?? '',
+                        'questions' => $questions
+                    ],
+                    'existing_responses' => $existingResponses
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load evaluation: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Save evaluation progress (partial answers)
+     */
+    public function saveProgress(Request $request, $id)
+    {
+        try {
+            $user = $request->user();
+            
+            $assignment = DB::table('evaluation_assignments as ea')
+                ->join('evaluation_staff as evaluator', 'ea.evaluator_id', '=', 'evaluator.id')
+                ->where('ea.id', $id)
+                ->whereNull('ea.deleted_at')
+                ->select('ea.*', 'evaluator.user_id as evaluator_user_id')
+                ->first();
+            
+            if (!$assignment) {
+                return response()->json(['success' => false, 'message' => 'Assignment not found'], 404);
+            }
+            
+            if ($assignment->evaluator_user_id !== $user->id) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+            }
+            
+            if ($assignment->status === 'completed') {
+                return response()->json(['success' => false, 'message' => 'This evaluation has already been submitted'], 400);
+            }
+            
+            $answers = $request->input('answers', []);
+            
+            // Create or update response record
+            if ($assignment->response_id) {
+                DB::table('responses')
+                    ->where('id', $assignment->response_id)
+                    ->update([
+                        'answers' => json_encode($answers),
+                        'updated_at' => now()
+                    ]);
+            } else {
+                $responseId = Str::uuid()->toString();
+                DB::table('responses')->insert([
+                    'id' => $responseId,
+                    'questionnaire_id' => DB::table('evaluation_events')
+                        ->where('id', $assignment->evaluation_event_id)
+                        ->value('questionnaire_id'),
+                    'organization_id' => $assignment->organization_id,
+                    'status' => 'in_progress',
+                    'answers' => json_encode($answers),
+                    'started_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                
+                DB::table('evaluation_assignments')
+                    ->where('id', $id)
+                    ->update([
+                        'response_id' => $responseId,
+                        'status' => 'in_progress',
+                        'updated_at' => now()
+                    ]);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Progress saved successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save progress: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Submit completed evaluation
+     */
+    public function submitEvaluation(Request $request, $id)
+    {
+        try {
+            $user = $request->user();
+            
+            $assignment = DB::table('evaluation_assignments as ea')
+                ->join('evaluation_staff as evaluator', 'ea.evaluator_id', '=', 'evaluator.id')
+                ->join('evaluation_events as ee', 'ea.evaluation_event_id', '=', 'ee.id')
+                ->where('ea.id', $id)
+                ->whereNull('ea.deleted_at')
+                ->select('ea.*', 'evaluator.user_id as evaluator_user_id', 'ee.questionnaire_id')
+                ->first();
+            
+            if (!$assignment) {
+                return response()->json(['success' => false, 'message' => 'Assignment not found'], 404);
+            }
+            
+            if ($assignment->evaluator_user_id !== $user->id) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+            }
+            
+            if ($assignment->status === 'completed') {
+                return response()->json(['success' => false, 'message' => 'This evaluation has already been submitted'], 400);
+            }
+            
+            $answers = $request->input('answers', []);
+            
+            DB::beginTransaction();
+            
+            // Create or update response record
+            $responseId = $assignment->response_id;
+            if ($responseId) {
+                DB::table('responses')
+                    ->where('id', $responseId)
+                    ->update([
+                        'answers' => json_encode($answers),
+                        'status' => 'completed',
+                        'completed_at' => now(),
+                        'updated_at' => now()
+                    ]);
+            } else {
+                $responseId = Str::uuid()->toString();
+                DB::table('responses')->insert([
+                    'id' => $responseId,
+                    'questionnaire_id' => $assignment->questionnaire_id,
+                    'organization_id' => $assignment->organization_id,
+                    'status' => 'completed',
+                    'answers' => json_encode($answers),
+                    'started_at' => now(),
+                    'completed_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+            
+            // Update assignment status
+            DB::table('evaluation_assignments')
+                ->where('id', $id)
+                ->update([
+                    'response_id' => $responseId,
+                    'status' => 'completed',
+                    'completed_at' => now(),
+                    'updated_at' => now()
+                ]);
+            
+            DB::commit();
+            
+            $this->logAudit('evaluation_assignment', $id, 'completed', 'Evaluation submitted', $user, $assignment->organization_id);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Evaluation submitted successfully'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to submit evaluation: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

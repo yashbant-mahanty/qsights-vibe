@@ -617,6 +617,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::post('/{id}/activate', [App\Http\Controllers\Api\EvaluationEventController::class, 'activate']);
             Route::post('/{id}/pause', [App\Http\Controllers\Api\EvaluationEventController::class, 'pause']);
             Route::post('/{id}/complete', [App\Http\Controllers\Api\EvaluationEventController::class, 'complete']);
+            
+            // Auto-generate assignments from hierarchy
+            Route::post('/{id}/generate-assignments', [App\Http\Controllers\Api\EvaluationEventController::class, 'generateAssignments']);
         });
         
         // Manager operations (trigger evaluation for their direct reports)
@@ -764,6 +767,14 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     // Evaluation Assignments (Admin-only for create/update/delete)
     Route::get('/assignments', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'index']);
     Route::get('/assignments/{id}', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'show']);
+    
+    // My Assignments - For current user to see their evaluations to complete
+    Route::get('/my-assignments', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'myAssignments']);
+    
+    // Taking Evaluations
+    Route::get('/assignments/{id}/take', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'takeEvaluation']);
+    Route::post('/assignments/{id}/save-progress', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'saveProgress']);
+    Route::post('/assignments/{id}/submit', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'submitEvaluation']);
     
     Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
         Route::post('/assignments', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'store']);

@@ -107,6 +107,12 @@ export default function QuestionnaireBuilderPage() {
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [mounted, setMounted] = useState(false);
+  
+  // Display settings for participant view
+  const [showHeaderInParticipantView, setShowHeaderInParticipantView] = useState(true);
+  const [customHeaderText, setCustomHeaderText] = useState('');
+  const [showSectionHeader, setShowSectionHeader] = useState(true);
+  const [sectionHeaderFormat, setSectionHeaderFormat] = useState<'numbered' | 'titleOnly'>('numbered');
 
   useEffect(() => {
     setMounted(true);
@@ -212,6 +218,288 @@ export default function QuestionnaireBuilderPage() {
     { id: "nps", label: "NPS Scale", icon: ThumbsUp, color: "text-cyan-600" },
     { id: "star_rating", label: "Star Rating", icon: Heart, color: "text-rose-600" },
   ];
+
+  // Feedback-specific predefined question templates
+  const feedbackTemplates = [
+    {
+      id: "fb_customer_satisfaction",
+      label: "Customer Satisfaction",
+      icon: Smile,
+      color: "text-green-600",
+      bgColor: "bg-green-50",
+      description: "Standard CSAT survey questions",
+      questions: [
+        { question: "How satisfied are you with our service?", type: "rating", scale: 5, required: true, description: "1 = Very Dissatisfied, 5 = Very Satisfied" },
+        { question: "How likely are you to recommend us to others?", type: "rating", scale: 10, required: true, description: "Net Promoter Score (0-10)" },
+        { question: "How would you rate the quality of our product/service?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "How responsive have we been to your questions or concerns?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "What did you like most about your experience?", type: "text", required: false, description: "Share positive feedback" },
+        { question: "What can we improve?", type: "text", required: false, description: "Share suggestions for improvement" },
+      ]
+    },
+    {
+      id: "fb_product",
+      label: "Product Feedback",
+      icon: Star,
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      description: "Product experience and usability feedback",
+      questions: [
+        { question: "How easy is it to use our product?", type: "rating", scale: 5, required: true, description: "1 = Very Difficult, 5 = Very Easy" },
+        { question: "How well does our product meet your needs?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "How would you rate the value for money?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "What features do you use most frequently?", type: "text", required: true, description: "" },
+        { question: "What features would you like us to add?", type: "text", required: false, description: "Feature requests and suggestions" },
+      ]
+    },
+    {
+      id: "fb_service",
+      label: "Service Experience",
+      icon: TrendingUp,
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+      description: "Service quality and support feedback",
+      questions: [
+        { question: "How would you rate our customer service?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "Was your issue resolved to your satisfaction?", type: "mcq", required: true, options: ["Yes, completely", "Partially", "No, not resolved"] },
+        { question: "How long did it take to resolve your issue?", type: "mcq", required: true, options: ["Less than expected", "As expected", "Longer than expected", "Still not resolved"] },
+        { question: "How professional was our staff?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "Any additional comments about your service experience?", type: "text", required: false, description: "" },
+      ]
+    },
+    {
+      id: "fb_event",
+      label: "Event Feedback",
+      icon: LayoutGrid,
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      description: "Post-event or training feedback",
+      questions: [
+        { question: "How would you rate the overall event?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "How relevant was the content to you?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "How would you rate the speakers/presenters?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "Was the event well-organized?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "What did you find most valuable?", type: "text", required: true, description: "" },
+        { question: "What topics would you like covered in future events?", type: "text", required: false, description: "" },
+        { question: "Would you attend future events?", type: "mcq", required: true, options: ["Definitely yes", "Probably yes", "Not sure", "Probably not", "Definitely not"] },
+      ]
+    },
+    {
+      id: "fb_website",
+      label: "Website Feedback",
+      icon: Type,
+      color: "text-cyan-600",
+      bgColor: "bg-cyan-50",
+      description: "Website usability and experience",
+      questions: [
+        { question: "How easy was it to find what you were looking for?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "How would you rate the website design?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "Did you encounter any issues while using our website?", type: "mcq", required: true, options: ["No issues", "Minor issues", "Major issues"] },
+        { question: "What could we improve on our website?", type: "text", required: false, description: "" },
+      ]
+    },
+    {
+      id: "fb_employee",
+      label: "Employee Feedback",
+      icon: List,
+      color: "text-pink-600",
+      bgColor: "bg-pink-50",
+      description: "Employee engagement and satisfaction",
+      questions: [
+        { question: "How satisfied are you with your current role?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "Do you feel valued at work?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "How would you rate communication within the team?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "Do you have the resources you need to do your job effectively?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "What do you enjoy most about working here?", type: "text", required: true, description: "" },
+        { question: "What changes would improve your work experience?", type: "text", required: false, description: "" },
+        { question: "Would you recommend this company as a place to work?", type: "rating", scale: 10, required: true, description: "Employee NPS (0-10)" },
+      ]
+    },
+  ];
+
+  // Evaluation-specific predefined question templates
+  const evaluationTemplates = [
+    {
+      id: "eval_competency",
+      label: "Competency Rating",
+      icon: Star,
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+      description: "Rate skills like Communication, Leadership, etc.",
+      questions: [
+        { question: "Communication Skills", type: "rating", scale: 5, required: true, description: "Ability to communicate clearly and effectively" },
+        { question: "Leadership & Initiative", type: "rating", scale: 5, required: true, description: "Demonstrates leadership and takes initiative" },
+        { question: "Technical Proficiency", type: "rating", scale: 5, required: true, description: "Knowledge and skills in their area of work" },
+        { question: "Teamwork & Collaboration", type: "rating", scale: 5, required: true, description: "Works effectively with team members" },
+        { question: "Problem Solving", type: "rating", scale: 5, required: true, description: "Ability to analyze and solve problems" },
+        { question: "Time Management", type: "rating", scale: 5, required: true, description: "Manages time and priorities effectively" },
+      ]
+    },
+    {
+      id: "eval_performance",
+      label: "Performance Scale",
+      icon: TrendingUp,
+      color: "text-green-600",
+      bgColor: "bg-green-50",
+      description: "Overall performance assessment",
+      questions: [
+        { 
+          question: "Overall Performance Rating", 
+          type: "mcq", 
+          required: true, 
+          description: "Rate the employee's overall performance",
+          options: ["Exceptional - Consistently exceeds expectations", "Exceeds Expectations - Often goes above and beyond", "Meets Expectations - Performs job requirements well", "Needs Improvement - Below expected standards", "Unsatisfactory - Does not meet minimum requirements"]
+        },
+        {
+          question: "Goal Achievement",
+          type: "mcq",
+          required: true,
+          description: "How well did the employee achieve their goals?",
+          options: ["Exceeded all goals", "Met all goals", "Met most goals", "Met some goals", "Did not meet goals"]
+        }
+      ]
+    },
+    {
+      id: "eval_feedback",
+      label: "Open Feedback",
+      icon: Type,
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      description: "Qualitative feedback questions",
+      questions: [
+        { question: "What are this person's key strengths?", type: "text", required: true, description: "Describe their strongest attributes and contributions" },
+        { question: "What areas could they improve?", type: "text", required: true, description: "Suggest areas for growth and development" },
+        { question: "Any additional comments or feedback?", type: "text", required: false, description: "Share any other observations or recommendations" },
+      ]
+    },
+    {
+      id: "eval_360_manager",
+      label: "360° Manager View",
+      icon: LayoutGrid,
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      description: "Complete manager evaluation set",
+      questions: [
+        { question: "Quality of Work", type: "rating", scale: 5, required: true, description: "Accuracy, thoroughness, and reliability of work output" },
+        { question: "Productivity", type: "rating", scale: 5, required: true, description: "Volume of work and ability to meet deadlines" },
+        { question: "Job Knowledge", type: "rating", scale: 5, required: true, description: "Understanding of job requirements and procedures" },
+        { question: "Dependability", type: "rating", scale: 5, required: true, description: "Reliability, attendance, and commitment" },
+        { question: "Attitude", type: "rating", scale: 5, required: true, description: "Cooperation, enthusiasm, and professionalism" },
+        { question: "Key accomplishments during this period?", type: "text", required: true, description: "" },
+        { question: "Development goals for next period?", type: "text", required: true, description: "" },
+      ]
+    },
+    {
+      id: "eval_self",
+      label: "Self Assessment",
+      icon: Smile,
+      color: "text-cyan-600",
+      bgColor: "bg-cyan-50",
+      description: "Self-evaluation questions",
+      questions: [
+        { question: "Rate your own performance this period", type: "rating", scale: 5, required: true, description: "Be honest in your self-assessment" },
+        { question: "What were your main achievements?", type: "text", required: true, description: "List your key accomplishments" },
+        { question: "What challenges did you face?", type: "text", required: true, description: "Describe obstacles you encountered" },
+        { question: "What skills would you like to develop?", type: "text", required: true, description: "Identify areas for growth" },
+        { question: "What support do you need from your manager?", type: "text", required: false, description: "Suggest how your manager can help" },
+      ]
+    },
+    {
+      id: "eval_peer",
+      label: "Peer Review",
+      icon: List,
+      color: "text-pink-600",
+      bgColor: "bg-pink-50",
+      description: "Peer feedback questions",
+      questions: [
+        { question: "How well does this person collaborate with the team?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "How reliable is this person in meeting commitments?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "How well do they communicate with colleagues?", type: "rating", scale: 5, required: true, description: "" },
+        { question: "What do they do best?", type: "text", required: true, description: "Highlight their strengths from a peer perspective" },
+        { question: "What could they do differently?", type: "text", required: false, description: "Constructive suggestions for improvement" },
+      ]
+    },
+  ];
+
+  // Function to add feedback template questions to a section
+  const addFeedbackTemplate = (sectionId: number, templateId: string) => {
+    const template = feedbackTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    setSections(prevSections => {
+      const newSections = prevSections.map(section => {
+        if (section.id === sectionId) {
+          const existingQuestionCount = section.questions.length;
+          const newQuestions = template.questions.map((tq, idx) => ({
+            id: existingQuestionCount + idx + 1,
+            question: tq.question,
+            type: tq.type as QuestionType,
+            required: tq.required,
+            description: tq.description || '',
+            options: tq.options || (tq.type === 'mcq' ? ['Option 1', 'Option 2'] : []),
+            scale: tq.scale || 5,
+            rows: [],
+            columns: [],
+            imageUrl: '',
+            imageSequence: [],
+            videoUrl: '',
+            minValue: 0,
+            maxValue: tq.scale || 5,
+            minLabel: '',
+            maxLabel: '',
+            correctAnswer: undefined,
+            points: 0,
+            conditionalLogic: undefined,
+            translations: {},
+          }));
+          return {
+            ...section,
+            questions: [...section.questions, ...newQuestions]
+          };
+        }
+        return section;
+      });
+      return newSections;
+    });
+    toast.success(`Added ${template.label} template (${template.questions.length} questions)`);
+  };
+
+  // Function to add evaluation template questions to a section
+  const addEvaluationTemplate = (sectionId: number, templateId: string) => {
+    const template = evaluationTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    withPreservedScroll(() => {
+      const newQuestions = template.questions.map((tq, idx) => ({
+        id: Date.now() + idx,
+        type: tq.type,
+        question: tq.question,
+        required: tq.required,
+        description: tq.description || "",
+        isRichText: false,
+        formattedQuestion: "",
+        formattedOptions: [],
+        conditionalLogic: null,
+        parentQuestionId: null,
+        conditionalValue: null,
+        nestingLevel: 0,
+        ...(tq.type === "mcq" || tq.type === "multi" ? { options: (tq as any).options || ["Option 1", "Option 2"], correctAnswers: [] } : {}),
+        ...(tq.type === "rating" ? { scale: (tq as any).scale || 5 } : {}),
+        ...(tq.type === "slider" ? { min: 0, max: 100 } : {}),
+        ...(tq.type === "matrix" ? { rows: ["Row 1", "Row 2"], columns: ["Column 1", "Column 2"] } : {}),
+      }));
+
+      setSections(prevSections =>
+        prevSections.map((section) =>
+          section.id === sectionId
+            ? { ...section, questions: [...section.questions, ...newQuestions] }
+            : section
+        )
+      );
+      
+      toast.success(`Added ${template.label} template (${newQuestions.length} questions)`);
+    });
+  };
 
   const toggleSection = (sectionId: number) => {
     setExpandedSections((prev) =>
@@ -571,6 +859,10 @@ export default function QuestionnaireBuilderPage() {
           randomize_options: randomizeOptions,
           show_progress_bar: showProgressBar,
           allow_save_continue: allowSaveAndContinue,
+          show_header_in_participant_view: showHeaderInParticipantView,
+          custom_header_text: customHeaderText,
+          show_section_header: showSectionHeader,
+          section_header_format: sectionHeaderFormat,
         },
         sections: sections.map((section) => ({
           title: section.title,
@@ -1046,6 +1338,64 @@ export default function QuestionnaireBuilderPage() {
                 ))}
               </div>
             </div>
+
+            {/* Feedback Templates - Only show when type is Feedback */}
+            {questionnaireType === 'Feedback' && (
+              <div className="pt-4 mt-4 border-t-2 border-green-200 bg-green-50/50 -mx-6 px-6 pb-4 rounded-b-lg">
+                <p className="text-sm font-semibold text-green-800 mb-3 flex items-center gap-2">
+                  <Smile className="w-4 h-4" />
+                  Feedback Templates (Predefined Question Sets)
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {feedbackTemplates.map((template: any) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => addFeedbackTemplate(section.id, template.id)}
+                      className={`flex flex-col items-start p-3 ${template.bgColor} border-2 border-transparent hover:border-green-400 rounded-lg text-left transition-all hover:shadow-md`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <template.icon className={`w-5 h-5 ${template.color}`} />
+                        <span className="text-sm font-semibold text-gray-800">{template.label}</span>
+                      </div>
+                      <span className="text-xs text-gray-600">{template.description}</span>
+                      <span className="text-xs text-green-600 mt-1 font-medium">
+                        {template.questions.length} questions
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Evaluation Templates - Only show when type is Evaluation */}
+            {questionnaireType === 'Evaluation' && (
+              <div className="pt-4 mt-4 border-t-2 border-purple-200 bg-purple-50/50 -mx-6 px-6 pb-4 rounded-b-lg">
+                <p className="text-sm font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                  <Star className="w-4 h-4" />
+                  Evaluation Templates (Predefined Question Sets)
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {evaluationTemplates.map((template: any) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => addEvaluationTemplate(section.id, template.id)}
+                      className={`flex flex-col items-start p-3 ${template.bgColor} border-2 border-transparent hover:border-purple-400 rounded-lg text-left transition-all hover:shadow-md`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <template.icon className={`w-5 h-5 ${template.color}`} />
+                        <span className="text-sm font-semibold text-gray-800">{template.label}</span>
+                      </div>
+                      <span className="text-xs text-gray-600">{template.description}</span>
+                      <span className="text-xs text-purple-600 mt-1 font-medium">
+                        {template.questions.length} questions
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         )}
       </Card>
@@ -2319,10 +2669,28 @@ export default function QuestionnaireBuilderPage() {
                     <select
                       value={likertSettings.scale || 5}
                       onChange={(e) => {
-                        const newScale = parseInt(e.target.value) as 5 | 7;
-                        const defaultLabels = newScale === 5 
-                          ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
-                          : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+                        const newScale = parseInt(e.target.value) as 2 | 3 | 5 | 7 | 10;
+                        let defaultLabels: string[] = [];
+                        
+                        // Define default labels for each scale
+                        switch(newScale) {
+                          case 2:
+                            defaultLabels = ['Disagree', 'Agree'];
+                            break;
+                          case 3:
+                            defaultLabels = ['Disagree', 'Neutral', 'Agree'];
+                            break;
+                          case 5:
+                            defaultLabels = ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree'];
+                            break;
+                          case 7:
+                            defaultLabels = ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+                            break;
+                          case 10:
+                            defaultLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+                            break;
+                        }
+                        
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -2340,8 +2708,11 @@ export default function QuestionnaireBuilderPage() {
                       }}
                       className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
                     >
+                      <option value={2}>2 Point Scale</option>
+                      <option value={3}>3 Point Scale</option>
                       <option value={5}>5 Point Scale</option>
                       <option value={7}>7 Point Scale</option>
+                      <option value={10}>10 Point Scale</option>
                     </select>
                   </div>
                   {/* Icon Style Selection */}
@@ -2430,6 +2801,63 @@ export default function QuestionnaireBuilderPage() {
                     </Label>
                   </div>
                 </div>
+                {/* Custom Labels Section */}
+                {likertSettings.showLabels !== false && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-2">Customize Hover Labels</Label>
+                    <div className="space-y-2">
+                      {Array.from({ length: likertSettings.scale || 5 }).map((_, idx) => {
+                        // Get current label text
+                        const currentLabels = likertSettings.labels || [];
+                        const currentLabel = typeof currentLabels[idx] === 'string' 
+                          ? currentLabels[idx] 
+                          : (currentLabels[idx]?.label || '');
+                        
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 w-16">Point {idx + 1}:</span>
+                            <Input
+                              type="text"
+                              placeholder={`Label for point ${idx + 1}`}
+                              defaultValue={currentLabel}
+                              onBlur={(e) => {
+                                const newLabels = Array.from({ length: likertSettings.scale || 5 }, (_, i) => {
+                                  const existingLabel = likertSettings.labels?.[i];
+                                  const existingText = typeof existingLabel === 'string' 
+                                    ? existingLabel 
+                                    : (existingLabel?.label || `Point ${i + 1}`);
+                                  
+                                  if (i === idx) {
+                                    return e.target.value || existingText;
+                                  }
+                                  return existingText;
+                                });
+                                
+                                setSections(prevSections =>
+                                  prevSections.map(section =>
+                                    section.id === sectionId
+                                      ? {
+                                          ...section,
+                                          questions: section.questions.map((q: any) =>
+                                            q.id === question.id
+                                              ? { ...q, settings: { ...likertSettings, labels: newLabels } }
+                                              : q
+                                          )
+                                        }
+                                      : section
+                                  )
+                                );
+                              }}
+                              key={`likert-label-${question.id}-${idx}-${currentLabel}`}
+                              className="text-xs h-8 flex-1"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">💡 Customize the text shown when hovering over each option</p>
+                  </div>
+                )}
                 {/* Custom Images Section */}
                 {likertSettings.iconStyle === 'custom' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -2627,6 +3055,34 @@ export default function QuestionnaireBuilderPage() {
                       <option value="xl">Extra Large</option>
                     </select>
                   </div>
+                  {/* Alignment */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Alignment</Label>
+                    <select
+                      value={starSettings.alignment || 'center'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...starSettings, alignment: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </div>
                   {/* Active Color - only for non-custom icons */}
                   {starSettings.icon !== 'custom' && (
                     <div>
@@ -2714,6 +3170,59 @@ export default function QuestionnaireBuilderPage() {
                     </Label>
                   </div>
                 </div>
+                {/* Custom Labels Section */}
+                {starSettings.showLabel !== false && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-2">Customize Hover Labels</Label>
+                    <div className="space-y-2">
+                      {Array.from({ length: starSettings.maxStars || 5 }).map((_, idx) => {
+                        // Get current label text
+                        const currentLabels = starSettings.labels || [];
+                        const currentLabel = currentLabels[idx]?.label || `${idx + 1} Stars`;
+                        
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 w-16">{idx + 1} Star{idx > 0 ? 's' : ''}:</span>
+                            <Input
+                              type="text"
+                              placeholder={`Label for ${idx + 1} star${idx > 0 ? 's' : ''}`}
+                              defaultValue={currentLabel}
+                              onBlur={(e) => {
+                                const newLabels = Array.from({ length: starSettings.maxStars || 5 }, (_, i) => {
+                                  const existingLabel = starSettings.labels?.[i]?.label || 
+                                    (i === 0 ? 'Poor' : i === (starSettings.maxStars || 5) - 1 ? 'Excellent' : `${i + 1} Stars`);
+                                  
+                                  return {
+                                    value: i + 1,
+                                    label: i === idx ? (e.target.value || existingLabel) : existingLabel
+                                  };
+                                });
+                                
+                                setSections(prevSections =>
+                                  prevSections.map(section =>
+                                    section.id === sectionId
+                                      ? {
+                                          ...section,
+                                          questions: section.questions.map((q: any) =>
+                                            q.id === question.id
+                                              ? { ...q, settings: { ...starSettings, labels: newLabels } }
+                                              : q
+                                          )
+                                        }
+                                      : section
+                                  )
+                                );
+                              }}
+                              key={`star-label-${question.id}-${idx}-${currentLabel}`}
+                              className="text-xs h-8 flex-1"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">💡 Customize the text shown when hovering over each star</p>
+                  </div>
+                )}
                 {/* Custom Images Section */}
                 {starSettings.icon === 'custom' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -3230,6 +3739,59 @@ export default function QuestionnaireBuilderPage() {
                     onChange={(e) => setAllowSaveAndContinue(e.target.checked)}
                     className="w-4 h-4 cursor-pointer" 
                   />
+                </div>
+                {/* Participant View Display Settings */}
+                <div className="pt-3 mt-3 border-t border-gray-200">
+                  <span className="text-xs font-semibold text-gray-800 block mb-2">Participant View Display</span>
+                  
+                  {/* Header (Main Title) Settings */}
+                  <div className="p-2 bg-gray-50 rounded mb-2">
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-xs font-medium text-gray-700">Show Header</span>
+                      <input 
+                        type="checkbox" 
+                        checked={showHeaderInParticipantView}
+                        onChange={(e) => setShowHeaderInParticipantView(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer" 
+                      />
+                    </div>
+                    {showHeaderInParticipantView && (
+                      <div className="py-1">
+                        <Input
+                          type="text"
+                          placeholder="Custom header text (leave empty for questionnaire title)"
+                          value={customHeaderText}
+                          onChange={(e) => setCustomHeaderText(e.target.value)}
+                          className="text-xs h-7"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Section Header (Subheader) Settings */}
+                  <div className="p-2 bg-gray-50 rounded">
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-xs font-medium text-gray-700">Show Section Header</span>
+                      <input 
+                        type="checkbox" 
+                        checked={showSectionHeader}
+                        onChange={(e) => setShowSectionHeader(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer" 
+                      />
+                    </div>
+                    {showSectionHeader && (
+                      <div className="py-1">
+                        <select
+                          value={sectionHeaderFormat}
+                          onChange={(e) => setSectionHeaderFormat(e.target.value as 'numbered' | 'titleOnly')}
+                          className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded"
+                        >
+                          <option value="numbered">Section 1: Title</option>
+                          <option value="titleOnly">Title Only</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

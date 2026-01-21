@@ -74,7 +74,7 @@ export interface DialGaugeSettings {
 }
 
 export interface LikertVisualSettings {
-  scale?: 5 | 7;
+  scale?: 2 | 3 | 5 | 7 | 10;
   labels?: string[];
   showLabels?: boolean;
   showIcons?: boolean;

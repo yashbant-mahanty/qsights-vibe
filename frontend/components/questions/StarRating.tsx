@@ -19,6 +19,7 @@ interface StarRatingProps {
     labels?: Array<{ value: number; label: string }>;
     showValue?: boolean;
     orientation?: 'horizontal' | 'circular';
+    alignment?: 'left' | 'center' | 'right';
     customImages?: {
       activeImageUrl?: string;
       inactiveImageUrl?: string;
@@ -50,6 +51,8 @@ export function StarRating({
   disabled = false,
   className,
 }: StarRatingProps) {
+  console.log('[STAR_RATING] Component rendered with settings:', settings);
+  
   const {
     maxStars = 5,
     icon = 'star',
@@ -62,8 +65,13 @@ export function StarRating({
     labels = defaultLabels,
     showValue = true,
     orientation = 'horizontal',
+    alignment = 'center',
     customImages,
   } = settings;
+  
+  const alignmentClass = alignment === 'left' ? 'items-start' : alignment === 'right' ? 'items-end' : 'items-center';
+  
+  console.log('[STAR_RATING] Resolved values:', { maxStars, icon, showLabel, labels, orientation, alignment });
 
   const [localValue, setLocalValue] = useState(value ?? 0);
   const [hoverValue, setHoverValue] = useState<number | null>(null);
@@ -89,8 +97,11 @@ export function StarRating({
   const displayValue = hoverValue ?? localValue;
   const currentLabel = labels.find((l) => l.value === Math.ceil(displayValue))?.label;
 
+  console.log('[STAR_RATING] Display state:', { displayValue, currentLabel, hoverValue, localValue });
+
   const handleClick = (starIndex: number, isHalf: boolean = false) => {
     if (disabled) return;
+    console.log('[STAR_RATING] Clicked star:', starIndex);
     const newValue = isHalf && allowHalf ? starIndex - 0.5 : starIndex;
     setLocalValue(newValue);
     onChange(newValue);
@@ -187,20 +198,18 @@ export function StarRating({
 
   // Horizontal orientation (default)
   return (
-    <div className={cn('flex flex-col items-center gap-3', className)}>
-      {/* Label display */}
-      {showLabel && (
-        <div className="min-h-[1.5rem]">
-          {currentLabel && (
-            <span
-              className="text-sm font-medium transition-colors duration-200"
-              style={{ color: displayValue > 0 ? activeColor : inactiveColor }}
-            >
-              {currentLabel}
-            </span>
-          )}
-        </div>
-      )}
+    <div className={cn('flex flex-col gap-3', alignmentClass, className)}>
+      {/* Label display - show on hover or selected */}
+      <div className="min-h-[2rem] flex items-center">
+        {showLabel && currentLabel && (
+          <span
+            className="text-sm font-semibold uppercase tracking-wide transition-all duration-200"
+            style={{ color: displayValue > 0 ? activeColor : inactiveColor }}
+          >
+            {currentLabel}
+          </span>
+        )}
+      </div>
 
       {/* Stars container */}
       <div className={cn('flex items-center', gap)}>
@@ -214,6 +223,7 @@ export function StarRating({
               key={starIndex}
               onClick={(e) => handleClick(starIndex, false)}
               onMouseMove={(e) => handleMouseMove(e, starIndex)}
+              onMouseEnter={() => !disabled && setHoverValue(starIndex)}
               onMouseLeave={() => setHoverValue(null)}
               disabled={disabled}
               className={cn(

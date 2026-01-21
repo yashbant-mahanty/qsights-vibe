@@ -12,9 +12,16 @@ import {
   Settings,
   FileText,
   Info,
+  Users,
+  ArrowDown,
+  ArrowUp,
+  RefreshCw,
+  UserCheck,
+  Network,
 } from "lucide-react";
 import { evaluationEventsApi, questionnairesApi, organizationsApi, programsApi, type Questionnaire, type Organization, type Program } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
+import { fetchWithAuth } from "@/lib/api";
 
 export default function CreateEvaluationEventPage() {
   const router = useRouter();
@@ -30,18 +37,27 @@ export default function CreateEvaluationEventPage() {
     program_id: "",
     start_date: "",
     end_date: "",
+    evaluation_type: "manager_to_subordinate", // NEW: evaluation type
     allow_self_evaluation: false,
+    allow_peer_evaluation: false,
+    allow_manager_evaluation: true,
+    allow_subordinate_evaluation: false,
     is_anonymous: true,
     show_individual_responses: false,
-    hierarchy_levels: 1, // 1 = direct reports only, null = all levels
+    auto_generate_assignments: true, // NEW: auto-generate from hierarchy
     email_subject: "Evaluation Request: {{evaluatee_name}}",
-    email_body: "Dear Manager,\n\nYou have been requested to complete an evaluation for {{evaluatee_name}}.\n\nPlease click the link below to complete the evaluation:\n{{evaluation_link}}\n\nThank you.",
+    email_body: "Dear {{evaluator_name}},\n\nYou have been requested to complete an evaluation for {{evaluatee_name}}.\n\nPlease click the link below to complete the evaluation:\n{{evaluation_link}}\n\nThis evaluation is part of: {{event_name}}\n\nThank you.",
   });
 
   // Dropdown options
   const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
+  
+  // Staff from hierarchy for preview
+  const [hierarchyStaff, setHierarchyStaff] = useState<any[]>([]);
+  const [hierarchyRelationships, setHierarchyRelationships] = useState<any[]>([]);
+  const [assignmentPreview, setAssignmentPreview] = useState<{evaluator: string, evaluatee: string, type: string}[]>([]);
 
   useEffect(() => {
     loadDropdownOptions();
@@ -64,14 +80,88 @@ export default function CreateEvaluationEventPage() {
         questionnairesApi.getAll(),
         organizationsApi.getAll(),
       ]);
-      setQuestionnaires(questData.filter((q: Questionnaire) => q.status === 'published'));
+      // Filter to show only Evaluation type questionnaires first, then others
+      const evalQuestionnaires = questData.filter((q: Questionnaire) => 
+        q.status === 'published' && q.type?.toLowerCase() === 'evaluation'
+      );
+      const otherQuestionnaires = questData.filter((q: Questionnaire) => 
+        q.status === 'published' && q.type?.toLowerCase() !== 'evaluation'
+      );
+      setQuestionnaires([...evalQuestionnaires, ...otherQuestionnaires]);
       setOrganizations(orgData);
+      
+      // Load hierarchy data for assignment generation
+      await loadHierarchyData();
     } catch (err) {
       console.error('Error loading options:', err);
       toast({ title: "Error", description: "Failed to load form options", variant: "error" });
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadHierarchyData() {
+    try {
+      const [staffRes, hierarchyRes] = await Promise.all([
+        fetchWithAuth('/evaluation/staff'),
+        fetchWithAuth('/evaluation/hierarchy'),
+      ]);
+      if (staffRes.success) setHierarchyStaff(staffRes.staff || []);
+      if (hierarchyRes.success) setHierarchyRelationships(hierarchyRes.hierarchies || []);
+    } catch (err) {
+      console.error('Error loading hierarchy:', err);
+    }
+  }
+
+  // Generate assignment preview based on evaluation type
+  useEffect(() => {
+    generateAssignmentPreview();
+  }, [formData.evaluation_type, formData.allow_self_evaluation, hierarchyStaff, hierarchyRelationships]);
+
+  function generateAssignmentPreview() {
+    if (hierarchyStaff.length === 0 || hierarchyRelationships.length === 0) {
+      setAssignmentPreview([]);
+      return;
+    }
+
+    const preview: {evaluator: string, evaluatee: string, type: string}[] = [];
+    const staffMap = new Map(hierarchyStaff.map(s => [s.id, s.name]));
+
+    hierarchyRelationships.forEach(rel => {
+      const staffName = staffMap.get(rel.staff_id) || 'Unknown';
+      const managerName = staffMap.get(rel.reports_to_id) || 'Unknown';
+
+      switch (formData.evaluation_type) {
+        case 'manager_to_subordinate':
+          // Manager evaluates subordinate (downward)
+          preview.push({ evaluator: managerName, evaluatee: staffName, type: 'Manager → Subordinate' });
+          break;
+        case 'subordinate_to_manager':
+          // Subordinate evaluates manager (upward)
+          preview.push({ evaluator: staffName, evaluatee: managerName, type: 'Subordinate → Manager' });
+          break;
+        case '360_degree':
+          // Both directions
+          preview.push({ evaluator: managerName, evaluatee: staffName, type: 'Manager → Subordinate' });
+          preview.push({ evaluator: staffName, evaluatee: managerName, type: 'Subordinate → Manager' });
+          break;
+        case 'peer_to_peer':
+          // Will need peer relationships - for now show placeholder
+          break;
+        case 'self_only':
+          // Self evaluation
+          break;
+      }
+    });
+
+    // Add self evaluations if enabled
+    if (formData.allow_self_evaluation) {
+      hierarchyStaff.forEach(staff => {
+        preview.push({ evaluator: staff.name, evaluatee: staff.name, type: 'Self' });
+      });
+    }
+
+    setAssignmentPreview(preview.slice(0, 10)); // Show first 10 for preview
   }
 
   async function loadPrograms(orgId: string) {
@@ -105,17 +195,39 @@ export default function CreateEvaluationEventPage() {
       toast({ title: "Error", description: "Please select a questionnaire", variant: "error" });
       return;
     }
+    if (!formData.start_date || !formData.end_date) {
+      toast({ title: "Error", description: "Please select start and end dates", variant: "error" });
+      return;
+    }
 
     try {
       setSaving(true);
       const data = {
         ...formData,
         status: 'draft' as const,
-        hierarchy_levels: formData.hierarchy_levels || null,
       };
       
-      await evaluationEventsApi.create(data);
-      toast({ title: "Success!", description: "Evaluation event created successfully", variant: "success" });
+      const result = await evaluationEventsApi.create(data);
+      
+      // If auto-generate is enabled, generate assignments
+      if (formData.auto_generate_assignments && result.data?.id) {
+        try {
+          await fetchWithAuth(`/evaluation-events/${result.data.id}/generate-assignments`, {
+            method: 'POST',
+            body: JSON.stringify({
+              evaluation_type: formData.evaluation_type,
+              allow_self_evaluation: formData.allow_self_evaluation,
+            })
+          });
+          toast({ title: "Success!", description: "Evaluation event created with assignments", variant: "success" });
+        } catch (assignErr) {
+          console.error('Failed to generate assignments:', assignErr);
+          toast({ title: "Warning", description: "Event created but assignments need to be generated manually", variant: "warning" });
+        }
+      } else {
+        toast({ title: "Success!", description: "Evaluation event created successfully", variant: "success" });
+      }
+      
       router.push('/evaluation-events');
     } catch (err) {
       console.error('Error creating evaluation event:', err);
@@ -293,6 +405,187 @@ export default function CreateEvaluationEventPage() {
               </CardContent>
             </Card>
 
+            {/* Evaluation Type - NEW */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Network className="w-5 h-5 text-qsights-cyan" />
+                  Evaluation Type
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Manager → Subordinate */}
+                  <label 
+                    className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      formData.evaluation_type === 'manager_to_subordinate' 
+                        ? 'border-blue-500 bg-blue-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="evaluation_type"
+                      value="manager_to_subordinate"
+                      checked={formData.evaluation_type === 'manager_to_subordinate'}
+                      onChange={handleInputChange}
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-2 mb-2">
+                      <ArrowDown className="w-5 h-5 text-blue-600" />
+                      <span className="font-medium">Manager → Subordinate</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Managers evaluate their direct reports</p>
+                  </label>
+
+                  {/* Subordinate → Manager (Upward) */}
+                  <label 
+                    className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      formData.evaluation_type === 'subordinate_to_manager' 
+                        ? 'border-green-500 bg-green-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="evaluation_type"
+                      value="subordinate_to_manager"
+                      checked={formData.evaluation_type === 'subordinate_to_manager'}
+                      onChange={handleInputChange}
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-2 mb-2">
+                      <ArrowUp className="w-5 h-5 text-green-600" />
+                      <span className="font-medium">Subordinate → Manager</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Staff evaluate their managers (upward feedback)</p>
+                  </label>
+
+                  {/* 360° Evaluation */}
+                  <label 
+                    className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      formData.evaluation_type === '360_degree' 
+                        ? 'border-purple-500 bg-purple-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="evaluation_type"
+                      value="360_degree"
+                      checked={formData.evaluation_type === '360_degree'}
+                      onChange={handleInputChange}
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-2 mb-2">
+                      <RefreshCw className="w-5 h-5 text-purple-600" />
+                      <span className="font-medium">360° Evaluation</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Full circle - managers, subordinates, and self</p>
+                  </label>
+
+                  {/* Peer to Peer */}
+                  <label 
+                    className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      formData.evaluation_type === 'peer_to_peer' 
+                        ? 'border-orange-500 bg-orange-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="evaluation_type"
+                      value="peer_to_peer"
+                      checked={formData.evaluation_type === 'peer_to_peer'}
+                      onChange={handleInputChange}
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="w-5 h-5 text-orange-600" />
+                      <span className="font-medium">Peer to Peer</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Colleagues at same level evaluate each other</p>
+                  </label>
+
+                  {/* Self Evaluation Only */}
+                  <label 
+                    className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      formData.evaluation_type === 'self_only' 
+                        ? 'border-cyan-500 bg-cyan-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="evaluation_type"
+                      value="self_only"
+                      checked={formData.evaluation_type === 'self_only'}
+                      onChange={handleInputChange}
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-2 mb-2">
+                      <UserCheck className="w-5 h-5 text-cyan-600" />
+                      <span className="font-medium">Self Evaluation</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Staff evaluate their own performance</p>
+                  </label>
+                </div>
+
+                {/* Auto-generate toggle */}
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="auto_generate_assignments"
+                      name="auto_generate_assignments"
+                      checked={formData.auto_generate_assignments}
+                      onChange={handleInputChange}
+                      className="w-4 h-4 text-qsights-cyan border-gray-300 rounded focus:ring-qsights-cyan"
+                    />
+                    <label htmlFor="auto_generate_assignments" className="text-sm font-medium text-gray-700">
+                      Auto-generate assignments from hierarchy
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 ml-7">
+                    Automatically create evaluation assignments based on your organization's hierarchy structure
+                  </p>
+                </div>
+
+                {/* Assignment Preview */}
+                {formData.auto_generate_assignments && assignmentPreview.length > 0 && (
+                  <div className="mt-4 p-4 border border-blue-200 bg-blue-50 rounded-lg">
+                    <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
+                      <Info className="w-4 h-4" />
+                      Assignment Preview ({hierarchyRelationships.length} relationships found)
+                    </h4>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {assignmentPreview.map((a, idx) => (
+                        <div key={idx} className="text-sm text-blue-800 flex items-center gap-2">
+                          <span className="font-medium">{a.evaluator}</span>
+                          <span className="text-blue-400">→</span>
+                          <span>{a.evaluatee}</span>
+                          <span className="text-xs bg-blue-200 px-2 py-0.5 rounded">{a.type}</span>
+                        </div>
+                      ))}
+                      {assignmentPreview.length < hierarchyRelationships.length + (formData.allow_self_evaluation ? hierarchyStaff.length : 0) && (
+                        <div className="text-xs text-blue-600 italic mt-2">
+                          + more assignments will be generated...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {formData.auto_generate_assignments && hierarchyStaff.length === 0 && (
+                  <div className="mt-4 p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      <strong>No hierarchy data found.</strong> Please set up staff and hierarchy relationships in the Evaluation module first.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Settings */}
             <Card>
               <CardHeader>
@@ -343,26 +636,6 @@ export default function CreateEvaluationEventPage() {
                   <label htmlFor="show_individual_responses" className="text-sm text-gray-700">
                     Show individual responses in reports
                   </label>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Hierarchy Depth
-                  </label>
-                  <select
-                    name="hierarchy_levels"
-                    value={formData.hierarchy_levels}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-indigo-500"
-                  >
-                    <option value={1}>Direct Reports Only</option>
-                    <option value={2}>Up to 2 Levels</option>
-                    <option value={3}>Up to 3 Levels</option>
-                    <option value="">All Levels (Full Hierarchy)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    How many levels down the hierarchy can a manager evaluate
-                  </p>
                 </div>
               </CardContent>
             </Card>

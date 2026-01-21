@@ -206,6 +206,168 @@ class EvaluationEventController extends Controller
     }
 
     /**
+     * Auto-generate assignments from hierarchy
+     * Based on evaluation_type, creates assignments for all relationships
+     */
+    public function generateAssignments(Request $request, string $id)
+    {
+        $event = EvaluationEvent::findOrFail($id);
+
+        $validated = $request->validate([
+            'evaluation_type' => 'required|in:manager_to_subordinate,subordinate_to_manager,360_degree,peer_to_peer,self_only',
+            'allow_self_evaluation' => 'nullable|boolean',
+        ]);
+
+        // Get all hierarchy relationships for this organization
+        $query = DB::table('evaluation_hierarchy')
+            ->where('is_active', true);
+            
+        if ($event->organization_id) {
+            $query->where('organization_id', $event->organization_id);
+        }
+        
+        $hierarchies = $query->get();
+        
+        // Get all staff
+        $staffQuery = DB::table('evaluation_staff')
+            ->where('status', 'active');
+            
+        if ($event->organization_id) {
+            $staffQuery->where('organization_id', $event->organization_id);
+        }
+        
+        $staff = $staffQuery->get();
+        $staffMap = $staff->keyBy('id');
+
+        $created = [];
+        $skipped = [];
+
+        DB::beginTransaction();
+        try {
+            // Generate based on evaluation type
+            switch ($validated['evaluation_type']) {
+                case 'manager_to_subordinate':
+                    // Manager evaluates subordinate (downward)
+                    foreach ($hierarchies as $h) {
+                        $result = $this->createAssignment($event->id, $h->reports_to_id, $h->staff_id, 'downward');
+                        if ($result['created']) {
+                            $created[] = $result['assignment'];
+                        } else {
+                            $skipped[] = $result;
+                        }
+                    }
+                    break;
+
+                case 'subordinate_to_manager':
+                    // Subordinate evaluates manager (upward)
+                    foreach ($hierarchies as $h) {
+                        $result = $this->createAssignment($event->id, $h->staff_id, $h->reports_to_id, 'upward');
+                        if ($result['created']) {
+                            $created[] = $result['assignment'];
+                        } else {
+                            $skipped[] = $result;
+                        }
+                    }
+                    break;
+
+                case '360_degree':
+                    // Both directions
+                    foreach ($hierarchies as $h) {
+                        // Downward
+                        $result = $this->createAssignment($event->id, $h->reports_to_id, $h->staff_id, 'downward');
+                        if ($result['created']) {
+                            $created[] = $result['assignment'];
+                        } else {
+                            $skipped[] = $result;
+                        }
+                        
+                        // Upward
+                        $result = $this->createAssignment($event->id, $h->staff_id, $h->reports_to_id, 'upward');
+                        if ($result['created']) {
+                            $created[] = $result['assignment'];
+                        } else {
+                            $skipped[] = $result;
+                        }
+                    }
+                    break;
+
+                case 'peer_to_peer':
+                    // Peers at same role level - TBD based on role matching
+                    // For now, skip
+                    break;
+
+                case 'self_only':
+                    // Only self evaluations
+                    break;
+            }
+
+            // Add self evaluations if enabled
+            if ($request->get('allow_self_evaluation', false)) {
+                foreach ($staff as $s) {
+                    $result = $this->createAssignment($event->id, $s->id, $s->id, 'self');
+                    if ($result['created']) {
+                        $created[] = $result['assignment'];
+                    } else {
+                        $skipped[] = $result;
+                    }
+                }
+            }
+
+            // Update event with assignment counts
+            $event->touch();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Assignments generated successfully',
+                'created_count' => count($created),
+                'skipped_count' => count($skipped),
+                'total_staff' => $staff->count(),
+                'total_relationships' => $hierarchies->count(),
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate assignments',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Helper to create a single assignment
+     */
+    private function createAssignment(string $eventId, string $evaluatorId, string $evaluateeId, string $type): array
+    {
+        // Check if already exists
+        $existing = EvaluationAssignment::where('evaluation_event_id', $eventId)
+            ->where('evaluator_id', $evaluatorId)
+            ->where('evaluatee_id', $evaluateeId)
+            ->first();
+
+        if ($existing) {
+            return ['created' => false, 'reason' => 'already_exists', 'evaluator' => $evaluatorId, 'evaluatee' => $evaluateeId];
+        }
+
+        $assignment = EvaluationAssignment::create([
+            'evaluation_event_id' => $eventId,
+            'evaluator_id' => $evaluatorId,
+            'evaluatee_id' => $evaluateeId,
+            'evaluator_type' => $type,
+            'status' => 'pending',
+            'access_token' => Str::random(64),
+            'assigned_at' => now(),
+            'send_invitation' => true,
+            'send_reminders' => true,
+        ]);
+
+        return ['created' => true, 'assignment' => $assignment];
+    }
+
+    /**
      * Get available evaluatees for the current manager
      * Returns users/participants who report to the current user
      */

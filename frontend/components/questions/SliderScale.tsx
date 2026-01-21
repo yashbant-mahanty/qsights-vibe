@@ -246,7 +246,7 @@ export function SliderScale({
         console.log('✅ [SLIDER] RENDERING SEQUENCE IMAGES BLOCK');
         return (
         <div className="w-full mb-6">
-          <div className="flex justify-between items-center gap-2">
+          <div className="flex justify-between items-center gap-1 w-full">
             {sequenceImages.map((imageUrl, index) => {
               console.log(`🖼️ [SLIDER] Rendering image ${index}:`, imageUrl);
               return (
@@ -256,21 +256,19 @@ export function SliderScale({
                   'relative flex-1 rounded-lg overflow-hidden transition-all duration-300 ease-out',
                   'border-2',
                   index === activeImageIndex 
-                    ? 'border-blue-500 scale-105 shadow-lg shadow-blue-200' 
-                    : 'border-transparent scale-95 opacity-40'
+                    ? 'border-blue-500 shadow-lg shadow-blue-200 z-10' 
+                    : 'border-transparent opacity-40'
                 )}
                 style={{
                   filter: index === activeImageIndex ? 'grayscale(0%)' : 'grayscale(100%)',
+                  aspectRatio: '1 / 1',
                 }}
               >
                 <img
                   src={imageUrl}
                   alt={`Value ${index}`}
-                  className="w-full h-auto bg-gray-50"
+                  className="w-full h-full object-cover bg-gray-50"
                   style={{ 
-                    maxHeight: '120px',
-                    objectFit: 'contain',
-                    aspectRatio: '16 / 9',
                     display: 'block'
                   }}
                   crossOrigin="anonymous"

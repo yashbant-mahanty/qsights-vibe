@@ -98,6 +98,10 @@ export default function ViewQuestionnairePage() {
   const [randomizeOptions, setRandomizeOptions] = useState(false);
   const [showProgressBar, setShowProgressBar] = useState(true);
   const [allowSaveAndContinue, setAllowSaveAndContinue] = useState(true);
+  const [showHeaderInParticipantView, setShowHeaderInParticipantView] = useState(true);
+  const [customHeaderText, setCustomHeaderText] = useState('');
+  const [showSectionHeader, setShowSectionHeader] = useState(true);
+  const [sectionHeaderFormat, setSectionHeaderFormat] = useState<'numbered' | 'titleOnly'>('numbered');
   const [enabledLanguages, setEnabledLanguages] = useState(["EN"]);
   const [activeLanguage, setActiveLanguage] = useState("EN");
   const [showMultilingualEditor, setShowMultilingualEditor] = useState(false);
@@ -267,6 +271,10 @@ export default function ViewQuestionnairePage() {
         setRandomizeOptions(data.settings.randomize_options || false);
         setShowProgressBar(data.settings.show_progress_bar !== false);
         setAllowSaveAndContinue(data.settings.allow_save_continue !== false);
+        setShowHeaderInParticipantView(data.settings.show_header_in_participant_view !== false);
+        setCustomHeaderText(data.settings.custom_header_text || '');
+        setShowSectionHeader(data.settings.show_section_header !== false);
+        setSectionHeaderFormat(data.settings.section_header_format || 'numbered');
       }
       
       // Load enabled languages
@@ -496,7 +504,11 @@ export default function ViewQuestionnairePage() {
           randomize_questions: randomizeQuestions,
           randomize_options: randomizeOptions,
           show_progress_bar: showProgressBar,
-          allow_save_continue: allowSaveAndContinue
+          allow_save_continue: allowSaveAndContinue,
+          show_header_in_participant_view: showHeaderInParticipantView,
+          custom_header_text: customHeaderText,
+          show_section_header: showSectionHeader,
+          section_header_format: sectionHeaderFormat,
         },
         sections: sections.map((section, idx) => ({
           id: section.id,
@@ -2216,10 +2228,28 @@ export default function ViewQuestionnairePage() {
                     <select
                       value={likertSettings.scale || 5}
                       onChange={(e) => {
-                        const newScale = parseInt(e.target.value) as 5 | 7;
-                        const defaultLabels = newScale === 5 
-                          ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
-                          : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+                        const newScale = parseInt(e.target.value) as 2 | 3 | 5 | 7 | 10;
+                        let defaultLabels: string[] = [];
+                        
+                        // Define default labels for each scale
+                        switch(newScale) {
+                          case 2:
+                            defaultLabels = ['Disagree', 'Agree'];
+                            break;
+                          case 3:
+                            defaultLabels = ['Disagree', 'Neutral', 'Agree'];
+                            break;
+                          case 5:
+                            defaultLabels = ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree'];
+                            break;
+                          case 7:
+                            defaultLabels = ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+                            break;
+                          case 10:
+                            defaultLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+                            break;
+                        }
+                        
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -2237,8 +2267,11 @@ export default function ViewQuestionnairePage() {
                       }}
                       className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
                     >
+                      <option value={2}>2 Point Scale</option>
+                      <option value={3}>3 Point Scale</option>
                       <option value={5}>5 Point Scale</option>
                       <option value={7}>7 Point Scale</option>
+                      <option value={10}>10 Point Scale</option>
                     </select>
                   </div>
                   {/* Icon Style Selection */}
@@ -2327,6 +2360,63 @@ export default function ViewQuestionnairePage() {
                     </Label>
                   </div>
                 </div>
+                {/* Custom Labels Section */}
+                {likertSettings.showLabels !== false && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-2">Customize Hover Labels</Label>
+                    <div className="space-y-2">
+                      {Array.from({ length: likertSettings.scale || 5 }).map((_, idx) => {
+                        // Get current label text
+                        const currentLabels = likertSettings.labels || [];
+                        const currentLabel = typeof currentLabels[idx] === 'string' 
+                          ? currentLabels[idx] 
+                          : (currentLabels[idx]?.label || '');
+                        
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 w-16">Point {idx + 1}:</span>
+                            <Input
+                              type="text"
+                              placeholder={`Label for point ${idx + 1}`}
+                              defaultValue={currentLabel}
+                              onBlur={(e) => {
+                                const newLabels = Array.from({ length: likertSettings.scale || 5 }, (_, i) => {
+                                  const existingLabel = likertSettings.labels?.[i];
+                                  const existingText = typeof existingLabel === 'string' 
+                                    ? existingLabel 
+                                    : (existingLabel?.label || `Point ${i + 1}`);
+                                  
+                                  if (i === idx) {
+                                    return e.target.value || existingText;
+                                  }
+                                  return existingText;
+                                });
+                                
+                                setSections(prevSections =>
+                                  prevSections.map(section =>
+                                    section.id === sectionId
+                                      ? {
+                                          ...section,
+                                          questions: section.questions.map((q: any) =>
+                                            q.id === question.id
+                                              ? { ...q, settings: { ...likertSettings, labels: newLabels } }
+                                              : q
+                                          )
+                                        }
+                                      : section
+                                  )
+                                );
+                              }}
+                              key={`likert-label-${question.id}-${idx}-${currentLabel}`}
+                              className="text-xs h-8 flex-1"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">💡 Customize the text shown when hovering over each option</p>
+                  </div>
+                )}
                 {/* Custom Images Section */}
                 {likertSettings.iconStyle === 'custom' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -2522,6 +2612,34 @@ export default function ViewQuestionnairePage() {
                       <option value="xl">Extra Large</option>
                     </select>
                   </div>
+                  {/* Alignment */}
+                  <div>
+                    <Label className="text-xs text-gray-600">Alignment</Label>
+                    <select
+                      value={starSettings.alignment || 'center'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...starSettings, alignment: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </div>
                   {/* Active Color - only for non-custom icons */}
                   {starSettings.icon !== 'custom' && (
                     <div>
@@ -2609,6 +2727,59 @@ export default function ViewQuestionnairePage() {
                     </Label>
                   </div>
                 </div>
+                {/* Custom Labels Section */}
+                {starSettings.showLabel !== false && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-2">Customize Hover Labels</Label>
+                    <div className="space-y-2">
+                      {Array.from({ length: starSettings.maxStars || 5 }).map((_, idx) => {
+                        // Get current label text
+                        const currentLabels = starSettings.labels || [];
+                        const currentLabel = currentLabels[idx]?.label || `${idx + 1} Stars`;
+                        
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 w-16">{idx + 1} Star{idx > 0 ? 's' : ''}:</span>
+                            <Input
+                              type="text"
+                              placeholder={`Label for ${idx + 1} star${idx > 0 ? 's' : ''}`}
+                              defaultValue={currentLabel}
+                              onBlur={(e) => {
+                                const newLabels = Array.from({ length: starSettings.maxStars || 5 }, (_, i) => {
+                                  const existingLabel = starSettings.labels?.[i]?.label || 
+                                    (i === 0 ? 'Poor' : i === (starSettings.maxStars || 5) - 1 ? 'Excellent' : `${i + 1} Stars`);
+                                  
+                                  return {
+                                    value: i + 1,
+                                    label: i === idx ? (e.target.value || existingLabel) : existingLabel
+                                  };
+                                });
+                                
+                                setSections(prevSections =>
+                                  prevSections.map(section =>
+                                    section.id === sectionId
+                                      ? {
+                                          ...section,
+                                          questions: section.questions.map((q: any) =>
+                                            q.id === question.id
+                                              ? { ...q, settings: { ...starSettings, labels: newLabels } }
+                                              : q
+                                          )
+                                        }
+                                      : section
+                                  )
+                                );
+                              }}
+                              key={`star-label-${question.id}-${idx}-${currentLabel}`}
+                              className="text-xs h-8 flex-1"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">💡 Customize the text shown when hovering over each star</p>
+                  </div>
+                )}
                 {/* Custom Images Section */}
                 {starSettings.icon === 'custom' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -3077,6 +3248,63 @@ export default function ViewQuestionnairePage() {
                     disabled={showPreview}
                     className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed" 
                   />
+                </div>
+                {/* Participant View Display Settings */}
+                <div className="pt-3 mt-3 border-t border-gray-200">
+                  <span className="text-xs font-semibold text-gray-800 block mb-2">Participant View Display</span>
+                  
+                  {/* Header (Main Title) Settings */}
+                  <div className="p-2 bg-gray-50 rounded mb-2">
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-xs font-medium text-gray-700">Show Header</span>
+                      <input 
+                        type="checkbox" 
+                        checked={showHeaderInParticipantView}
+                        onChange={(e) => setShowHeaderInParticipantView(e.target.checked)}
+                        disabled={showPreview}
+                        className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed" 
+                      />
+                    </div>
+                    {showHeaderInParticipantView && (
+                      <div className="py-1">
+                        <Input
+                          type="text"
+                          placeholder="Custom header text (leave empty for questionnaire title)"
+                          value={customHeaderText}
+                          onChange={(e) => setCustomHeaderText(e.target.value)}
+                          disabled={showPreview}
+                          className="text-xs h-7"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Section Header (Subheader) Settings */}
+                  <div className="p-2 bg-gray-50 rounded">
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-xs font-medium text-gray-700">Show Section Header</span>
+                      <input 
+                        type="checkbox" 
+                        checked={showSectionHeader}
+                        onChange={(e) => setShowSectionHeader(e.target.checked)}
+                        disabled={showPreview}
+                        className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed" 
+                      />
+                    </div>
+                    {showSectionHeader && (
+                      <div className="py-1">
+                        <select
+                          value={sectionHeaderFormat}
+                          onChange={(e) => setSectionHeaderFormat(e.target.value as 'numbered' | 'titleOnly')}
+                          disabled={showPreview}
+                          className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded disabled:bg-gray-100"
+                        >
+                          <option value="numbered">Section 1: Title</option>
+                          <option value="titleOnly">Title Only</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
