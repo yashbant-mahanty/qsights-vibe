@@ -39,3 +39,4 @@ npm-debug.log*
 # Cache
 .cache/
 *.cache
+backend/update_sendgrid_settings.php
