@@ -560,4 +560,37 @@ class ResponseController extends Controller
             \Log::error("DUAL-SAVE failed for response {$response->id}: " . $e->getMessage());
         }
     }
+
+    /**
+     * Delete a response (for orphaned/invalid responses)
+     */
+    public function destroy(string $activityId, string $responseId)
+    {
+        try {
+            // Find the response
+            $response = Response::where('activity_id', $activityId)
+                ->where('id', $responseId)
+                ->firstOrFail();
+
+            // Delete associated answers first
+            Answer::where('response_id', $responseId)->delete();
+
+            // Delete the response
+            $response->delete();
+
+            return response()->json([
+                'message' => 'Response deleted successfully'
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Response not found'
+            ], 404);
+        } catch (\Exception $e) {
+            \Log::error("Failed to delete response {$responseId}: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to delete response',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

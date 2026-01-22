@@ -97,6 +97,8 @@ export default function ActivityResultsPage() {
   const [chartType, setChartType] = useState<'bar' | 'pie'>('bar');
   const [activeTab, setActiveTab] = useState('overview');
   const [notificationReports, setNotificationReports] = useState<NotificationReport[]>([]);
+  const [orphanedResponses, setOrphanedResponses] = useState<string[]>([]);
+  const [deletingResponses, setDeletingResponses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -188,6 +190,33 @@ export default function ActivityResultsPage() {
               firstSectionQuestions: qData.data?.sections?.[0]?.questions?.length || 0
             });
             setQuestionnaire(qData.data);
+            
+            // Identify orphaned responses (responses with question IDs that don't exist in current questionnaire)
+            if (qData.data?.sections && responsesData.length > 0) {
+              const currentQuestionIds = new Set<number>();
+              qData.data.sections.forEach((section: any) => {
+                section.questions?.forEach((q: any) => {
+                  currentQuestionIds.add(q.id);
+                });
+              });
+              
+              const orphaned: string[] = [];
+              responsesData.forEach((response: any) => {
+                if (Array.isArray(response.answers) && response.answers.length > 0) {
+                  const hasOrphanedAnswers = response.answers.some((ans: any) => 
+                    !currentQuestionIds.has(ans.question_id)
+                  );
+                  if (hasOrphanedAnswers) {
+                    orphaned.push(response.id);
+                  }
+                }
+              });
+              
+              setOrphanedResponses(orphaned);
+              if (orphaned.length > 0) {
+                console.warn(`⚠️ Found ${orphaned.length} orphaned responses with old question IDs`);
+              }
+            }
           } else {
             console.error('❌ Questionnaire fetch failed with status:', questionnaireData.status);
             const errorText = await questionnaireData.text();
@@ -484,6 +513,51 @@ export default function ActivityResultsPage() {
         title: "Error", 
         description: 'Failed to export PDF',
         variant: "error" 
+      });
+    }
+  }
+
+  // Delete orphaned response
+  async function deleteResponse(responseId: string) {
+    if (!confirm('Are you sure you want to delete this response? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setDeletingResponses(prev => new Set(prev).add(responseId));
+      
+      const response = await fetch(`/api/activities/${activityId}/responses/${responseId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete response');
+      }
+
+      // Remove from local state
+      setResponses(prev => prev.filter(r => r.id !== responseId));
+      setOrphanedResponses(prev => prev.filter(id => id !== responseId));
+      
+      toast({ 
+        title: "Success", 
+        description: 'Response deleted successfully',
+        variant: "success" 
+      });
+      
+      // Reload data to update statistics
+      await loadData();
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({ 
+        title: "Error", 
+        description: 'Failed to delete response',
+        variant: "error" 
+      });
+    } finally {
+      setDeletingResponses(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(responseId);
+        return newSet;
       });
     }
   }
@@ -825,11 +899,18 @@ export default function ActivityResultsPage() {
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                           Submitted At
                         </th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-100">
-                      {responses.map((response: any, index: number) => (
-                        <tr key={response.id} className="hover:bg-blue-50 transition-colors">
+                      {responses.map((response: any, index: number) => {
+                        const isOrphaned = orphanedResponses.includes(response.id);
+                        const isDeleting = deletingResponses.has(response.id);
+                        
+                        return (
+                        <tr key={response.id} className={`hover:bg-blue-50 transition-colors ${isOrphaned ? 'bg-yellow-50' : ''}`}>
                           <td className="px-6 py-4 text-sm font-semibold text-gray-900">{index + 1}</td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -941,8 +1022,35 @@ export default function ActivityResultsPage() {
                               </span>
                             </div>
                           </td>
+                          <td className="px-6 py-4 text-sm">
+                            {isOrphaned && (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300">
+                                  ⚠️ Old Data
+                                </span>
+                                <button
+                                  onClick={() => deleteResponse(response.id)}
+                                  disabled={isDeleting}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  {isDeleting ? (
+                                    <>
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      Deleting...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <X className="w-3 h-3" />
+                                      Delete
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
