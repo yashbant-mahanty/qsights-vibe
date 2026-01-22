@@ -7,8 +7,8 @@ import { toast } from "@/components/ui/toast";
 import { fetchWithAuth } from "@/lib/api";
 
 interface BulkImageUploadProps {
-  value?: string[]; // Array of existing image URLs
-  onChange: (urls: string[]) => void;
+  value?: string[]; // Array of existing image URLs or S3 keys
+  onChange: (urls: string[], keys?: string[]) => void; // Return both URLs and keys
   maxFiles?: number;
   maxSize?: number; // in MB
   placeholder?: string;
@@ -100,16 +100,17 @@ export default function BulkImageUpload({
       }
 
       if (uploadedFiles && Array.isArray(uploadedFiles)) {
-        // Extract URLs from response (sorted by index)
-        const uploadedUrls = uploadedFiles
-          .sort((a: any, b: any) => a.index - b.index)
-          .map((file: any) => file.url);
+        // Extract URLs and keys from response (sorted by index)
+        const sortedFiles = uploadedFiles.sort((a: any, b: any) => a.index - b.index);
+        const uploadedUrls = sortedFiles.map((file: any) => file.url);
+        const uploadedKeys = sortedFiles.map((file: any) => file.key);
         
         console.log('🖼️ [BULK UPLOAD] Uploaded URLs:', uploadedUrls);
+        console.log('🖼️ [BULK UPLOAD] Uploaded Keys:', uploadedKeys);
         
-        // Update previews and notify parent
+        // Update previews and notify parent with both URLs and keys
         setPreviews(uploadedUrls);
-        onChange(uploadedUrls);
+        onChange(uploadedUrls, uploadedKeys);
 
         toast({
           title: "Success!",

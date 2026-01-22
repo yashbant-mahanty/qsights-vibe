@@ -58,6 +58,7 @@ export function NPSScale({
   const [hoveredValue, setHoveredValue] = useState<number | null>(null);
 
   useEffect(() => {
+    // Always update localValue to match value (including null)
     setLocalValue(value);
   }, [value]);
 

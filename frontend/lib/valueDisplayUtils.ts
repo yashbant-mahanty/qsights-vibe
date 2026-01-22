@@ -7,6 +7,11 @@ export interface RangeMapping {
   min: number;
   max: number;
   label: string;
+  // Optional: Support for inequality ranges
+  // 'lessThan' means value < max (ignores min)
+  // 'greaterThan' means value >= min (ignores max)  
+  // 'between' (default) means min <= value < max (or <= for last range)
+  type?: 'lessThan' | 'greaterThan' | 'between';
 }
 
 export interface TextMapping {
@@ -33,24 +38,69 @@ export function resolveDisplayValue(
   }
 
   if (mode === 'range' && rangeMappings && rangeMappings.length > 0) {
-    // Sort by min to ensure correct order
-    const sortedMappings = [...rangeMappings].sort((a, b) => a.min - b.min);
+    console.log('🔍 [resolveDisplayValue] Looking up value:', rawValue, 'in mappings:', rangeMappings);
+    
+    // POSITION-BASED MAPPING: If rawValue is a small integer (0-10) and ranges use large values (>10),
+    // treat rawValue as an array index to map positions to labels directly
+    const hasLargeRangeValues = rangeMappings.some(m => m.min > 10 || m.max > 10);
+    const isSmallValue = rawValue >= 0 && rawValue <= 10;
+    
+    if (hasLargeRangeValues && isSmallValue) {
+      // Use position-based mapping: map dial/slider position directly to label by index
+      const sortedByType = [...rangeMappings].sort((a, b) => {
+        if (a.type === 'lessThan' && b.type !== 'lessThan') return -1;
+        if (b.type === 'lessThan' && a.type !== 'lessThan') return 1;
+        if (a.type === 'greaterThan' && b.type !== 'greaterThan') return 1;
+        if (b.type === 'greaterThan' && a.type !== 'greaterThan') return -1;
+        return (a.min || 0) - (b.min || 0);
+      });
+      
+      const index = Math.floor(rawValue);
+      if (index >= 0 && index < sortedByType.length) {
+        console.log('🎯 [resolveDisplayValue] Position-based match:', sortedByType[index]);
+        return sortedByType[index].label;
+      }
+      // Handle edge case: value equals or exceeds number of mappings, use last mapping
+      if (index >= sortedByType.length && sortedByType.length > 0) {
+        console.log('🎯 [resolveDisplayValue] Using last mapping for value', rawValue);
+        return sortedByType[sortedByType.length - 1].label;
+      }
+    }
+    
+    // VALUE-BASED MAPPING: Traditional range matching when values align with range min/max
+    const sortedMappings = [...rangeMappings].sort((a, b) => {
+      if (a.type === 'lessThan' && b.type !== 'lessThan') return -1;
+      if (b.type === 'lessThan' && a.type !== 'lessThan') return 1;
+      if (a.type === 'greaterThan' && b.type !== 'greaterThan') return 1;
+      if (b.type === 'greaterThan' && a.type !== 'greaterThan') return -1;
+      return a.min - b.min;
+    });
     
     const mapping = sortedMappings.find((m, index) => {
+      const rangeType = m.type || 'between';
+      
+      if (rangeType === 'lessThan') {
+        return rawValue < m.max;
+      }
+      
+      if (rangeType === 'greaterThan') {
+        return rawValue >= m.min;
+      }
+      
       const isLastRange = index === sortedMappings.length - 1;
       if (isLastRange) {
-        // Last range uses inclusive upper bound [min, max]
         return rawValue >= m.min && rawValue <= m.max;
       } else {
-        // Other ranges use exclusive upper bound [min, max)
         return rawValue >= m.min && rawValue < m.max;
       }
     });
     
     if (mapping) {
-      return `${mapping.label} (${mapping.min}–${mapping.max})`;
+      console.log('🎯 [resolveDisplayValue] Value-based match:', mapping);
+      return mapping.label;
     }
-    // Fallback to numeric if no mapping found
+    
+    console.log('⚠️ [resolveDisplayValue] No mapping found for value', rawValue);
     return String(rawValue);
   }
 
@@ -69,6 +119,7 @@ export function resolveDisplayValue(
 
 /**
  * Validate range mappings for gaps and overlaps
+ * Supports lessThan, greaterThan, and between (default) range types
  */
 export function validateRangeMappings(
   mappings: RangeMapping[],
@@ -82,43 +133,54 @@ export function validateRangeMappings(
     return { valid: false, errors };
   }
 
-  // Sort by min value
-  const sorted = [...mappings].sort((a, b) => a.min - b.min);
+  // Separate ranges by type
+  const lessThanRanges = mappings.filter(m => m.type === 'lessThan');
+  const greaterThanRanges = mappings.filter(m => m.type === 'greaterThan');
+  const betweenRanges = mappings.filter(m => !m.type || m.type === 'between');
 
-  // Check for overlaps and gaps
-  for (let i = 0; i < sorted.length; i++) {
-    const current = sorted[i];
-
-    // Check if min <= max
-    if (current.min > current.max) {
-      errors.push(`Range "${current.label}": min (${current.min}) cannot be greater than max (${current.max})`);
-    }
+  // Validate each range
+  for (let i = 0; i < mappings.length; i++) {
+    const current = mappings[i];
+    const rangeType = current.type || 'between';
 
     // Check if label is provided
     if (!current.label || current.label.trim() === '') {
       errors.push(`Range ${i + 1}: label is required`);
     }
 
-    // Check for overlaps with next range
-    if (i < sorted.length - 1) {
-      const next = sorted[i + 1];
-      if (current.max >= next.min) {
-        errors.push(`Overlap detected: "${current.label}" (${current.min}–${current.max}) overlaps with "${next.label}" (${next.min}–${next.max})`);
+    // Type-specific validation
+    if (rangeType === 'lessThan') {
+      // For lessThan, only max matters
+      if (current.max <= min) {
+        errors.push(`Range "${current.label}": threshold (${current.max}) must be greater than min (${min})`);
+      }
+    } else if (rangeType === 'greaterThan') {
+      // For greaterThan, only min matters
+      if (current.min >= max) {
+        errors.push(`Range "${current.label}": threshold (${current.min}) must be less than max (${max})`);
+      }
+    } else {
+      // For between ranges, check min <= max
+      if (current.min > current.max) {
+        errors.push(`Range "${current.label}": min (${current.min}) cannot be greater than max (${current.max})`);
       }
     }
   }
 
-  // Check full coverage
-  const firstRange = sorted[0];
-  const lastRange = sorted[sorted.length - 1];
+  // Sort between ranges by min value for overlap checking
+  const sortedBetween = [...betweenRanges].sort((a, b) => a.min - b.min);
   
-  if (firstRange.min > min) {
-    errors.push(`Gap detected: Range starts at ${firstRange.min} but slider min is ${min}`);
+  // Check for overlaps between 'between' ranges
+  for (let i = 0; i < sortedBetween.length - 1; i++) {
+    const current = sortedBetween[i];
+    const next = sortedBetween[i + 1];
+    if (current.max > next.min) {
+      errors.push(`Overlap detected: "${current.label}" (${current.min}–${current.max}) overlaps with "${next.label}" (${next.min}–${next.max})`);
+    }
   }
-  
-  if (lastRange.max < max) {
-    errors.push(`Gap detected: Range ends at ${lastRange.max} but slider max is ${max}`);
-  }
+
+  // Note: We don't enforce full coverage when using inequality ranges
+  // as they provide more flexibility for partial range definitions
 
   return { valid: errors.length === 0, errors };
 }
@@ -206,12 +268,23 @@ export function createAnswerPayload(
   };
 
   if (mode === 'range' && rangeMappings) {
-    const mapping = rangeMappings.find(
-      (m) => rawValue >= m.min && rawValue <= m.max
-    );
+    // Find matching range, considering range types
+    const mapping = rangeMappings.find((m) => {
+      const rangeType = m.type || 'between';
+      
+      if (rangeType === 'lessThan') {
+        return rawValue < m.max;
+      } else if (rangeType === 'greaterThan') {
+        return rawValue >= m.min;
+      } else {
+        // 'between' type
+        return rawValue >= m.min && rawValue <= m.max;
+      }
+    });
+    
     if (mapping) {
       payload.resolved_value = mapping.label;
-      payload.range = { min: mapping.min, max: mapping.max };
+      payload.range = { min: mapping.min, max: mapping.max, type: mapping.type };
     }
   }
 

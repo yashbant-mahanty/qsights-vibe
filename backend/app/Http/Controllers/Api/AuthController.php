@@ -201,6 +201,13 @@ class AuthController extends Controller
 
         // Get services/permissions for program roles
         $services = [];
+        
+        // First, check user's default_services (set when user is created)
+        if ($user->default_services) {
+            $services = $user->default_services;
+        }
+        
+        // For custom program roles, override with role-specific services
         if ($user->program_id) {
             $programRole = DB::table('program_roles')
                 ->where('email', $user->email)
@@ -208,7 +215,9 @@ class AuthController extends Controller
                 ->first();
             
             if ($programRole && $programRole->services) {
-                $services = json_decode($programRole->services, true) ?? [];
+                $roleServices = json_decode($programRole->services, true) ?? [];
+                // Merge with default services (role services take precedence)
+                $services = array_unique(array_merge($services, $roleServices));
             }
         }
 
@@ -230,6 +239,7 @@ class AuthController extends Controller
                 'bio' => $user->bio,
                 'preferences' => $user->preferences,
                 'services' => $services, // Add services for permission checks
+                'defaultServices' => $user->default_services, // Original default services for reference
             ]
         ]);
     }

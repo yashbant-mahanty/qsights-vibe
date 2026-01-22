@@ -31,6 +31,44 @@ import { activitiesApi, responsesApi, notificationsApi, type Activity } from "@/
 import { toast } from "@/components/ui/toast";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
 
+// Helper function to format answer values for display
+// Handles JSON objects from dial_gauge and slider_scale (e.g., {"value_type":"range","raw_value":2,"display_value":"40-60%"})
+function formatAnswerForDisplay(answer: any): string {
+  if (answer === null || answer === undefined) return 'No response';
+  
+  // Check if it's a JSON object with display_value (dial_gauge/slider_scale)
+  if (typeof answer === 'object' && answer !== null && !Array.isArray(answer)) {
+    // If it has display_value, use that
+    if (answer.display_value !== undefined) {
+      return String(answer.display_value);
+    }
+    // If it has value_type and raw_value but no display_value, format it
+    if (answer.value_type && answer.raw_value !== undefined) {
+      return String(answer.raw_value);
+    }
+    // Try to parse if it's a stringified JSON
+    try {
+      return JSON.stringify(answer);
+    } catch {
+      return String(answer);
+    }
+  }
+  
+  // Check if it's a JSON string that needs parsing
+  if (typeof answer === 'string') {
+    try {
+      const parsed = JSON.parse(answer);
+      if (parsed && typeof parsed === 'object' && parsed.display_value !== undefined) {
+        return String(parsed.display_value);
+      }
+    } catch {
+      // Not JSON, just return as is
+    }
+  }
+  
+  return String(answer);
+}
+
 interface NotificationReport {
   id: string;
   activity_id: string;
@@ -210,7 +248,10 @@ export default function ActivityResultsPage() {
               const answerObj = response.answers.find((a: any) => a.question_id === question.id);
               if (answerObj) {
                 const answerValue = answerObj.value_array || answerObj.value;
-                row[questionLabel] = Array.isArray(answerValue) ? answerValue.join(', ') : answerValue || 'No response';
+                // Use formatAnswerForDisplay for proper formatting of dial_gauge/slider_scale JSON values
+                row[questionLabel] = Array.isArray(answerValue) 
+                  ? answerValue.map(v => formatAnswerForDisplay(v)).join(', ') 
+                  : formatAnswerForDisplay(answerValue);
               } else {
                 row[questionLabel] = 'No response';
               }
@@ -1318,12 +1359,12 @@ export default function ActivityResultsPage() {
                                                       <div className="flex flex-wrap gap-1">
                                                         {pr.answer.map((ans: any, i: number) => (
                                                           <span key={i} className="inline-block px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                                                            {String(ans)}
+                                                            {formatAnswerForDisplay(ans)}
                                                           </span>
                                                         ))}
                                                       </div>
                                                     ) : (
-                                                      <span className="font-medium">{String(pr.answer)}</span>
+                                                      <span className="font-medium">{formatAnswerForDisplay(pr.answer)}</span>
                                                     )}
                                                   </div>
                                                 </td>

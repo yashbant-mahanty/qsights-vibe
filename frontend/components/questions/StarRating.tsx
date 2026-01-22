@@ -79,6 +79,9 @@ export function StarRating({
   useEffect(() => {
     if (value !== null) {
       setLocalValue(value);
+    } else {
+      // Reset to 0 when value is null (new/unanswered question)
+      setLocalValue(0);
     }
   }, [value]);
 

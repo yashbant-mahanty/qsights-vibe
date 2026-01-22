@@ -48,6 +48,7 @@ export default function ActivitiesPage() {
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<{ role?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; activityId: string | null; activityName: string | null }>({ isOpen: false, activityId: null, activityName: null });
   const [linksDropdown, setLinksDropdown] = useState<{ activityId: string | null; links: any | null; loading: boolean }>({ activityId: null, links: null, loading: false });
@@ -56,6 +57,7 @@ export default function ActivitiesPage() {
 
   useEffect(() => {
     loadActivities();
+    loadCurrentUser();
 
     // Listen for global search events
     const handleGlobalSearch = (e: CustomEvent) => {
@@ -88,6 +90,18 @@ export default function ActivitiesPage() {
       document.removeEventListener('click', handleClickOutside);
     };
   }, []);
+
+  async function loadCurrentUser() {
+    try {
+      const response = await fetch('/api/auth/me');
+      if (response.ok) {
+        const userData = await response.json();
+        setCurrentUser(userData.user);
+      }
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  }
 
   async function loadActivities() {
     try {
@@ -569,13 +583,15 @@ export default function ActivitiesPage() {
               <Download className="w-4 h-4" />
               Export
             </button>
-            <a
-              href="/activities/create"
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Create Event
-            </a>
+            {currentUser?.role !== 'program-moderator' && (
+              <a
+                href="/activities/create"
+                className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Create Event
+              </a>
+            )}
           </div>
         </div>
 
@@ -966,32 +982,36 @@ export default function ActivitiesPage() {
                               </div>
                             )}
                           </div>
-                          <button
-                            onClick={(e) => { 
-                              e.stopPropagation();
-                              console.log('[BTN CLICK] activity.id:', activity.id, 'allow_participant_reminders:', activity.allow_participant_reminders);
-                              toggleParticipantReminders(activity.id.toString(), activity.allow_participant_reminders || false); 
-                            }}
-                            className={`p-1.5 rounded transition-colors ${
-                              activity.allow_participant_reminders
-                                ? 'bg-cyan-50 text-qsights-cyan' 
-                                : 'text-gray-400 hover:bg-gray-100'
-                            }`}
-                            title={activity.allow_participant_reminders ? 'Participant Reminders Enabled' : 'Participant Reminders Disabled'}
-                          >
-                            {(() => {
-                              const icon = activity.allow_participant_reminders ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />;
-                              console.log('[BTN RENDER] activity.id:', activity.id, 'allow_participant_reminders:', activity.allow_participant_reminders, 'showing:', activity.allow_participant_reminders ? 'BellRing' : 'Bell');
-                              return icon;
-                            })()}
-                          </button>
-                          <button
-                            onClick={() => handleSendNotification(activity.id.toString())}
-                            className="p-1.5 text-qsights-cyan hover:bg-qsights-light rounded transition-colors"
-                            title="Send Notification"
-                          >
-                            <Mail className="w-4 h-4" />
-                          </button>
+                          {currentUser?.role !== 'program-moderator' && (
+                            <>
+                              <button
+                                onClick={(e) => { 
+                                  e.stopPropagation();
+                                  console.log('[BTN CLICK] activity.id:', activity.id, 'allow_participant_reminders:', activity.allow_participant_reminders);
+                                  toggleParticipantReminders(activity.id.toString(), activity.allow_participant_reminders || false); 
+                                }}
+                                className={`p-1.5 rounded transition-colors ${
+                                  activity.allow_participant_reminders
+                                    ? 'bg-cyan-50 text-qsights-cyan' 
+                                    : 'text-gray-400 hover:bg-gray-100'
+                                }`}
+                                title={activity.allow_participant_reminders ? 'Participant Reminders Enabled' : 'Participant Reminders Disabled'}
+                              >
+                                {(() => {
+                                  const icon = activity.allow_participant_reminders ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />;
+                                  console.log('[BTN RENDER] activity.id:', activity.id, 'allow_participant_reminders:', activity.allow_participant_reminders, 'showing:', activity.allow_participant_reminders ? 'BellRing' : 'Bell');
+                                  return icon;
+                                })()}
+                              </button>
+                              <button
+                                onClick={() => handleSendNotification(activity.id.toString())}
+                                className="p-1.5 text-qsights-cyan hover:bg-qsights-light rounded transition-colors"
+                                title="Send Notification"
+                              >
+                                <Mail className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => handleViewResults(activity.id.toString())}
                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -999,34 +1019,38 @@ export default function ActivitiesPage() {
                           >
                             <BarChart3 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => handleLandingConfig(activity.id.toString())}
-                            className="p-1.5 text-pink-600 hover:bg-pink-50 rounded transition-colors"
-                            title="Landing Page Configuration"
-                          >
-                            <Palette className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(activity.id.toString())}
-                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDuplicate(activity.id.toString())}
-                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                            title="Duplicate"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(activity.id.toString(), activity.title)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {currentUser?.role !== 'program-moderator' && (
+                            <>
+                              <button
+                                onClick={() => handleLandingConfig(activity.id.toString())}
+                                className="p-1.5 text-pink-600 hover:bg-pink-50 rounded transition-colors"
+                                title="Landing Page Configuration"
+                              >
+                                <Palette className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleEdit(activity.id.toString())}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDuplicate(activity.id.toString())}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                title="Duplicate"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(activity.id.toString(), activity.title)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

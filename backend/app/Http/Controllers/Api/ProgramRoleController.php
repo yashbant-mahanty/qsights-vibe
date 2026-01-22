@@ -52,8 +52,9 @@ class ProgramRoleController extends Controller
         }
 
         $role = ProgramRole::where('program_id', $programId)
+            ->where('id', $roleId)
             ->with(['program', 'events'])
-            ->findOrFail($roleId);
+            ->firstOrFail();
 
         return response()->json(['role' => $role]);
     }
@@ -172,7 +173,9 @@ class ProgramRoleController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $role = ProgramRole::where('program_id', $programId)->findOrFail($roleId);
+        $role = ProgramRole::where('program_id', $programId)
+            ->where('id', $roleId)
+            ->firstOrFail();
 
         // Validation
         $validator = Validator::make($request->all(), [
@@ -252,7 +255,9 @@ class ProgramRoleController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $role = ProgramRole::where('program_id', $programId)->findOrFail($roleId);
+        $role = ProgramRole::where('program_id', $programId)
+            ->where('id', $roleId)
+            ->firstOrFail();
         $role->delete();
 
         return response()->json(['message' => 'Role deleted successfully']);
@@ -270,8 +275,9 @@ class ProgramRoleController extends Controller
         }
 
         $role = ProgramRole::where('program_id', $programId)
+            ->where('id', $roleId)
             ->withTrashed()
-            ->findOrFail($roleId);
+            ->firstOrFail();
             
         $role->restore();
 
