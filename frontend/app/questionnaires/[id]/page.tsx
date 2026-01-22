@@ -510,7 +510,7 @@ export default function ViewQuestionnairePage() {
           show_section_header: showSectionHeader,
           section_header_format: sectionHeaderFormat,
         },
-        sections: sections.map((section, idx) => ({
+        sections: sectionsToSave.map((section, idx) => ({
           id: section.id,
           title: section.title,
           description: section.description,
@@ -554,7 +554,7 @@ export default function ViewQuestionnairePage() {
             
             const questionData: any = {
               type: mapFrontendTypeToBackend(question.type),
-              title: question.question,
+              title: question.formattedQuestion || question.question,
               description: null,
               is_required: question.required === true,
               options: (question.type === 'mcq' || question.type === 'multi') && question.options ? question.options : null,
@@ -567,7 +567,7 @@ export default function ViewQuestionnairePage() {
               questionData.translations = question.translations;
             }
             
-            console.log(`Question ${qIdx + 1}:`, question.question, '| Type:', question.type, '| Required:', question.required, '| Settings:', settings);
+            console.log(`Question ${qIdx + 1}:`, question.formattedQuestion || question.question, '| Type:', question.type, '| Required:', question.required, '| Settings:', settings);
             return questionData;
           }),
         })),
@@ -1385,8 +1385,8 @@ export default function ViewQuestionnairePage() {
                     <Label className="text-xs text-gray-600">Min Value</Label>
                     <Input
                       type="number"
-                      value={sliderSettings.min ?? 0}
-                      onChange={(e) => {
+                      defaultValue={sliderSettings.min ?? 0}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1402,6 +1402,7 @@ export default function ViewQuestionnairePage() {
                           )
                         );
                       }}
+                      key={`slider-min-${question.id}-${sliderSettings.min}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1410,8 +1411,8 @@ export default function ViewQuestionnairePage() {
                     <Label className="text-xs text-gray-600">Max Value</Label>
                     <Input
                       type="number"
-                      value={sliderSettings.max ?? 100}
-                      onChange={(e) => {
+                      defaultValue={sliderSettings.max ?? 100}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1427,6 +1428,7 @@ export default function ViewQuestionnairePage() {
                           )
                         );
                       }}
+                      key={`slider-max-${question.id}-${sliderSettings.max}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1435,8 +1437,8 @@ export default function ViewQuestionnairePage() {
                     <Label className="text-xs text-gray-600">Step</Label>
                     <Input
                       type="number"
-                      value={sliderSettings.step ?? 1}
-                      onChange={(e) => {
+                      defaultValue={sliderSettings.step ?? 1}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1452,6 +1454,7 @@ export default function ViewQuestionnairePage() {
                           )
                         );
                       }}
+                      key={`slider-step-${question.id}-${sliderSettings.step}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1462,9 +1465,9 @@ export default function ViewQuestionnairePage() {
                     <Label className="text-xs text-gray-600">Start Label</Label>
                     <Input
                       type="text"
-                      value={sliderSettings.labels?.start || ''}
+                      defaultValue={sliderSettings.labels?.start || ''}
                       placeholder="e.g., Low"
-                      onChange={(e) => {
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1480,6 +1483,7 @@ export default function ViewQuestionnairePage() {
                           )
                         );
                       }}
+                      key={`slider-start-${question.id}-${sliderSettings.labels?.start}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1488,9 +1492,9 @@ export default function ViewQuestionnairePage() {
                     <Label className="text-xs text-gray-600">Middle Label</Label>
                     <Input
                       type="text"
-                      value={sliderSettings.labels?.middle || ''}
+                      defaultValue={sliderSettings.labels?.middle || ''}
                       placeholder="e.g., Medium"
-                      onChange={(e) => {
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1506,6 +1510,7 @@ export default function ViewQuestionnairePage() {
                           )
                         );
                       }}
+                      key={`slider-middle-${question.id}-${sliderSettings.labels?.middle}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1514,9 +1519,9 @@ export default function ViewQuestionnairePage() {
                     <Label className="text-xs text-gray-600">End Label</Label>
                     <Input
                       type="text"
-                      value={sliderSettings.labels?.end || ''}
+                      defaultValue={sliderSettings.labels?.end || ''}
                       placeholder="e.g., High"
-                      onChange={(e) => {
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1532,6 +1537,7 @@ export default function ViewQuestionnairePage() {
                           )
                         );
                       }}
+                      key={`slider-end-${question.id}-${sliderSettings.labels?.end}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1703,8 +1709,8 @@ export default function ViewQuestionnairePage() {
                         <Input
                           type="url"
                           placeholder="https://example.com/thumb.png"
-                          value={sliderSettings.customImages?.thumbUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={sliderSettings.customImages?.thumbUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(sliderSettings.customImages || {}), thumbUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -1721,6 +1727,7 @@ export default function ViewQuestionnairePage() {
                               )
                             );
                           }}
+                          key={`slider-thumb-url-${question.id}-${sliderSettings.customImages?.thumbUrl}`}
                           className="text-xs h-7"
                         />
                       </div>
@@ -1763,8 +1770,8 @@ export default function ViewQuestionnairePage() {
                         <Input
                           type="url"
                           placeholder="https://example.com/track.png"
-                          value={sliderSettings.customImages?.trackUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={sliderSettings.customImages?.trackUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(sliderSettings.customImages || {}), trackUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -1781,6 +1788,7 @@ export default function ViewQuestionnairePage() {
                               )
                             );
                           }}
+                          key={`slider-track-url-${question.id}-${sliderSettings.customImages?.trackUrl}`}
                           className="text-xs h-7"
                         />
                       </div>
@@ -1861,8 +1869,8 @@ export default function ViewQuestionnairePage() {
                     <Label className="text-xs text-gray-600">Min Value</Label>
                     <Input
                       type="number"
-                      value={dialSettings.min ?? 0}
-                      onChange={(e) => {
+                      defaultValue={dialSettings.min ?? 0}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1878,6 +1886,7 @@ export default function ViewQuestionnairePage() {
                           )
                         );
                       }}
+                      key={`dial-min-${question.id}-${dialSettings.min}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -1886,8 +1895,8 @@ export default function ViewQuestionnairePage() {
                     <Label className="text-xs text-gray-600">Max Value</Label>
                     <Input
                       type="number"
-                      value={dialSettings.max ?? 10}
-                      onChange={(e) => {
+                      defaultValue={dialSettings.max ?? 10}
+                      onBlur={(e) => {
                         setSections(prevSections =>
                           prevSections.map(section =>
                             section.id === sectionId
@@ -1903,6 +1912,7 @@ export default function ViewQuestionnairePage() {
                           )
                         );
                       }}
+                      key={`dial-max-${question.id}-${dialSettings.max}`}
                       className="mt-1 h-8 text-sm"
                     />
                   </div>
@@ -2073,8 +2083,8 @@ export default function ViewQuestionnairePage() {
                         <Input
                           type="url"
                           placeholder="https://example.com/gauge-bg.png"
-                          value={dialSettings.customImages?.backgroundUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={dialSettings.customImages?.backgroundUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(dialSettings.customImages || {}), backgroundUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -2091,6 +2101,7 @@ export default function ViewQuestionnairePage() {
                               )
                             );
                           }}
+                          key={`dial-bg-url-${question.id}-${dialSettings.customImages?.backgroundUrl}`}
                           className="text-xs h-7"
                         />
                       </div>
@@ -2131,8 +2142,8 @@ export default function ViewQuestionnairePage() {
                         <Input
                           type="url"
                           placeholder="https://example.com/needle.png"
-                          value={dialSettings.customImages?.needleUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={dialSettings.customImages?.needleUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(dialSettings.customImages || {}), needleUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -2148,6 +2159,10 @@ export default function ViewQuestionnairePage() {
                                   : section
                               )
                             );
+                          }}
+                          key={`dial-needle-url-${question.id}-${dialSettings.customImages?.needleUrl}`}
+                          className="text-xs h-7"
+                        />
                           }}
                           className="text-xs h-7"
                         />
@@ -2417,6 +2432,153 @@ export default function ViewQuestionnairePage() {
                     <p className="text-xs text-gray-400 mt-2">💡 Customize the text shown when hovering over each option</p>
                   </div>
                 )}
+                {/* Icon/Emoji Selector Section */}
+                {(likertSettings.iconStyle === 'emoji' || likertSettings.iconStyle === 'face') && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-3">
+                      {likertSettings.iconStyle === 'emoji' ? 'Select Emoji for Each Option' : 'Select Face Icon for Each Option'}
+                    </Label>
+                    <div className="space-y-3">
+                      {Array.from({ length: likertSettings.scale || 5 }).map((_, idx) => {
+                        const currentLabels = likertSettings.labels || [];
+                        const currentLabel = currentLabels[idx];
+                        const labelText = typeof currentLabel === 'string' ? currentLabel : currentLabel?.label || `Point ${idx + 1}`;
+                        const currentIcon = typeof currentLabel === 'object' ? currentLabel?.icon : undefined;
+                        const currentEmoji = typeof currentLabel === 'object' ? currentLabel?.emoji : undefined;
+                        
+                        // Predefined emoji list
+                        const emojiOptions = ['😠', '😡', '😤', '🙁', '😟', '😕', '😐', '😶', '🙂', '😊', '😃', '😄', '😁', '🤩', '😍', '❤️', '💚', '👍', '👎', '✅', '❌', '⭐', '🔥', '💯'];
+                        
+                        // Face icon options
+                        const faceIconOptions = [
+                          { value: 'angry', label: '😠 Angry', emoji: '😠' },
+                          { value: 'frown', label: '🙁 Frown', emoji: '🙁' },
+                          { value: 'meh', label: '😐 Neutral', emoji: '😐' },
+                          { value: 'smile', label: '🙂 Smile', emoji: '🙂' },
+                          { value: 'smileplus', label: '😄 Big Smile', emoji: '😄' }
+                        ];
+                        
+                        return (
+                          <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-700">
+                                Point {idx + 1}: {labelText}
+                              </span>
+                              {(currentEmoji || currentIcon) && (
+                                <span className="text-lg">{currentEmoji || (currentIcon === 'angry' ? '😠' : currentIcon === 'frown' ? '🙁' : currentIcon === 'meh' ? '😐' : currentIcon === 'smile' ? '🙂' : '😄')}</span>
+                              )}
+                            </div>
+                            {likertSettings.iconStyle === 'emoji' ? (
+                              <div className="flex flex-wrap gap-2">
+                                {emojiOptions.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => {
+                                      const newLabels = Array.from({ length: likertSettings.scale || 5 }, (_, i) => {
+                                        const existingLabel = likertSettings.labels?.[i];
+                                        const existingText = typeof existingLabel === 'string' 
+                                          ? existingLabel 
+                                          : (existingLabel?.label || `Point ${i + 1}`);
+                                        const existingIcon = typeof existingLabel === 'object' ? existingLabel?.icon : undefined;
+                                        
+                                        if (i === idx) {
+                                          return { 
+                                            value: i + 1, 
+                                            label: existingText,
+                                            emoji: emoji,
+                                            icon: existingIcon
+                                          };
+                                        }
+                                        return typeof existingLabel === 'string' 
+                                          ? existingLabel 
+                                          : existingLabel || existingText;
+                                      });
+                                      
+                                      setSections(prevSections =>
+                                        prevSections.map(section =>
+                                          section.id === sectionId
+                                            ? {
+                                                ...section,
+                                                questions: section.questions.map((q: any) =>
+                                                  q.id === question.id
+                                                    ? { ...q, settings: { ...likertSettings, labels: newLabels } }
+                                                    : q
+                                                )
+                                              }
+                                            : section
+                                        )
+                                      );
+                                    }}
+                                    className={`text-2xl p-2 rounded hover:bg-white transition-colors ${
+                                      currentEmoji === emoji ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-white'
+                                    }`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {faceIconOptions.map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => {
+                                      const newLabels = Array.from({ length: likertSettings.scale || 5 }, (_, i) => {
+                                        const existingLabel = likertSettings.labels?.[i];
+                                        const existingText = typeof existingLabel === 'string' 
+                                          ? existingLabel 
+                                          : (existingLabel?.label || `Point ${i + 1}`);
+                                        const existingEmoji = typeof existingLabel === 'object' ? existingLabel?.emoji : undefined;
+                                        
+                                        if (i === idx) {
+                                          return { 
+                                            value: i + 1, 
+                                            label: existingText,
+                                            icon: option.value,
+                                            emoji: existingEmoji
+                                          };
+                                        }
+                                        return typeof existingLabel === 'string' 
+                                          ? existingLabel 
+                                          : existingLabel || existingText;
+                                      });
+                                      
+                                      setSections(prevSections =>
+                                        prevSections.map(section =>
+                                          section.id === sectionId
+                                            ? {
+                                                ...section,
+                                                questions: section.questions.map((q: any) =>
+                                                  q.id === question.id
+                                                    ? { ...q, settings: { ...likertSettings, labels: newLabels } }
+                                                    : q
+                                                )
+                                              }
+                                            : section
+                                        )
+                                      );
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded hover:bg-white transition-colors text-sm ${
+                                      currentIcon === option.value ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-white'
+                                    }`}
+                                  >
+                                    <span className="text-xl">{option.emoji}</span>
+                                    <span>{option.label.split(' ')[1]}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      💡 {likertSettings.iconStyle === 'emoji' ? 'Select an emoji for each scale point' : 'Select a face icon for each scale point'}
+                    </p>
+                  </div>
+                )}
                 {/* Custom Images Section */}
                 {likertSettings.iconStyle === 'custom' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -2460,8 +2622,8 @@ export default function ViewQuestionnairePage() {
                           <Input
                             type="url"
                             placeholder={`https://example.com/image-${idx + 1}.png`}
-                            value={likertSettings.customImages?.[idx]?.imageUrl || ''}
-                            onChange={(e) => {
+                            defaultValue={likertSettings.customImages?.[idx]?.imageUrl || ''}
+                            onBlur={(e) => {
                               const newCustomImages = [...(likertSettings.customImages || [])];
                               newCustomImages[idx] = { value: idx + 1, imageUrl: e.target.value };
                               setSections(prevSections =>
@@ -2479,6 +2641,7 @@ export default function ViewQuestionnairePage() {
                                 )
                               );
                             }}
+                            key={`likert-custom-img-${question.id}-${idx}-${likertSettings.customImages?.[idx]?.imageUrl}`}
                             className="text-xs h-8"
                           />
                         </div>
@@ -2784,6 +2947,15 @@ export default function ViewQuestionnairePage() {
                 {starSettings.icon === 'custom' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <Label className="text-xs text-gray-600 block mb-2">Custom Images</Label>
+                    {/* Image Requirements Info */}
+                    <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                      <p className="text-xs font-medium text-blue-900 mb-1">📐 Image Requirements:</p>
+                      <ul className="text-xs text-blue-700 space-y-0.5 ml-3">
+                        <li>• Recommended size: <strong>100×100 pixels (square, 1:1 ratio)</strong></li>
+                        <li>• Format: PNG, JPG, GIF, SVG, or WebP</li>
+                        <li>• Maximum file size: <strong>1MB</strong></li>
+                      </ul>
+                    </div>
                     <div className="space-y-4">
                       {/* Active/Selected Image */}
                       <div className="p-3 bg-green-50 rounded-lg border border-green-200">
@@ -2793,37 +2965,38 @@ export default function ViewQuestionnairePage() {
                             <span className="text-xs text-green-600">✓ Image set</span>
                           )}
                         </div>
-                        <S3ImageUpload
-                          value={starSettings.customImages?.activeImageUrl || ''}
-                          onChange={(url) => {
-                            const newCustomImages = { ...(starSettings.customImages || {}), activeImageUrl: url };
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          folder="questionnaire-images/star-rating"
-                          placeholder="Upload image for selected state"
-                          showPreview={true}
-                          showUniversalSizeHelper={true}
-                          maxSize={10}
-                        />
+                        <div className="max-w-md mx-auto">
+                          <S3ImageUpload
+                            value={starSettings.customImages?.activeImageUrl || ''}
+                            onChange={(url) => {
+                              const newCustomImages = { ...(starSettings.customImages || {}), activeImageUrl: url };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            folder="questionnaire-images/star-rating"
+                            placeholder="Upload image for selected state"
+                            showPreview={true}
+                            maxSize={1}
+                          />
+                        </div>
                         <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
                         <Input
                           type="url"
                           placeholder="https://example.com/active-star.png"
-                          value={starSettings.customImages?.activeImageUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={starSettings.customImages?.activeImageUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(starSettings.customImages || {}), activeImageUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -2840,6 +3013,7 @@ export default function ViewQuestionnairePage() {
                               )
                             );
                           }}
+                          key={`star-active-url-${question.id}-${starSettings.customImages?.activeImageUrl}`}
                           className="text-xs h-8"
                         />
                       </div>
@@ -2851,37 +3025,38 @@ export default function ViewQuestionnairePage() {
                             <span className="text-xs text-green-600">✓ Image set</span>
                           )}
                         </div>
-                        <S3ImageUpload
-                          value={starSettings.customImages?.inactiveImageUrl || ''}
-                          onChange={(url) => {
-                            const newCustomImages = { ...(starSettings.customImages || {}), inactiveImageUrl: url };
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          folder="questionnaire-images/star-rating"
-                          placeholder="Upload image for unselected state"
-                          showPreview={true}
-                          showUniversalSizeHelper={true}
-                          maxSize={10}
-                        />
+                        <div className="max-w-md mx-auto">
+                          <S3ImageUpload
+                            value={starSettings.customImages?.inactiveImageUrl || ''}
+                            onChange={(url) => {
+                              const newCustomImages = { ...(starSettings.customImages || {}), inactiveImageUrl: url };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            folder="questionnaire-images/star-rating"
+                            placeholder="Upload image for unselected state"
+                            showPreview={true}
+                            maxSize={1}
+                          />
+                        </div>
                         <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
                         <Input
                           type="url"
                           placeholder="https://example.com/inactive-star.png"
-                          value={starSettings.customImages?.inactiveImageUrl || ''}
-                          onChange={(e) => {
+                          defaultValue={starSettings.customImages?.inactiveImageUrl || ''}
+                          onBlur={(e) => {
                             const newCustomImages = { ...(starSettings.customImages || {}), inactiveImageUrl: e.target.value };
                             setSections(prevSections =>
                               prevSections.map(section =>
@@ -2898,6 +3073,7 @@ export default function ViewQuestionnairePage() {
                               )
                             );
                           }}
+                          key={`star-inactive-url-${question.id}-${starSettings.customImages?.inactiveImageUrl}`}
                           className="text-xs h-8"
                         />
                       </div>

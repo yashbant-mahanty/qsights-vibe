@@ -83,10 +83,16 @@ export default function QuestionnaireBuilderPage() {
   const [showMultilingualEditor, setShowMultilingualEditor] = useState(false);
 
   // Preserve scroll position across state updates that rebuild the DOM
+  // Uses double requestAnimationFrame to ensure DOM has fully updated
   const withPreservedScroll = useCallback((fn: () => void) => {
     const scrollY = typeof window !== 'undefined' ? window.scrollY : 0;
     fn();
-    requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    // Use double RAF to ensure DOM has fully updated after React render
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY, behavior: 'instant' });
+      });
+    });
   }, []);
   const [selectedQuestion, setSelectedQuestion] = useState<number | null>(null);
   const [selectedQuestionForTranslation, setSelectedQuestionForTranslation] = useState<any>(null);
@@ -871,7 +877,7 @@ export default function QuestionnaireBuilderPage() {
           questions: section.questions.map((question: any) => {
             const questionData: any = {
               type: typeMapping[question.type] || question.type,
-              title: question.question,
+              title: question.formattedQuestion || question.question,
               description: null,
               is_required: question.required || false,
               options: question.options || null,
@@ -2464,6 +2470,35 @@ export default function QuestionnaireBuilderPage() {
                   </div>
                 </div>
 
+                {/* Instruction Text */}
+                <div className="mt-4">
+                  <Label className="text-xs text-gray-600">Instruction Text (Over Text)</Label>
+                  <Input
+                    type="text"
+                    placeholder="Drag the pointer to select"
+                    defaultValue={dialSettings.instructionText || 'Drag the pointer to select'}
+                    onBlur={(e) => {
+                      setSections(prevSections =>
+                        prevSections.map(section =>
+                          section.id === sectionId
+                            ? {
+                                ...section,
+                                questions: section.questions.map((q: any) =>
+                                  q.id === question.id
+                                    ? { ...q, settings: { ...dialSettings, instructionText: e.target.value || 'Drag the pointer to select' } }
+                                    : q
+                                )
+                              }
+                            : section
+                        )
+                      );
+                    }}
+                    key={`dial-instruction-${question.id}-${dialSettings.instructionText}`}
+                    className="mt-1 h-8 text-sm"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">💡 Text shown below the value (like "over text" in star rating)</p>
+                </div>
+
                 {/* Value Display Mode Configuration */}
                 <ValueDisplayModeConfig
                   settings={dialSettings}
@@ -2858,6 +2893,153 @@ export default function QuestionnaireBuilderPage() {
                     <p className="text-xs text-gray-400 mt-2">💡 Customize the text shown when hovering over each option</p>
                   </div>
                 )}
+                {/* Icon/Emoji Selector Section */}
+                {(likertSettings.iconStyle === 'emoji' || likertSettings.iconStyle === 'face') && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Label className="text-xs text-gray-600 block mb-3">
+                      {likertSettings.iconStyle === 'emoji' ? 'Select Emoji for Each Option' : 'Select Face Icon for Each Option'}
+                    </Label>
+                    <div className="space-y-3">
+                      {Array.from({ length: likertSettings.scale || 5 }).map((_, idx) => {
+                        const currentLabels = likertSettings.labels || [];
+                        const currentLabel = currentLabels[idx];
+                        const labelText = typeof currentLabel === 'string' ? currentLabel : currentLabel?.label || `Point ${idx + 1}`;
+                        const currentIcon = typeof currentLabel === 'object' ? currentLabel?.icon : undefined;
+                        const currentEmoji = typeof currentLabel === 'object' ? currentLabel?.emoji : undefined;
+                        
+                        // Predefined emoji list
+                        const emojiOptions = ['😠', '😡', '😤', '🙁', '😟', '😕', '😐', '😶', '🙂', '😊', '😃', '😄', '😁', '🤩', '😍', '❤️', '💚', '👍', '👎', '✅', '❌', '⭐', '🔥', '💯'];
+                        
+                        // Face icon options
+                        const faceIconOptions = [
+                          { value: 'angry', label: '😠 Angry', emoji: '😠' },
+                          { value: 'frown', label: '🙁 Frown', emoji: '🙁' },
+                          { value: 'meh', label: '😐 Neutral', emoji: '😐' },
+                          { value: 'smile', label: '🙂 Smile', emoji: '🙂' },
+                          { value: 'smileplus', label: '😄 Big Smile', emoji: '😄' }
+                        ];
+                        
+                        return (
+                          <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-700">
+                                Point {idx + 1}: {labelText}
+                              </span>
+                              {(currentEmoji || currentIcon) && (
+                                <span className="text-lg">{currentEmoji || (currentIcon === 'angry' ? '😠' : currentIcon === 'frown' ? '🙁' : currentIcon === 'meh' ? '😐' : currentIcon === 'smile' ? '🙂' : '😄')}</span>
+                              )}
+                            </div>
+                            {likertSettings.iconStyle === 'emoji' ? (
+                              <div className="flex flex-wrap gap-2">
+                                {emojiOptions.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => {
+                                      const newLabels = Array.from({ length: likertSettings.scale || 5 }, (_, i) => {
+                                        const existingLabel = likertSettings.labels?.[i];
+                                        const existingText = typeof existingLabel === 'string' 
+                                          ? existingLabel 
+                                          : (existingLabel?.label || `Point ${i + 1}`);
+                                        const existingIcon = typeof existingLabel === 'object' ? existingLabel?.icon : undefined;
+                                        
+                                        if (i === idx) {
+                                          return { 
+                                            value: i + 1, 
+                                            label: existingText,
+                                            emoji: emoji,
+                                            icon: existingIcon
+                                          };
+                                        }
+                                        return typeof existingLabel === 'string' 
+                                          ? existingLabel 
+                                          : existingLabel || existingText;
+                                      });
+                                      
+                                      setSections(prevSections =>
+                                        prevSections.map(section =>
+                                          section.id === sectionId
+                                            ? {
+                                                ...section,
+                                                questions: section.questions.map((q: any) =>
+                                                  q.id === question.id
+                                                    ? { ...q, settings: { ...likertSettings, labels: newLabels } }
+                                                    : q
+                                                )
+                                              }
+                                            : section
+                                        )
+                                      );
+                                    }}
+                                    className={`text-2xl p-2 rounded hover:bg-white transition-colors ${
+                                      currentEmoji === emoji ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-white'
+                                    }`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {faceIconOptions.map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => {
+                                      const newLabels = Array.from({ length: likertSettings.scale || 5 }, (_, i) => {
+                                        const existingLabel = likertSettings.labels?.[i];
+                                        const existingText = typeof existingLabel === 'string' 
+                                          ? existingLabel 
+                                          : (existingLabel?.label || `Point ${i + 1}`);
+                                        const existingEmoji = typeof existingLabel === 'object' ? existingLabel?.emoji : undefined;
+                                        
+                                        if (i === idx) {
+                                          return { 
+                                            value: i + 1, 
+                                            label: existingText,
+                                            icon: option.value,
+                                            emoji: existingEmoji
+                                          };
+                                        }
+                                        return typeof existingLabel === 'string' 
+                                          ? existingLabel 
+                                          : existingLabel || existingText;
+                                      });
+                                      
+                                      setSections(prevSections =>
+                                        prevSections.map(section =>
+                                          section.id === sectionId
+                                            ? {
+                                                ...section,
+                                                questions: section.questions.map((q: any) =>
+                                                  q.id === question.id
+                                                    ? { ...q, settings: { ...likertSettings, labels: newLabels } }
+                                                    : q
+                                                )
+                                              }
+                                            : section
+                                        )
+                                      );
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded hover:bg-white transition-colors text-sm ${
+                                      currentIcon === option.value ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-white'
+                                    }`}
+                                  >
+                                    <span className="text-xl">{option.emoji}</span>
+                                    <span>{option.label.split(' ')[1]}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      💡 {likertSettings.iconStyle === 'emoji' ? 'Select an emoji for each scale point' : 'Select a face icon for each scale point'}
+                    </p>
+                  </div>
+                )}
                 {/* Custom Images Section */}
                 {likertSettings.iconStyle === 'custom' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
@@ -3227,6 +3409,15 @@ export default function QuestionnaireBuilderPage() {
                 {starSettings.icon === 'custom' && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <Label className="text-xs text-gray-600 block mb-2">Custom Images</Label>
+                    {/* Image Requirements Info */}
+                    <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                      <p className="text-xs font-medium text-blue-900 mb-1">📐 Image Requirements:</p>
+                      <ul className="text-xs text-blue-700 space-y-0.5 ml-3">
+                        <li>• Recommended size: <strong>100×100 pixels (square, 1:1 ratio)</strong></li>
+                        <li>• Format: PNG, JPG, GIF, SVG, or WebP</li>
+                        <li>• Maximum file size: <strong>1MB</strong></li>
+                      </ul>
+                    </div>
                     <div className="space-y-4">
                       {/* Active/Selected Image */}
                       <div className="p-3 bg-green-50 rounded-lg border border-green-200">
@@ -3236,30 +3427,32 @@ export default function QuestionnaireBuilderPage() {
                             <span className="text-xs text-green-600">✓ Image set</span>
                           )}
                         </div>
-                        <S3ImageUpload
-                          value={starSettings.customImages?.activeImageUrl || ''}
-                          onChange={(url) => {
-                            const newCustomImages = { ...(starSettings.customImages || {}), activeImageUrl: url };
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          folder="questionnaire-images/star-rating"
-                          placeholder="Upload image for selected state"
-                          showPreview={true}
-                          maxSize={10}
-                        />
+                        <div className="max-w-md mx-auto">
+                          <S3ImageUpload
+                            value={starSettings.customImages?.activeImageUrl || ''}
+                            onChange={(url) => {
+                              const newCustomImages = { ...(starSettings.customImages || {}), activeImageUrl: url };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            folder="questionnaire-images/star-rating"
+                            placeholder="Upload image for selected state"
+                            showPreview={true}
+                            maxSize={1}
+                          />
+                        </div>
                         <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
                         <Input
                           type="url"
@@ -3294,30 +3487,32 @@ export default function QuestionnaireBuilderPage() {
                             <span className="text-xs text-green-600">✓ Image set</span>
                           )}
                         </div>
-                        <S3ImageUpload
-                          value={starSettings.customImages?.inactiveImageUrl || ''}
-                          onChange={(url) => {
-                            const newCustomImages = { ...(starSettings.customImages || {}), inactiveImageUrl: url };
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          folder="questionnaire-images/star-rating"
-                          placeholder="Upload image for unselected state"
-                          showPreview={true}
-                          maxSize={10}
-                        />
+                        <div className="max-w-md mx-auto">
+                          <S3ImageUpload
+                            value={starSettings.customImages?.inactiveImageUrl || ''}
+                            onChange={(url) => {
+                              const newCustomImages = { ...(starSettings.customImages || {}), inactiveImageUrl: url };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...starSettings, customImages: newCustomImages } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            folder="questionnaire-images/star-rating"
+                            placeholder="Upload image for unselected state"
+                            showPreview={true}
+                            maxSize={1}
+                          />
+                        </div>
                         <div className="text-xs text-gray-400 text-center my-2">— or enter URL manually —</div>
                         <Input
                           type="url"

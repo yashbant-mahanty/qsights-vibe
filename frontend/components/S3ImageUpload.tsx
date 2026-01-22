@@ -274,13 +274,13 @@ export default function S3ImageUpload({
           
           {showPreview && (
             <div className="relative rounded-lg border border-gray-200 overflow-hidden">
-              <div className="aspect-video bg-gray-100 flex items-center justify-center">
+              <div className="bg-gray-100 flex items-center justify-center p-4 min-h-[120px]">
                 {value.endsWith(".svg") ? (
                   <object
                     data={value}
                     type="image/svg+xml"
-                    className="max-w-full max-h-48"
-                    style={{ objectFit: 'contain' }}
+                    className="max-w-full h-auto"
+                    style={{ maxHeight: '200px', objectFit: 'contain' }}
                   >
                     <ImageIcon className="w-12 h-12 text-gray-400" />
                   </object>
@@ -288,8 +288,8 @@ export default function S3ImageUpload({
                   <img
                     src={value}
                     alt="Uploaded image"
-                    className="max-w-full max-h-48"
-                    style={{ objectFit: 'contain' }}
+                    className="max-w-full h-auto"
+                    style={{ maxHeight: '200px', objectFit: 'contain' }}
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
