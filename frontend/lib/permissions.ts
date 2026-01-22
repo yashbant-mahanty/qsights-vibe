@@ -83,6 +83,10 @@ const editViewExport: Permission = {
 };
 
 // Role-based permission definitions
+// IMPORTANT: Default Program roles follow specific rules:
+// - Program Admin: Full access within assigned program (like Super Admin but scoped)
+// - Program Manager: View/Edit but NO Create/Delete for questionnaires & events
+// - Program Moderator: View-only for events and reports
 export const rolePermissions: Record<UserRole, RolePermissions> = {
   // Super Admin - Full access to everything
   'super-admin': {
@@ -108,38 +112,38 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     notifications: fullAccess,
   },
 
-  // Program Admin - Full access within assigned program
+  // Program Admin - Full access within assigned program (like Super Admin but program-scoped)
   'program-admin': {
     organizations: noAccess,
     groupHeads: noAccess,
-    programs: manageAccess, // Can create and manage programs
+    programs: fullAccess, // Full access to programs within scope
     participants: manageAccess,
-    questionnaires: manageAccess,
-    activities: manageAccess,
+    questionnaires: fullAccess, // Full access like Super Admin (program-scoped)
+    activities: fullAccess, // Full access like Super Admin (program-scoped)
     reports: fullAccess,
     notifications: fullAccess,
   },
 
-  // Program Manager - View and edit within assigned program, cannot create programs
+  // Program Manager - View and edit, but CANNOT create/delete questionnaires & events
   'program-manager': {
     organizations: noAccess,
     groupHeads: noAccess,
     programs: viewOnly, // Can only view, not create programs
     participants: viewExport,
-    questionnaires: editViewExport, // Can add/edit questionnaires
-    activities: editViewExport, // Can add/edit activities
+    questionnaires: editViewExport, // Can edit/view but NOT create/delete
+    activities: editViewExport, // Can edit/view but NOT create/delete
     reports: viewExport,
     notifications: { ...viewExport, canSendNotifications: true },
   },
 
-  // Program Moderator - View-only access, can only export reports
+  // Program Moderator - View-only access to events and reports
   'program-moderator': {
     organizations: noAccess,
     groupHeads: noAccess,
     programs: noAccess,
     participants: noAccess,
     questionnaires: noAccess,
-    activities: viewOnly, // Can view activity reports
+    activities: viewOnly, // Can view event reports only
     reports: viewExport, // Can view and export reports
     notifications: noAccess,
   },
@@ -231,22 +235,22 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
   }
 
   // Programs - super admin, admin, program admin can manage; program manager can view
-  if (canAccessResource(role, 'programs') && hasService('list_programs')) {
+  if (canAccessResource(role, 'programs') && hasService('programs-view')) {
     items.push({ label: 'Programs', href: '/programs', icon: 'FolderTree' });
   }
 
   // Participants - all except moderator
-  if (canAccessResource(role, 'participants') && hasService('list_participants')) {
+  if (canAccessResource(role, 'participants') && hasService('participants-view')) {
     items.push({ label: 'Participants', href: '/participants', icon: 'UserCheck' });
   }
 
   // Questionnaires - all except moderator
-  if (canAccessResource(role, 'questionnaires')) {
+  if (canAccessResource(role, 'questionnaires') && hasService('questionnaires-view')) {
     items.push({ label: 'Questionnaires', href: '/questionnaires', icon: 'FileText' });
   }
 
   // Activities - all roles can access
-  if (canAccessResource(role, 'activities') && hasService('list_activity')) {
+  if (canAccessResource(role, 'activities') && hasService('activities-view')) {
     items.push({ label: 'Events', href: '/activities', icon: 'Activity' });
   }
 
@@ -256,13 +260,18 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
   }
 
   // Reports & Analytics - all roles can access
-  if (canAccessResource(role, 'reports') && hasService('view_report')) {
+  if (canAccessResource(role, 'reports') && hasService('reports-view')) {
     items.push({ label: 'Reports & Analytics', href: '/analytics', icon: 'BarChart3' });
   }
 
-  // Evaluation Module - super-admin, admin, and program-admin can manage
-  if (role === 'super-admin' || role === 'admin' || role === 'program-admin') {
-    items.push({ label: 'Evaluation', href: '/evaluation-new', icon: 'ClipboardCheck' });
+  // Evaluation Module - All Program roles have full access (program-scoped)
+  // Check for service availability
+  if (hasService('evaluation-view') || hasService('evaluation-manage')) {
+    if (role === 'super-admin' || role === 'admin' || 
+        role === 'program-admin' || role === 'program-manager' || 
+        role === 'program-moderator') {
+      items.push({ label: 'Evaluation', href: '/evaluation-new', icon: 'ClipboardCheck' });
+    }
   }
 
   // Settings - only super-admin
