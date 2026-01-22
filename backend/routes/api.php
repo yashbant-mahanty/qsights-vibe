@@ -364,6 +364,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:super-admin,admin,group-head,program-admin,program-manager,program-moderator')->group(function () {
         Route::get('/activities/{activity}/responses', [App\Http\Controllers\Api\ResponseController::class, 'index']);
         Route::get('/activities/{activity}/responses/statistics', [App\Http\Controllers\Api\ResponseController::class, 'statistics']);
+        Route::delete('/activities/{activity}/responses/{response}', [App\Http\Controllers\Api\ResponseController::class, 'destroy']);
     });
 });
 
