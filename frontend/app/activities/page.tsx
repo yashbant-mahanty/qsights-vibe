@@ -34,8 +34,9 @@ import {
   X,
   QrCode,
 } from "lucide-react";
-import { activitiesApi, type Activity, fetchWithAuth } from "@/lib/api";
+import { activitiesApi, activityApprovalsApi, type Activity, fetchWithAuth } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
+import DuplicateConfirmationModal from "@/components/duplicate-confirmation-modal";
 import { toast } from "@/components/ui/toast";
 import { QRCodeModal } from "@/components/ui/qr-code-modal";
 
@@ -47,10 +48,12 @@ export default function ActivitiesPage() {
   const [selectedTab, setSelectedTab] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<{ role?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ role?: string; programId?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; activityId: string | null; activityName: string | null }>({ isOpen: false, activityId: null, activityName: null });
+  const [duplicateModal, setDuplicateModal] = useState<{ isOpen: boolean; activityId: string | null; activityName: string | null }>({ isOpen: false, activityId: null, activityName: null });
   const [linksDropdown, setLinksDropdown] = useState<{ activityId: string | null; links: any | null; loading: boolean }>({ activityId: null, links: null, loading: false });
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{ isOpen: boolean; url: string; title: string; subtitle: string; color: string }>({ isOpen: false, url: '', title: '', subtitle: '', color: 'blue' });
@@ -107,7 +110,23 @@ export default function ActivitiesPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await activitiesApi.getAll();
+      
+      // Get current user to filter by program_id for program roles
+      const userResponse = await fetch('/api/auth/me');
+      let programId = null;
+      let isProgramRole = false;
+      let isSuperAdminOrAdmin = false;
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        isProgramRole = userData?.user?.role && ['program-admin', 'program-manager', 'program-moderator'].includes(userData.user.role);
+        isSuperAdminOrAdmin = userData?.user?.role && ['super-admin', 'admin'].includes(userData.user.role);
+        if (isProgramRole) {
+          programId = userData.user.programId;
+        }
+      }
+      
+      // Load activities
+      const data = await activitiesApi.getAll(programId ? { program_id: programId } : {});
       console.log('[ACTIVITIES] Raw API response:', data);
       console.log('[ACTIVITIES] First activity counts:', data[0] ? {
         id: data[0].id,
@@ -117,6 +136,20 @@ export default function ActivitiesPage() {
         guest_responses_count: data[0].guest_responses_count,
         participants_count: data[0].participants_count
       } : 'No activities');
+      
+      // Load pending approval requests for program roles OR super-admin/admin
+      if (isProgramRole || isSuperAdminOrAdmin) {
+        try {
+          const approvalsResponse = await activityApprovalsApi.getAll({ status: 'pending' });
+          const approvals = approvalsResponse?.data || approvalsResponse || [];
+          setPendingApprovals(Array.isArray(approvals) ? approvals : []);
+          console.log('[ACTIVITIES] Pending approvals:', approvals);
+        } catch (err) {
+          console.error('Failed to load pending approvals:', err);
+          setPendingApprovals([]);
+        }
+      }
+      
       // Sort by updated_at or created_at descending (newest first)
       const sortedData = [...data].sort((a, b) => {
         const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
@@ -144,12 +177,15 @@ export default function ActivitiesPage() {
     router.push(`/activities/${activityId}/edit`);
   };
 
-  const handleDuplicate = async (activityId: string) => {
-    if (!confirm('Are you sure you want to duplicate this activity?')) {
-      return;
-    }
+  const handleDuplicate = (activityId: string, activityName: string) => {
+    setDuplicateModal({ isOpen: true, activityId, activityName });
+  };
+
+  const confirmDuplicate = async () => {
+    if (!duplicateModal.activityId) return;
+    
     try {
-      const activity = activities.find(a => a.id === activityId);
+      const activity = activities.find(a => a.id === duplicateModal.activityId);
       if (!activity) return;
       
       const duplicatePayload = {
@@ -166,10 +202,11 @@ export default function ActivitiesPage() {
       
       await activitiesApi.create(duplicatePayload);
       await loadActivities();
-      toast({ title: "Success!", description: "Activity duplicated successfully!", variant: "success" });
+      setDuplicateModal({ isOpen: false, activityId: null, activityName: null });
+      toast({ title: "Success!", description: "Event duplicated successfully!", variant: "success" });
     } catch (err) {
       console.error('Failed to duplicate activity:', err);
-      toast({ title: "Error", description: 'Failed to duplicate activity: ' + (err instanceof Error ? err.message : 'Unknown error'), variant: "error" });
+      toast({ title: "Error", description: 'Failed to duplicate event: ' + (err instanceof Error ? err.message : 'Unknown error'), variant: "error" });
     }
   };
 
@@ -359,13 +396,45 @@ export default function ActivitiesPage() {
       languages: a.languages && a.languages.length > 0 ? a.languages : ["EN"],
       allowGuests: a.allow_guests || false,
       allow_participant_reminders: a.allow_participant_reminders || false,
+      isApprovalRequest: false,
+      approvalId: null as string | null,
     };
   });
 
-  const totalActivities = activities.length;
+  // Add pending approval requests as virtual "activities" with status "pending-approval"
+  const pendingApprovalDisplay = pendingApprovals.map(pa => ({
+    id: pa.id,
+    title: pa.name || "",
+    code: pa.id ? String(pa.id).substring(0, 8) : "",
+    type: pa.type || "",
+    program: pa.program?.name || "N/A",
+    programId: pa.program_id || null,
+    questionnaires: pa.questionnaire_id ? 1 : 0,
+    participants: 0,
+    authenticatedParticipants: 0,
+    guestParticipants: 0,
+    responses: 0,
+    authenticatedResponses: 0,
+    guestResponses: 0,
+    status: "pending-approval",
+    startDate: pa.start_date ? new Date(pa.start_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : "N/A",
+    endDate: pa.end_date ? new Date(pa.end_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : "N/A",
+    progress: 0,
+    languages: pa.languages && pa.languages.length > 0 ? pa.languages : ["EN"],
+    allowGuests: pa.allow_guests || false,
+    allow_participant_reminders: false,
+    isApprovalRequest: true,
+    approvalId: pa.id,
+  }));
+
+  // Combine activities with pending approvals (pending approvals shown first)
+  const allActivitiesDisplay = [...pendingApprovalDisplay, ...activities_display];
+
+  const totalActivities = activities.length + pendingApprovals.length;
   const activeActivities = activities.filter(a => a.status === 'live').length;
   const scheduledActivities = activities.filter(a => a.status === 'upcoming').length;
   const completedActivities = activities.filter(a => a.status === 'closed' || a.status === 'archived').length;
+  const pendingApprovalCount = pendingApprovals.length;
 
   // Calculate participant counts across all activities
   const totalEventParticipants = activities.reduce((sum, a) => sum + (a.responses_count || 0), 0);
@@ -406,13 +475,13 @@ export default function ActivitiesPage() {
   // Mock data removed - using only real API data
 
   const tabs = [
-    { id: "all", label: "All Events", count: activities.length },
-    { id: "survey", label: "Surveys", count: activities.filter(a => a.type === 'survey').length },
-    { id: "poll", label: "Polls", count: activities.filter(a => a.type === 'poll').length },
-    { id: "assessment", label: "Assessments", count: activities.filter(a => a.type === 'assessment').length },
+    { id: "all", label: "All Events", count: allActivitiesDisplay.length },
+    { id: "survey", label: "Surveys", count: allActivitiesDisplay.filter(a => a.type === 'survey').length },
+    { id: "poll", label: "Polls", count: allActivitiesDisplay.filter(a => a.type === 'poll').length },
+    { id: "assessment", label: "Assessments", count: allActivitiesDisplay.filter(a => a.type === 'assessment').length },
   ];
 
-  const displayActivities = activities_display;
+  const displayActivities = allActivitiesDisplay;
 
   const filteredActivities = displayActivities.filter((activity) => {
     const matchesTab =
@@ -472,6 +541,13 @@ export default function ActivitiesPage() {
           <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full">
             <CheckCircle className="w-3 h-3" />
             Live
+          </span>
+        );
+      case "pending-approval":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded-full">
+            <Clock className="w-3 h-3" />
+            Pending Approval
           </span>
         );
       case "upcoming":
@@ -806,24 +882,50 @@ export default function ActivitiesPage() {
                       {/* Actions */}
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-1 flex-wrap">
+                          {/* Special handling for pending approval requests */}
+                          {(activity as any).isApprovalRequest ? (
+                            <>
+                              <button
+                                onClick={() => router.push(`/activities/approvals/${activity.id}`)}
+                                className={`p-1.5 rounded transition-colors ${
+                                  currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
+                                    ? 'text-green-600 hover:bg-green-50'
+                                    : 'text-amber-600 hover:bg-amber-50'
+                                }`}
+                                title={currentUser?.role === 'super-admin' || currentUser?.role === 'admin' ? 'Review Approval Request' : 'View Approval Request'}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <span className={`text-xs px-2 ${
+                                currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
+                                  ? 'text-green-600 font-medium'
+                                  : 'text-gray-400'
+                              }`}>
+                                {currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
+                                  ? 'Click to Review'
+                                  : 'Awaiting Super Admin Approval'}
+                              </span>
+                            </>
+                          ) : (
+                            <>
                           {/* Links Dropdown */}
                           <div className="relative links-dropdown-container">
                             <button
                               onClick={(e) => { 
                                 e.stopPropagation(); 
-                                if (activity.status !== 'draft') {
+                                if (activity.status !== 'draft' && activity.status !== 'pending-approval') {
                                   handleShowLinks(activity.id.toString()); 
                                 }
                               }}
                               className={`p-1.5 rounded transition-colors ${
-                                activity.status === 'draft' 
+                                activity.status === 'draft' || activity.status === 'pending-approval'
                                   ? 'text-gray-300 cursor-not-allowed' 
                                   : linksDropdown.activityId === activity.id.toString() 
                                     ? 'bg-green-100 text-green-600' 
                                     : 'text-green-600 hover:bg-green-50'
                               }`}
                               title={activity.status === 'draft' ? 'Get Links (Not available for draft events)' : 'Get Links'}
-                              disabled={activity.status === 'draft'}
+                              disabled={activity.status === 'draft' || activity.status === 'pending-approval'}
                             >
                               <Link2 className="w-4 h-4" />
                             </button>
@@ -1036,7 +1138,7 @@ export default function ActivitiesPage() {
                                 <Edit className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => handleDuplicate(activity.id.toString())}
+                                onClick={() => handleDuplicate(activity.id.toString(), activity.title)}
                                 className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
                                 title="Duplicate"
                               >
@@ -1049,6 +1151,8 @@ export default function ActivitiesPage() {
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
+                            </>
+                          )}
                             </>
                           )}
                         </div>
@@ -1107,6 +1211,13 @@ export default function ActivitiesPage() {
         title="Delete Event?"
         itemName={deleteModal.activityName || undefined}
         itemType="event"
+      />
+
+      <DuplicateConfirmationModal
+        isOpen={duplicateModal.isOpen}
+        onClose={() => setDuplicateModal({ isOpen: false, activityId: null, activityName: null })}
+        onConfirm={confirmDuplicate}
+        itemName={duplicateModal.activityName || undefined}
       />
 
       {/* QR Code Modal */}

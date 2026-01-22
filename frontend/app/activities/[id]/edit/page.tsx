@@ -142,16 +142,19 @@ export default function EditActivityPage() {
   const [questionnaireLanguages, setQuestionnaireLanguages] = useState<string[]>(["EN"]);
   const [activityLoaded, setActivityLoaded] = useState(false);
   const [activityStatus, setActivityStatus] = useState<string>("draft"); // Track activity status
+  const [isApprovedActivity, setIsApprovedActivity] = useState(false); // Track if super admin has approved
 
   useEffect(() => {
     loadInitialData();
   }, []);
 
   useEffect(() => {
-    if (activityId && !loading && !activityLoaded) {
+    // Wait for both loading to complete AND questionnaires to be loaded before loading activity data
+    // Also ensure availableQuestionnaires has data before proceeding
+    if (activityId && !loading && !loadingQuestionnaires && availableQuestionnaires.length > 0 && !activityLoaded) {
       loadActivityData();
     }
-  }, [activityId, loading, activityLoaded]);
+  }, [activityId, loading, loadingQuestionnaires, availableQuestionnaires, activityLoaded]);
 
   const normalizeRegistrationFields = (fields: FormField[]): FormField[] => {
     const base = fields && fields.length > 0 ? fields : defaultMandatoryRegistrationFields;
@@ -331,6 +334,9 @@ export default function EditActivityPage() {
       // Store the activity status for later use
       setActivityStatus(activity.status || "draft");
       
+      // Check if activity has been approved by super admin (has approved_at)
+      setIsApprovedActivity(!!activity.approved_at);
+      
       // Helper function to extract just the date part (YYYY-MM-DD) from ISO strings
       const parseDate = (dateString: string | null | undefined): string => {
         if (!dateString) return "";
@@ -352,7 +358,7 @@ export default function EditActivityPage() {
         managerName: activity.manager_name || "",
         managerEmail: activity.manager_email || "",
         projectCode: activity.project_code || "",
-        configurationDate: activity.configuration_date || "",
+        configurationDate: parseDate(activity.configuration_date),
         configurationPrice: activity.configuration_price || "",
         subscriptionPrice: activity.subscription_price || "",
         subscriptionFrequency: activity.subscription_frequency || "",
@@ -372,8 +378,16 @@ export default function EditActivityPage() {
       });
 
       // Load selected questionnaires
+      console.log('[Edit Activity] activity.questionnaire_id:', activity.questionnaire_id);
+      console.log('[Edit Activity] availableQuestionnaires:', availableQuestionnaires.map(q => q.id));
       if (activity.questionnaire_id) {
-        setSelectedQuestionnaires([String(activity.questionnaire_id)]);
+        const questionnaireIdStr = String(activity.questionnaire_id);
+        console.log('[Edit Activity] Setting selectedQuestionnaires to:', [questionnaireIdStr]);
+        setSelectedQuestionnaires([questionnaireIdStr]);
+        
+        // Verify the questionnaire exists in available list
+        const foundQuestionnaire = availableQuestionnaires.find(q => q.id === questionnaireIdStr);
+        console.log('[Edit Activity] Found questionnaire in list:', foundQuestionnaire ? 'YES' : 'NO');
       }
 
       // Load registration form fields
@@ -383,7 +397,8 @@ export default function EditActivityPage() {
 
       // Set question languages from questionnaire
       if (activity.questionnaire_id) {
-        const questionnaire = availableQuestionnaires.find(q => q.id === activity.questionnaire_id);
+        const questionnaireIdStr = String(activity.questionnaire_id);
+        const questionnaire = availableQuestionnaires.find(q => q.id === questionnaireIdStr);
         if (questionnaire && questionnaire.languages) {
           setQuestionnaireLanguages(questionnaire.languages);
         }
@@ -538,8 +553,9 @@ export default function EditActivityPage() {
       // Check if user needs approval (program-admin, program-manager)
       const requiresApproval = currentUser && ['program-admin', 'program-manager'].includes(currentUser.role);
       
-      // Check if activity is already approved (status = live) - no new approval needed
-      const isAlreadyApproved = activityStatus === 'live';
+      // Check if activity has been approved by super admin (has approved_at field set)
+      // If approved, program admin can publish directly to live without new approval
+      const isAlreadyApproved = isApprovedActivity;
 
       if (requiresApproval && !isAlreadyApproved) {
         // For draft activity being published by program-admin: update activity then create approval
@@ -583,7 +599,7 @@ export default function EditActivityPage() {
         await activitiesApi.update(activityId, activityPayload);
         
         // Create approval request with activity_id linking to the existing activity
-        const approvalPayload = {
+        const approvalPayload: any = {
           activity_id: activityId, // Link to existing activity
           name: activityData.title,
           sender_email: activityData.senderEmail || undefined,
@@ -592,7 +608,6 @@ export default function EditActivityPage() {
           program_id: activityData.programId,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0],
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
           is_multilingual: activityData.isMultilingual,
@@ -618,6 +633,11 @@ export default function EditActivityPage() {
           number_of_participants: activityData.numberOfParticipants ? parseInt(activityData.numberOfParticipants) : undefined,
           questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
         };
+        
+        // Only include questionnaire_id if a questionnaire is actually selected
+        if (selectedQuestionnaires.length > 0 && selectedQuestionnaires[0]) {
+          approvalPayload.questionnaire_id = selectedQuestionnaires[0];
+        }
 
         await activityApprovalsApi.create(approvalPayload);
         toast({ 
@@ -627,16 +647,18 @@ export default function EditActivityPage() {
         });
         router.push("/activities");
       } else if (requiresApproval && isAlreadyApproved) {
-        // Already approved activity: program-admin can update directly without new approval
+        // Already approved activity: program-admin can publish directly to live
+        // Additional Details fields are NOT editable by program-admin (only super-admin can edit those)
         const activityPayload = {
           name: activityData.title,
           description: activityData.description,
           type: activityData.type as "survey" | "poll" | "assessment" | "evaluation",
+          status: "live" as const, // Make it live when publishing approved draft
           program_id: activityData.programId,
           organization_id: selectedProgram.organization_id,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0],
+          questionnaire_id: selectedQuestionnaires[0] || undefined,
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
           is_multilingual: activityData.isMultilingual,
@@ -650,11 +672,11 @@ export default function EditActivityPage() {
             display_mode: activityData.displayMode || 'all',
             enable_per_question_language_switch: activityData.enablePerQuestionLanguageSwitch
           },
-          // Note: Additional Details fields are NOT updated for program-admin when already approved
+          // Note: Additional Details fields are NOT updated by program-admin after approval
         };
 
         await activitiesApi.update(activityId, activityPayload);
-        toast({ title: "Success!", description: "Event updated successfully!", variant: "success" });
+        toast({ title: "Success!", description: "Event published successfully!", variant: "success" });
         router.push("/activities");
       } else {
         // Super-admin and admin can update directly
@@ -666,7 +688,7 @@ export default function EditActivityPage() {
           organization_id: selectedProgram.organization_id,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0],
+          questionnaire_id: selectedQuestionnaires[0] || undefined,
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
           is_multilingual: activityData.isMultilingual,
@@ -1020,7 +1042,7 @@ export default function EditActivityPage() {
                   <Settings className="w-5 h-5 text-qsights-blue" />
                   Additional Details
                   {/* Lock indicator for program-admin when already approved */}
-                  {currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live' && (
+                  {currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity && (
                     <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
                       🔒 Locked (Already Approved)
                     </span>
@@ -1041,7 +1063,7 @@ export default function EditActivityPage() {
                     value={activityData.senderEmail}
                     onChange={handleInputChange}
                     className="w-full"
-                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                   />
                 </div>
 
@@ -1059,7 +1081,7 @@ export default function EditActivityPage() {
                       value={activityData.managerName}
                       onChange={handleInputChange}
                       className="w-full"
-                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                     />
                   </div>
 
@@ -1076,7 +1098,7 @@ export default function EditActivityPage() {
                       value={activityData.managerEmail}
                       onChange={handleInputChange}
                       className="w-full"
-                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                     />
                   </div>
                 </div>
@@ -1094,7 +1116,7 @@ export default function EditActivityPage() {
                     value={activityData.projectCode}
                     onChange={handleInputChange}
                     className="w-full"
-                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                   />
                 </div>
 
@@ -1112,7 +1134,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
-                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                     />
                   </div>
 
@@ -1132,7 +1154,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
-                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                     />
                   </div>
                 </div>
@@ -1154,7 +1176,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
-                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                     />
                   </div>
 
@@ -1170,7 +1192,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
                       required
-                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                     >
                       <option value="">Select frequency</option>
                       <option value="one-time">One-time</option>
@@ -1199,7 +1221,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
-                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                     />
                   </div>
 
@@ -1218,7 +1240,7 @@ export default function EditActivityPage() {
                       onChange={handleInputChange}
                       className="w-full"
                       required
-                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                      disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                     />
                   </div>
                 </div>
@@ -1237,7 +1259,7 @@ export default function EditActivityPage() {
                     value={activityData.questionsToRandomize}
                     onChange={handleInputChange}
                     className="w-full"
-                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && activityStatus === 'live'}
+                    disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
                   />
                   <p className="text-xs text-gray-500">
                     Randomly select and display this many questions from the questionnaire pool

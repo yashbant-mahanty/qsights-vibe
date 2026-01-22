@@ -68,7 +68,42 @@ export default function ProgramsPage() {
   const [currentUser, setCurrentUser] = useState<{ role: UserRole } | null>(null);
 
   useEffect(() => {
-    loadPrograms();
+    // Fetch user data first, then load programs with filter
+    const initializeData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Get current user to check role
+        const userResponse = await fetch('/api/auth/me', {
+          credentials: 'include'
+        });
+        let userData = null;
+        if (userResponse.ok) {
+          userData = await userResponse.json();
+          setCurrentUser(userData.user);
+        }
+        
+        // Filter by program_id for program roles
+        const isProgramRole = userData?.user?.role && ['program-admin', 'program-manager', 'program-moderator'].includes(userData.user.role);
+        const programId = userData?.user?.programId;
+        
+        console.log('🔍 Loading programs with filter:', { isProgramRole, programId });
+        
+        const data = await programsApi.getAll(
+          isProgramRole && programId ? { program_id: programId } : {}
+        );
+        console.log('✅ Programs loaded:', data.length, 'programs');
+        setPrograms(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load programs');
+        console.error('Error loading programs:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    initializeData();
     loadOrganizationsAndGroupHeads();
 
     // Listen for global search events
@@ -102,12 +137,19 @@ export default function ProgramsPage() {
       const userResponse = await fetch('/api/auth/me', {
         credentials: 'include'
       });
+      let userData = null;
       if (userResponse.ok) {
-        const userData = await userResponse.json();
+        userData = await userResponse.json();
         setCurrentUser(userData.user);
       }
       
-      const data = await programsApi.getAll();
+      // Filter by program_id for program roles
+      const isProgramRole = userData?.user?.role && ['program-admin', 'program-manager', 'program-moderator'].includes(userData.user.role);
+      const programId = userData?.user?.programId;
+      
+      const data = await programsApi.getAll(
+        isProgramRole && programId ? { program_id: programId } : {}
+      );
       setPrograms(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load programs');

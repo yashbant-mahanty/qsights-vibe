@@ -66,6 +66,16 @@ class ProgramController extends Controller
             $query->where('group_head_id', $request->group_head_id);
         }
 
+        // Filter by program ID (for program-scoped roles)
+        if ($request->has('program_id')) {
+            $query->where('id', $request->program_id);
+        }
+
+        // Filter by ID (alternative parameter)
+        if ($request->has('id')) {
+            $query->where('id', $request->id);
+        }
+
         // Search
         if ($request->has('search')) {
             $search = $request->search;

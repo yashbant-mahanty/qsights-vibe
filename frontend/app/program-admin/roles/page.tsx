@@ -120,9 +120,33 @@ function RolesPage() {
 
   // Fetch roles on mount and when tab changes
   useEffect(() => {
-    checkUserRole();
-    loadPrograms();
-    loadRoles();
+    const initializeData = async () => {
+      try {
+        // Fetch user data first
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentUser(data.user);
+          console.log('🔍 User loaded for roles page:', { role: data.user.role, programId: data.user.programId });
+          
+          // If not super-admin and trying to access system-roles, redirect to program-users
+          if (data.user.role !== 'super-admin' && activeTab === 'system-roles') {
+            setActiveTab('program-users');
+            return;
+          }
+          
+          // Now load data with user context available
+          await loadProgramsWithUser(data.user);
+          await loadRolesWithUser(data.user);
+        }
+      } catch (error) {
+        console.error('Error initializing roles page:', error);
+      }
+    };
+    
+    initializeData();
     
     // Load hierarchy mappings when on hierarchy-mapping tab
     if (activeTab === 'hierarchy-mapping') {
@@ -186,10 +210,50 @@ function RolesPage() {
     return user?.programId || 'a0a77496-0fc0-4627-ba5b-9a1ea026623f';
   };
 
+  const loadProgramsWithUser = async (user: any) => {
+    try {
+      const headers = getAuthHeaders();
+      
+      // Check user role and programId
+      let url = `${API_URL}/programs`;
+      if (user && user.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(user.role)) {
+        url = `${API_URL}/programs?program_id=${user.programId}`;
+        console.log('🔍 Fetching programs with filter:', url);
+      }
+      
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      });
+
+      console.log('Programs response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Programs data:', data);
+        // Handle both array and object with programs property
+        const programsList = Array.isArray(data) ? data : (data.programs || data.data || []);
+        console.log('✅ Programs list loaded:', programsList.length, 'programs');
+        setPrograms(programsList);
+      } else {
+        console.error('Failed to load programs:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error loading programs:', error);
+    }
+  };
+
   const loadPrograms = async () => {
     try {
       const headers = getAuthHeaders();
-      const response = await fetch(`${API_URL}/programs`, {
+      
+      // Check user role and programId
+      let url = `${API_URL}/programs`;
+      if (currentUser && currentUser.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(currentUser.role)) {
+        url = `${API_URL}/programs?program_id=${currentUser.programId}`;
+      }
+      
+      const response = await fetch(url, {
         headers,
         credentials: 'include',
       });
@@ -211,13 +275,161 @@ function RolesPage() {
     }
   };
 
+  const loadRolesWithUser = async (user: any) => {
+    try {
+      setLoadingRoles(true);
+      const headers = getAuthHeaders();
+      
+      // Fetch programs (filtered by user's program for program roles)
+      let programsUrl = `${API_URL}/programs`;
+      if (user && user.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(user.role)) {
+        programsUrl = `${API_URL}/programs?program_id=${user.programId}`;
+        console.log('🔍 Fetching programs for roles with filter:', programsUrl);
+      }
+      
+      const programsResponse = await fetch(programsUrl, {
+        headers,
+        credentials: 'include',
+      });
+
+      console.log('Programs response for roles:', programsResponse.status);
+
+      if (!programsResponse.ok) {
+        throw new Error('Failed to fetch programs');
+      }
+
+      const programsData = await programsResponse.json();
+      console.log('Programs data for roles:', programsData);
+      
+      // Handle both array and object with programs property
+      const allPrograms = Array.isArray(programsData) ? programsData : (programsData.programs || programsData.data || []);
+      console.log('✅ Programs for roles loaded:', allPrograms.length, 'programs');
+
+      // Fetch roles based on active tab
+      let allRoles: Role[] = [];
+      
+      if (activeTab === 'system-roles') {
+        // For system roles, fetch from /system-roles endpoint (no program association)
+        try {
+          const systemRolesResponse = await fetch(`${API_URL}/system-roles`, {
+            headers,
+            credentials: 'include',
+          });
+
+          if (systemRolesResponse.ok) {
+            const systemRolesData = await systemRolesResponse.json();
+            const rolesList = Array.isArray(systemRolesData) ? systemRolesData : (systemRolesData.roles || systemRolesData.data || []);
+            allRoles = rolesList.map((role: any) => ({
+              id: role.id,
+              role_name: role.role || role.role_name || 'System Role',
+              username: role.username || role.name,
+              email: role.email,
+              program_id: role.program_id || null,
+              created_at: role.created_at,
+              program: role.program || null
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading system roles:', error);
+        }
+      } else {
+        // For program users, fetch from each program
+        const rolesPromises = allPrograms.map(async (prog: ProgramOption) => {
+          try {
+            console.log(`Fetching users and roles for program: ${prog.id}`);
+            
+            // Fetch both default users AND custom roles
+            const [usersResponse, rolesResponse] = await Promise.all([
+              fetch(`${API_URL}/programs/${prog.id}/users`, {
+                headers,
+                credentials: 'include',
+              }),
+              fetch(`${API_URL}/programs/${prog.id}/roles`, {
+                headers,
+                credentials: 'include',
+              })
+            ]);
+
+            console.log(`users response for ${prog.id}:`, usersResponse.status);
+            console.log(`roles response for ${prog.id}:`, rolesResponse.status);
+
+            const allProgramRoles = [];
+
+            // Process default users
+            if (usersResponse.ok) {
+              const usersData = await usersResponse.json();
+              console.log(`users data for ${prog.id}:`, usersData);
+              const usersList = Array.isArray(usersData) ? usersData : (usersData.users || usersData.data || []);
+              const mappedUsers = usersList.map((user: any) => ({
+                id: String(user.id),
+                role_name: user.role || user.role_name || 'User',
+                username: user.username || user.name,
+                email: user.email,
+                program_id: prog.id,
+                created_at: user.created_at,
+                is_default_user: true,
+                program: { id: prog.id, name: prog.name }
+              }));
+              allProgramRoles.push(...mappedUsers);
+            }
+
+            // Process custom roles
+            if (rolesResponse.ok) {
+              const rolesData = await rolesResponse.json();
+              console.log(`roles data for ${prog.id}:`, rolesData);
+              const rolesList = Array.isArray(rolesData) ? rolesData : (rolesData.roles || rolesData.data || []);
+              const mappedRoles = rolesList.map((role: any) => ({
+                id: role.id,
+                role_name: role.role || role.role_name || 'Role',
+                username: role.username || role.name,
+                email: role.email,
+                program_id: prog.id,
+                created_at: role.created_at,
+                is_default_user: false,
+                program: { id: prog.id, name: prog.name }
+              }));
+              allProgramRoles.push(...mappedRoles);
+            }
+
+            return allProgramRoles;
+          } catch (error) {
+            console.error(`Error loading users/roles for program ${prog.id}:`, error);
+            return [];
+          }
+        });
+
+        const rolesArrays = await Promise.all(rolesPromises);
+        allRoles = rolesArrays.flat();
+      }
+
+      console.log('✅ All roles loaded:', allRoles.length, 'roles');
+
+      // Apply program filter
+      setAllRoles(allRoles);
+      setRoles(allRoles);
+    } catch (error: any) {
+      console.error('Error loading roles:', error);
+      if (error.message === 'Not authenticated') {
+        window.location.href = '/';
+      }
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
+
+
   const loadRoles = async () => {
     try {
       setLoadingRoles(true);
       const headers = getAuthHeaders();
       
-      // Fetch all programs first to get roles from each
-      const programsResponse = await fetch(`${API_URL}/programs`, {
+      // Fetch programs (filtered by user's program for program roles)
+      let programsUrl = `${API_URL}/programs`;
+      if (currentUser && currentUser.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(currentUser.role)) {
+        programsUrl = `${API_URL}/programs?program_id=${currentUser.programId}`;
+      }
+      
+      const programsResponse = await fetch(programsUrl, {
         headers,
         credentials: 'include',
       });

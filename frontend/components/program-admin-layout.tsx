@@ -157,7 +157,8 @@ export default function ProgramAdminLayout({ children }: ProgramAdminLayoutProps
         {/* Navigation */}
         <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100%-4rem)]">
           {sidebarItems.map((item, index) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            // FIXED: Exact match only - no substring matching to prevent dashboard being active when on /program-admin/roles
+            const isActive = pathname === item.href;
             return (
               <a
                 key={index}
