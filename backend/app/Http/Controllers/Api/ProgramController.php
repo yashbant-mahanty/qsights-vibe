@@ -189,37 +189,150 @@ class ProgramController extends Controller
     private function generateProgramUser(Program $program, string $role)
     {
         $roleNames = [
-            'program-admin' => 'Admin',
-            'program-manager' => 'Manager',
-            'program-moderator' => 'Moderator',
+            'program-admin' => 'admin',
+            'program-manager' => 'manager',
+            'program-moderator' => 'moderator',
         ];
 
-        $roleName = $roleNames[$role] ?? 'User';
+        $roleShortName = $roleNames[$role] ?? 'user';
         $generatedPassword = Str::random(12);
-        $email = strtolower(str_replace(' ', '.', $program->name)) . ".{$roleName}@" . parse_url(config('app.url'), PHP_URL_HOST);
         
-        // Ensure unique email
+        // Generate username: programcode.role@qsights.com (no spaces, all lowercase)
+        // Example: "strategic-survey.admin@qsights.com"
+        $programSlug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $program->name));
+        $programSlug = trim($programSlug, '-'); // Remove leading/trailing hyphens
+        $programSlug = substr($programSlug, 0, 30); // Limit length
+        
+        $baseUsername = "{$programSlug}.{$roleShortName}@qsights.com";
+        
+        // Ensure unique username
+        $username = $baseUsername;
         $counter = 1;
-        $originalEmail = $email;
-        while (User::where('email', $email)->exists()) {
-            $email = str_replace('@', $counter . '@', $originalEmail);
+        while (User::where('name', $username)->exists() || User::where('email', $username)->exists()) {
+            $username = "{$programSlug}.{$roleShortName}.{$counter}@qsights.com";
             $counter++;
         }
+        
+        // Email is same as username for consistency
+        $email = $username;
+
+        // Define default services for each role
+        $defaultServices = $this->getDefaultServicesForRole($role);
 
         $user = User::create([
-            'name' => $program->name . ' ' . $roleName,
+            'name' => $username, // Store username in name field for login
             'email' => $email,
             'password' => Hash::make($generatedPassword),
             'role' => $role,
             'program_id' => $program->id,
+            'default_services' => $defaultServices,
         ]);
 
         return [
             'role' => $role,
-            'name' => $user->name,
+            'username' => $user->name, // Return as 'username' for clarity
             'email' => $user->email,
             'password' => $generatedPassword,
         ];
+    }
+
+    /**
+     * Get default services/permissions for a role.
+     * 
+     * IMPORTANT: These are default Program role services
+     * - Program Admin: Full access within program (like Super Admin but scoped)
+     * - Program Manager: View/Edit only (no Create/Delete for questionnaires & events)
+     * - Program Moderator: View-only access to events and reports
+     */
+    private function getDefaultServicesForRole(string $role): array
+    {
+        $defaults = [
+            'program-admin' => [
+                // Dashboard
+                'dashboard',
+                
+                // Programs - Full access
+                'programs-view',
+                'programs-create',
+                'programs-edit',
+                'programs-delete',
+                
+                // Participants - Full access
+                'participants-view',
+                'participants-create',
+                'participants-edit',
+                'participants-delete',
+                
+                // Questionnaires - Full access (like Super Admin, program-scoped)
+                'questionnaires-view',
+                'questionnaires-create',
+                'questionnaires-edit',
+                'questionnaires-delete',
+                
+                // Activities/Events - Full access (like Super Admin, program-scoped)
+                'activities-view',
+                'activities-create',
+                'activities-edit',
+                'activities-delete',
+                'activities-send-notification',
+                'activities-set-reminder',
+                'activities-landing-config',
+                
+                // Reports - Full access
+                'reports-view',
+                'reports-export',
+                
+                // Evaluation - Full access (like Super Admin, program-scoped)
+                'evaluation-view',
+                'evaluation-manage',
+            ],
+            'program-manager' => [
+                // Dashboard
+                'dashboard',
+                
+                // Programs - View only
+                'programs-view',
+                
+                // Participants - View and Edit
+                'participants-view',
+                'participants-edit',
+                
+                // Questionnaires - View and Edit only (NO create, NO delete)
+                'questionnaires-view',
+                'questionnaires-edit',
+                
+                // Activities/Events - View and Edit only (NO create, NO delete)
+                'activities-view',
+                'activities-edit',
+                'activities-send-notification',
+                'activities-landing-config',
+                
+                // Reports - View and Export
+                'reports-view',
+                'reports-export',
+                
+                // Evaluation - Full access (like Super Admin, program-scoped)
+                'evaluation-view',
+                'evaluation-manage',
+            ],
+            'program-moderator' => [
+                // Dashboard
+                'dashboard',
+                
+                // Activities/Events - View only
+                'activities-view',
+                
+                // Reports - View and Export
+                'reports-view',
+                'reports-export',
+                
+                // Evaluation - Full access (like Super Admin, program-scoped)
+                'evaluation-view',
+                'evaluation-manage',
+            ],
+        ];
+
+        return $defaults[$role] ?? [];
     }
 
     /**
@@ -497,18 +610,34 @@ class ProgramController extends Controller
             
             // Validate request
             $validated = $request->validate([
-                'username' => 'sometimes|string|max:255',
-                'name' => 'sometimes|string|max:255',
+                'username' => 'sometimes|string|max:255|unique:users,name,' . $userId,
                 'email' => 'sometimes|email|unique:users,email,' . $userId,
                 'password' => 'sometimes|string|min:8',
             ]);
             
             // Update user fields
             if (isset($validated['username'])) {
-                $user->name = $validated['username'];
-            }
-            if (isset($validated['name'])) {
-                $user->name = $validated['name'];
+                $username = $validated['username'];
+                
+                // Only validate format if username is actually changing
+                if ($username !== $user->name) {
+                    // Ensure username has no spaces and ends with @qsights.com
+                    if (!str_ends_with($username, '@qsights.com')) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Username must end with @qsights.com',
+                        ], 422);
+                    }
+                    if (preg_match('/\s/', $username)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Username cannot contain spaces',
+                        ], 422);
+                    }
+                    $user->name = $username;
+                    // Also update email to match username
+                    $user->email = $username;
+                }
             }
             if (isset($validated['email'])) {
                 $user->email = $validated['email'];
@@ -539,6 +668,69 @@ class ProgramController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update user',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update allowed services for a program user
+     * Only super-admin and admin can update services
+     */
+    public function updateProgramUserServices(Request $request, string $programId, string $userId)
+    {
+        try {
+            $authUser = $request->user();
+            
+            // Only super-admin and admin can update services
+            if (!in_array($authUser->role, ['super-admin', 'admin'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Only super-admin and admin can update user services.',
+                ], 403);
+            }
+            
+            $program = Program::findOrFail($programId);
+            $user = User::where('id', $userId)
+                ->where('program_id', $programId)
+                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator'])
+                ->firstOrFail();
+            
+            // Validate request
+            $validated = $request->validate([
+                'services' => 'required|array',
+                'services.*' => 'string|in:dashboard,activities-view,activities-create,activities-edit,activities-delete,activities-send-notification,activities-set-reminder,activities-landing-config,participants-view,participants-create,participants-edit,participants-delete,reports-view,reports-export',
+            ]);
+            
+            // Update services
+            $user->default_services = $validated['services'];
+            $user->save();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'User services updated successfully',
+                'data' => [
+                    'user_id' => $user->id,
+                    'name' => $user->name,
+                    'role' => $user->role,
+                    'services' => $user->default_services,
+                ],
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User or program not found',
+            ], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update user services',
                 'error' => $e->getMessage(),
             ], 500);
         }
