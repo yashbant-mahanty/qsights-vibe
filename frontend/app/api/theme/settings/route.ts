@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET() {
   try {
     // Call the Laravel backend from the server side
-    // Always use localhost:8000 on the server (not from env which might be external URL)
-    const backendUrl = 'http://127.0.0.1:8000/api';
-    const response = await fetch(`${backendUrl}/theme/settings`, {
+    // Use BACKEND_URL from environment (production) or fallback to localhost for dev
+    const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+    const response = await fetch(`${backendUrl}/api/theme/settings`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',

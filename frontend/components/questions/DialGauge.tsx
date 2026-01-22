@@ -3,6 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { resolveDisplayValue } from '@/lib/valueDisplayUtils';
+import { getPresignedUrls, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 
 interface DialGaugeProps {
   value: number | null;
@@ -27,6 +28,7 @@ interface DialGaugeProps {
       min: number;
       max: number;
       label: string;
+      type?: 'lessThan' | 'greaterThan' | 'between';
     }>;
     textMappings?: Array<{
       value: number;
@@ -46,11 +48,11 @@ export function DialGauge({
   className,
 }: DialGaugeProps) {
   const {
-    min = 0,
-    max = 10,
+    min: settingsMin = 0,
+    max: settingsMax = 10,
     step = 1,
     labels = [],
-    gaugeType = 'semi-circle',
+    gaugeType: rawGaugeType = 'semi-circle',
     showPointer = true,
     showValue = true,
     colorStops = [
@@ -63,41 +65,118 @@ export function DialGauge({
     size = 'md',
     customImages,
     valueDisplayMode = 'number',
-    rangeMappings = [],
-    textMappings = [],
+    rangeMappings: rawRangeMappings = [],
+    textMappings: rawTextMappings = [],
     showImageLabels = true,
+    instructionText = 'Drag the pointer to select',
   } = settings;
+
+  // UNIVERSAL FIX: Validate gaugeType - only 'semi-circle' or 'full-circle' are valid
+  // Invalid values like 'gradient' should default to 'semi-circle'
+  const gaugeType: 'semi-circle' | 'full-circle' = 
+    (rawGaugeType === 'semi-circle' || rawGaugeType === 'full-circle') 
+      ? rawGaugeType 
+      : 'semi-circle';
+
+  // Parse rangeMappings and textMappings if they are JSON strings
+  const rangeMappings = typeof rawRangeMappings === 'string' 
+    ? (rawRangeMappings ? JSON.parse(rawRangeMappings) : [])
+    : rawRangeMappings;
+  const textMappings = typeof rawTextMappings === 'string'
+    ? (rawTextMappings ? JSON.parse(rawTextMappings) : [])
+    : rawTextMappings;
+
+  // Auto-adjust max based on range mappings: if using range mode, max should be (number of ranges - 1)
+  // so that each dial position maps to exactly one range label
+  const min = settingsMin;
+  const max = (valueDisplayMode === 'range' && rangeMappings.length > 0)
+    ? Math.max(min, rangeMappings.length - 1)
+    : settingsMax;
+
+  console.log('🔍 [DIAL] Parsed rangeMappings:', rangeMappings, 'Type:', typeof rangeMappings, 'IsArray:', Array.isArray(rangeMappings));
+  console.log('🔍 [DIAL] Adjusted max:', max, '(based on', rangeMappings.length, 'range mappings)');
 
   // Check for custom background image
   const backgroundImageUrl = customImages?.backgroundUrl || '';
   const hasBackgroundImage = !!backgroundImageUrl;
   
   // Sequence images for interactive highlighting
-  const sequenceImages = customImages?.sequenceImages || [];
-  const hasSequenceImages = sequenceImages.length > 0;
-
-  console.log('🎨 [DIAL GAUGE] Rendering:', {
-    hasCustomImages: !!customImages,
-    customImages,
-    backgroundImageUrl,
-    hasBackgroundImage,
-    hasSequenceImages,
-    sequenceCount: sequenceImages.length,
-    min,
-    max,
-    step,
-    allSettings: settings,
-  });
+  const rawSequenceImages = customImages?.sequenceImages || [];
+  const hasSequenceImages = rawSequenceImages.length > 0;
 
   const [isDragging, setIsDragging] = useState(false);
   const [localValue, setLocalValue] = useState(value ?? min);
+  const [presignedSequenceImages, setPresignedSequenceImages] = useState<string[]>(rawSequenceImages);
+  const [presignedBackgroundUrl, setPresignedBackgroundUrl] = useState<string>(backgroundImageUrl);
   const gaugeRef = useRef<SVGSVGElement>(null);
+
+  // Load presigned URLs for S3 images
+  useEffect(() => {
+    const loadPresignedUrls = async () => {
+      // Check if any URLs need presigning
+      const urlsToCheck = [...rawSequenceImages];
+      if (backgroundImageUrl) urlsToCheck.push(backgroundImageUrl);
+      
+      const needsPresigning = urlsToCheck.some(url => isS3Url(url) && !isPresignedUrl(url));
+      
+      if (!needsPresigning) {
+        // No presigning needed
+        setPresignedSequenceImages(rawSequenceImages);
+        setPresignedBackgroundUrl(backgroundImageUrl);
+        return;
+      }
+      
+      console.log('🔐 [DIAL] Loading presigned URLs for S3 images...');
+      
+      try {
+        const presignedMap = await getPresignedUrls(urlsToCheck);
+        
+        // Update sequence images with presigned URLs
+        const newSequenceImages = rawSequenceImages.map(url => presignedMap.get(url) || url);
+        setPresignedSequenceImages(newSequenceImages);
+        
+        // Update background URL
+        if (backgroundImageUrl) {
+          setPresignedBackgroundUrl(presignedMap.get(backgroundImageUrl) || backgroundImageUrl);
+        }
+        
+        console.log('🔐 [DIAL] Presigned URLs loaded:', { 
+          original: rawSequenceImages.length, 
+          presigned: newSequenceImages.length 
+        });
+      } catch (error) {
+        console.error('🔐 [DIAL] Failed to load presigned URLs:', error);
+        // Fallback to original URLs
+        setPresignedSequenceImages(rawSequenceImages);
+        setPresignedBackgroundUrl(backgroundImageUrl);
+      }
+    };
+    
+    loadPresignedUrls();
+  }, [rawSequenceImages.join(','), backgroundImageUrl]);
+  
+  // Use presigned URLs for display
+  const sequenceImages = presignedSequenceImages;
 
   useEffect(() => {
     if (value !== null) {
       setLocalValue(value);
     }
   }, [value]);
+
+  // Debug logging for range mappings (after localValue is defined)
+  useEffect(() => {
+    console.log('🎯 [DIAL] Settings received:', {
+      valueDisplayMode,
+      rawRangeMappings: JSON.stringify(rawRangeMappings),
+      parsedRangeMappings: rangeMappings,
+      isParsedArray: Array.isArray(rangeMappings),
+      currentValue: localValue,
+      displayValue: resolveDisplayValue(localValue, valueDisplayMode, rangeMappings, textMappings),
+      min,
+      max
+    });
+  }, [valueDisplayMode, rawRangeMappings, rangeMappings, localValue, min, max, textMappings]);
 
   const sizeConfig = {
     sm: { width: 200, height: 120, radius: 80, strokeWidth: 20 },
@@ -286,7 +365,7 @@ export function DialGauge({
       {hasBackgroundImage && (
         <div className="w-full max-w-md mb-2 flex justify-center items-center bg-gray-50 rounded-lg">
           <img
-            src={backgroundImageUrl}
+            src={presignedBackgroundUrl}
             alt="Gauge background"
             className="w-full h-auto rounded-lg"
             style={{ 
@@ -310,12 +389,12 @@ export function DialGauge({
 
       {/* Combined Gauge + Sequence Images Layout */}
       {hasSequenceImages ? (
-        <div className="w-full max-w-4xl">
+        <div className="w-full max-w-4xl mt-6">
           <div 
             className="relative mx-auto"
             style={{
               width: `${width + 240}px`,
-              height: `${height + 140}px`,
+              height: `${height + 200}px`,
             }}
           >
             {/* Sequence Images - Positioned AROUND the gauge */}
@@ -348,10 +427,10 @@ export function DialGauge({
                 <div
                   key={index}
                   className={cn(
-                    'absolute rounded-lg overflow-hidden border-4 transition-all duration-300',
+                    'absolute rounded-lg overflow-hidden transition-all duration-300',
                     isActive 
-                      ? 'border-blue-500 shadow-xl shadow-blue-500/50 z-10' 
-                      : 'border-gray-300 opacity-60'
+                      ? 'border-4 border-blue-500 shadow-xl shadow-blue-500/50 z-10' 
+                      : 'border-0 opacity-60'
                   )}
                   style={{
                     left: `${imageX - imageSize / 2}px`,
@@ -504,7 +583,7 @@ export function DialGauge({
                 </div>
               )}
               <div className="text-xs text-gray-400 uppercase tracking-wider">
-                Drag the pointer to select
+                {instructionText}
               </div>
             </div>
           </div>
@@ -574,7 +653,7 @@ export function DialGauge({
             )}
 
             {/* Tick marks and labels around the gauge */}
-            {labels.map((label, i) => {
+            {labels.length > 0 && labels.map((label, i) => {
               const labelPct = ((label.value - min) / (max - min)) * 100;
               const labelAngle = startAngle - (labelPct / 100) * angleRange;
               const labelRad = (labelAngle * Math.PI) / 180;
@@ -605,7 +684,7 @@ export function DialGauge({
               </div>
             )}
             <div className="text-xs text-gray-400 uppercase tracking-wider">
-              Drag the pointer to select
+              {instructionText}
             </div>
           </div>
         </>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,17 @@ interface ValueDisplayModeConfigProps {
   sectionId: number;
   setSections: React.Dispatch<React.SetStateAction<any[]>>;
 }
+
+// Helper to preserve scroll position during state updates
+const withScrollPreservation = (fn: () => void) => {
+  const scrollY = window.scrollY;
+  fn();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollY, behavior: 'instant' });
+    });
+  });
+};
 
 export function ValueDisplayModeConfig({ 
   settings, 
@@ -27,40 +38,70 @@ export function ValueDisplayModeConfig({
   const max = settings.max ?? 10;
   const step = settings.step ?? 1;
 
-  const updateSettings = (newSettings: any) => {
-    setSections(prevSections =>
-      prevSections.map(section =>
-        section.id === sectionId
-          ? {
-              ...section,
-              questions: section.questions.map((q: any) =>
-                q.id === questionId
-                  ? { ...q, settings: { ...settings, ...newSettings } }
-                  : q
-              )
-            }
-          : section
-      )
-    );
-  };
+  const updateSettings = useCallback((newSettings: any) => {
+    withScrollPreservation(() => {
+      setSections(prevSections =>
+        prevSections.map(section =>
+          section.id === sectionId
+            ? {
+                ...section,
+                questions: section.questions.map((q: any) =>
+                  q.id === questionId
+                    ? { ...q, settings: { ...settings, ...newSettings } }
+                    : q
+                )
+              }
+            : section
+        )
+      );
+    });
+  }, [sectionId, questionId, settings, setSections]);
 
   const handleModeChange = (mode: 'number' | 'range' | 'text') => {
     setValidationErrors([]);
     updateSettings({ valueDisplayMode: mode });
   };
 
-  const addRangeMapping = () => {
-    const newMapping = {
-      min: rangeMappings.length > 0 ? rangeMappings[rangeMappings.length - 1].max + 1 : min,
-      max: max,
-      label: `Range ${rangeMappings.length + 1}`
-    };
+  const addRangeMapping = (type: 'between' | 'lessThan' | 'greaterThan' = 'between') => {
+    let newMapping: any;
+    
+    if (type === 'lessThan') {
+      // Less than range: value < max
+      newMapping = {
+        min: min,
+        max: rangeMappings.length > 0 ? rangeMappings[0].min : Math.round((max - min) * 0.2) + min,
+        label: `< ${Math.round((max - min) * 0.2) + min}`,
+        type: 'lessThan'
+      };
+    } else if (type === 'greaterThan') {
+      // Greater than range: value >= min
+      const lastMax = rangeMappings.length > 0 ? rangeMappings[rangeMappings.length - 1].max : Math.round((max - min) * 0.8) + min;
+      newMapping = {
+        min: lastMax,
+        max: max,
+        label: `≥ ${lastMax}`,
+        type: 'greaterThan'
+      };
+    } else {
+      // Default between range
+      newMapping = {
+        min: rangeMappings.length > 0 ? rangeMappings[rangeMappings.length - 1].max : min,
+        max: max,
+        label: `Range ${rangeMappings.length + 1}`,
+        type: 'between'
+      };
+    }
+    
     updateSettings({ rangeMappings: [...rangeMappings, newMapping] });
   };
 
-  const updateRangeMapping = (index: number, field: 'min' | 'max' | 'label', value: any) => {
+  const updateRangeMapping = (index: number, field: 'min' | 'max' | 'label' | 'type', value: any) => {
     const updated = [...rangeMappings];
-    updated[index] = { ...updated[index], [field]: field === 'label' ? value : Number(value) };
+    if (field === 'label' || field === 'type') {
+      updated[index] = { ...updated[index], [field]: value };
+    } else {
+      updated[index] = { ...updated[index], [field]: Number(value) };
+    }
     updateSettings({ rangeMappings: updated });
     
     // Validate
@@ -185,64 +226,138 @@ export function ValueDisplayModeConfig({
         <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
           <div className="flex items-center justify-between mb-3">
             <Label className="text-sm font-medium text-blue-900">Range Mappings</Label>
-            <Button
-              type="button"
-              onClick={addRangeMapping}
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-            >
-              <Plus className="w-3 h-3 mr-1" />
-              Add Range
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                onClick={() => addRangeMapping('lessThan')}
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                title="Add a 'less than' range (e.g., < 20%)"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                &lt; Less Than
+              </Button>
+              <Button
+                type="button"
+                onClick={() => addRangeMapping('between')}
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                title="Add a 'between' range (e.g., 20-40)"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Between
+              </Button>
+              <Button
+                type="button"
+                onClick={() => addRangeMapping('greaterThan')}
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                title="Add a 'greater than or equal' range (e.g., ≥ 60%)"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                ≥ Greater Than
+              </Button>
+            </div>
           </div>
           
           {rangeMappings.length === 0 && (
             <p className="text-xs text-gray-600 mb-3">
               No ranges defined. Add ranges to map numeric values to labels.
+              <br />
+              <span className="text-blue-600">💡 Example: For percentage questions use "Less Than" for &lt;20%, "Between" for 20-40%, and "Greater Than" for ≥60%</span>
             </p>
           )}
 
           <div className="space-y-2">
-            {rangeMappings.map((mapping: any, index: number) => (
-              <div key={index} className="flex items-center gap-2 p-2 bg-white rounded border">
-                <Input
-                  type="number"
-                  placeholder="Min"
-                  value={mapping.min}
-                  onChange={(e) => updateRangeMapping(index, 'min', e.target.value)}
-                  className="h-8 text-xs w-20"
-                />
-                <span className="text-xs text-gray-500">to</span>
-                <Input
-                  type="number"
-                  placeholder="Max"
-                  value={mapping.max}
-                  onChange={(e) => updateRangeMapping(index, 'max', e.target.value)}
-                  className="h-8 text-xs w-20"
-                />
-                <Input
-                  type="text"
-                  placeholder="Label (e.g., Low)"
-                  value={mapping.label}
-                  onChange={(e) => updateRangeMapping(index, 'label', e.target.value)}
-                  className="h-8 text-xs flex-1"
-                />
-                <Button
-                  type="button"
-                  onClick={() => deleteRangeMapping(index)}
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
+            {rangeMappings.map((mapping: any, index: number) => {
+              const rangeType = mapping.type || 'between';
+              return (
+                <div key={index} className="flex items-center gap-2 p-2 bg-white rounded border">
+                  {/* Range Type Indicator */}
+                  <select
+                    value={rangeType}
+                    onChange={(e) => updateRangeMapping(index, 'type', e.target.value)}
+                    className="h-8 text-xs px-2 border rounded bg-gray-50 min-w-[90px]"
+                  >
+                    <option value="lessThan">&lt; Less Than</option>
+                    <option value="between">Between</option>
+                    <option value="greaterThan">≥ Greater Than</option>
+                  </select>
+                  
+                  {/* Conditional Min/Max fields based on range type */}
+                  {rangeType === 'lessThan' ? (
+                    <>
+                      <span className="text-xs text-gray-500">Value &lt;</span>
+                      <Input
+                        type="number"
+                        placeholder="Max"
+                        defaultValue={mapping.max}
+                        onBlur={(e) => updateRangeMapping(index, 'max', e.target.value)}
+                        key={`range-max-${questionId}-${index}-${mapping.max}`}
+                        className="h-8 text-xs w-20"
+                      />
+                    </>
+                  ) : rangeType === 'greaterThan' ? (
+                    <>
+                      <span className="text-xs text-gray-500">Value ≥</span>
+                      <Input
+                        type="number"
+                        placeholder="Min"
+                        defaultValue={mapping.min}
+                        onBlur={(e) => updateRangeMapping(index, 'min', e.target.value)}
+                        key={`range-min-${questionId}-${index}-${mapping.min}`}
+                        className="h-8 text-xs w-20"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        type="number"
+                        placeholder="Min"
+                        defaultValue={mapping.min}
+                        onBlur={(e) => updateRangeMapping(index, 'min', e.target.value)}
+                        key={`range-min-${questionId}-${index}-${mapping.min}`}
+                        className="h-8 text-xs w-20"
+                      />
+                      <span className="text-xs text-gray-500">to</span>
+                      <Input
+                        type="number"
+                        placeholder="Max"
+                        defaultValue={mapping.max}
+                        onBlur={(e) => updateRangeMapping(index, 'max', e.target.value)}
+                        key={`range-max-${questionId}-${index}-${mapping.max}`}
+                        className="h-8 text-xs w-20"
+                      />
+                    </>
+                  )}
+                  
+                  <Input
+                    type="text"
+                    placeholder="Label (e.g., Low)"
+                    defaultValue={mapping.label}
+                    onBlur={(e) => updateRangeMapping(index, 'label', e.target.value)}
+                    key={`range-label-${questionId}-${index}-${mapping.label}`}
+                    className="h-8 text-xs flex-1"
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => deleteRangeMapping(index)}
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
 
           <p className="text-xs text-blue-700 mt-3">
-            💡 Ranges must not overlap and should cover the full slider range ({min} to {max})
+            💡 Use different range types for flexible configurations: "&lt; Less Than" for values below a threshold, "Between" for value ranges, "≥ Greater Than" for values at or above a threshold.
           </p>
         </div>
       )}
@@ -288,8 +403,9 @@ export function ValueDisplayModeConfig({
                 <Input
                   type="number"
                   placeholder="Value"
-                  value={mapping.value}
-                  onChange={(e) => updateTextMapping(index, 'value', e.target.value)}
+                  defaultValue={mapping.value}
+                  onBlur={(e) => updateTextMapping(index, 'value', e.target.value)}
+                  key={`text-value-${questionId}-${index}-${mapping.value}`}
                   className="h-8 text-xs w-20"
                   step={step}
                   min={min}
@@ -299,8 +415,9 @@ export function ValueDisplayModeConfig({
                 <Input
                   type="text"
                   placeholder="Label (e.g., Excellent)"
-                  value={mapping.label}
-                  onChange={(e) => updateTextMapping(index, 'label', e.target.value)}
+                  defaultValue={mapping.label}
+                  onBlur={(e) => updateTextMapping(index, 'label', e.target.value)}
+                  key={`text-label-${questionId}-${index}-${mapping.label}`}
                   className="h-8 text-xs flex-1"
                 />
                 <Button

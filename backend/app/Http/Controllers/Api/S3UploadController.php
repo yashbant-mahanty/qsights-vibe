@@ -544,8 +544,93 @@ class S3UploadController extends Controller
             \Log::error('Failed to generate view URL', ['error' => $e->getMessage()]);
             
             return response()->json([
-                'status' => 'error',
+                'status' => 'success',
                 'message' => 'Failed to generate view URL: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate presigned URLs for viewing multiple S3 objects
+     * Use this to convert stored S3 keys to viewable URLs
+     */
+    public function getBulkViewUrls(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'keys' => 'required|array|min:1|max:50',
+                'keys.*' => 'required|string',
+                'expires' => 'nullable|integer|min:60|max:604800', // 1 min to 7 days
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $config = $this->getS3Config();
+            
+            if (empty($config['s3_bucket'])) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'S3 is not configured'
+                ], 400);
+            }
+
+            $s3Client = new S3Client([
+                'region' => $config['s3_region'],
+                'version' => 'latest',
+                'credentials' => [
+                    'key' => $config['s3_access_key'],
+                    'secret' => $config['s3_secret_key'],
+                ],
+            ]);
+
+            $keys = $request->input('keys');
+            $expiresIn = $request->input('expires', 3600); // Default 1 hour
+
+            $urls = [];
+            foreach ($keys as $s3Key) {
+                try {
+                    $cmd = $s3Client->getCommand('GetObject', [
+                        'Bucket' => $config['s3_bucket'],
+                        'Key' => $s3Key,
+                    ]);
+
+                    $presignedRequest = $s3Client->createPresignedRequest($cmd, "+{$expiresIn} seconds");
+                    $presignedUrl = (string) $presignedRequest->getUri();
+
+                    $urls[] = [
+                        'key' => $s3Key,
+                        'url' => $presignedUrl,
+                    ];
+                } catch (Exception $e) {
+                    \Log::warning('Failed to generate presigned URL for key', ['key' => $s3Key, 'error' => $e->getMessage()]);
+                    $urls[] = [
+                        'key' => $s3Key,
+                        'url' => null,
+                        'error' => 'Failed to generate URL',
+                    ];
+                }
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'urls' => $urls,
+                    'expires_in' => $expiresIn,
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('Failed to generate bulk view URLs', ['error' => $e->getMessage()]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to generate view URLs: ' . $e->getMessage()
             ], 500);
         }
     }

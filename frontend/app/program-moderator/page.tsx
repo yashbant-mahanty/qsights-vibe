@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import ProgramAdminLayout from "@/components/program-admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GradientStatCard } from "@/components/ui/gradient-stat-card";
 import {
   Users,
   Activity,
@@ -71,38 +72,30 @@ export default function ProgramModeratorDashboard() {
     {
       title: 'Total Participants',
       value: `${totalParticipants} (${authenticatedParticipants}/${guestParticipants})`,
-      change: '(Participant/Anonymous)',
-      trend: 'up' as const,
+      subtitle: '(Participant/Anonymous)',
       icon: Users,
-      bgColor: 'bg-blue-50',
-      color: 'text-blue-600',
+      variant: 'blue' as const,
     },
     {
       title: 'Active Participants',
       value: activeParticipants.toString(),
-      change: totalParticipants > 0 ? `${Math.round((activeParticipants/totalParticipants)*100)}% of total` : '0% of total',
-      trend: 'up' as const,
+      subtitle: totalParticipants > 0 ? `${Math.round((activeParticipants/totalParticipants)*100)}% of total` : '0% of total',
       icon: UserCheck,
-      bgColor: 'bg-green-50',
-      color: 'text-green-600',
+      variant: 'green' as const,
     },
     {
       title: 'Events Completed',
       value: completedActivities.toString(),
-      change: activities.length > 0 ? `${activities.length} total events` : '0 total events',
-      trend: 'up' as const,
+      subtitle: activities.length > 0 ? `${activities.length} total events` : '0 total events',
       icon: CheckCircle,
-      bgColor: 'bg-qsights-light',
-      color: 'text-qsights-cyan',
+      variant: 'purple' as const,
     },
     {
       title: 'Pending Responses',
       value: pendingResponses.toString(),
-      change: pendingResponses > 0 ? 'Needs attention' : 'All current',
-      trend: pendingResponses > 0 ? ('down' as const) : ('up' as const),
+      subtitle: pendingResponses > 0 ? 'Needs attention' : 'All current',
       icon: AlertCircle,
-      bgColor: 'bg-orange-50',
-      color: 'text-orange-600',
+      variant: 'orange' as const,
     },
   ];
 
@@ -264,26 +257,14 @@ export default function ProgramModeratorDashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {stats.map((stat, index) => (
-            <Card key={index} className="relative overflow-hidden">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
-                    <p className="text-3xl font-bold text-gray-900 mb-2">{stat.value}</p>
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className={`w-4 h-4 ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'} ${stat.trend === 'down' && 'rotate-180'}`} />
-                      <span className={`text-sm font-semibold ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-                        {stat.change}
-                      </span>
-                      <span className="text-xs text-gray-500">vs last month</span>
-                    </div>
-                  </div>
-                  <div className={`${stat.bgColor} ${stat.color} p-3 rounded-xl`}>
-                    <stat.icon className="w-6 h-6" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <GradientStatCard
+              key={index}
+              title={stat.title}
+              value={stat.value}
+              subtitle={stat.subtitle}
+              icon={stat.icon}
+              variant={stat.variant}
+            />
           ))}
         </div>
 

@@ -1,4 +1,5 @@
 "use client";
+// Version: 2.0 - Fixed UUID routing for default users vs custom roles
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -55,6 +56,7 @@ interface Role {
   email: string;
   program_id: string;
   created_at: string;
+  is_default_user?: boolean; // true if from /users endpoint (integer ID), false if from /roles endpoint (UUID)
   program?: {
     id: string;
     name: string;
@@ -288,15 +290,18 @@ function RolesPage() {
               const usersData = await usersResponse.json();
               console.log(`users data for ${prog.id}:`, usersData);
               const usersList = Array.isArray(usersData) ? usersData : (usersData.users || usersData.data || []);
+              console.log(`Sample user from /users endpoint:`, usersList[0]);
               const mappedUsers = usersList.map((user: any) => ({
-                id: user.id,
+                id: String(user.id), // Convert to string for consistency
                 role_name: user.role || user.role_name || 'User',
                 username: user.username || user.name,
                 email: user.email,
                 program_id: prog.id,
                 created_at: user.created_at,
+                is_default_user: true, // Flag: this is from /users endpoint with integer ID
                 program: { id: prog.id, name: prog.name }
               }));
+              console.log(`Sample mapped user:`, mappedUsers[0]);
               allProgramRoles.push(...mappedUsers);
             }
 
@@ -305,6 +310,7 @@ function RolesPage() {
               const rolesData = await rolesResponse.json();
               console.log(`roles data for ${prog.id}:`, rolesData);
               const rolesList = Array.isArray(rolesData) ? rolesData : (rolesData.roles || rolesData.data || []);
+              console.log(`Sample role from /roles endpoint:`, rolesList[0]);
               const mappedRoles = rolesList.map((role: any) => ({
                 id: role.id,
                 role_name: role.role || role.role_name || 'Role',
@@ -312,8 +318,10 @@ function RolesPage() {
                 email: role.email,
                 program_id: prog.id,
                 created_at: role.created_at,
+                is_default_user: false, // Flag: this is from /roles endpoint with UUID
                 program: { id: prog.id, name: prog.name }
               }));
+              console.log(`Sample mapped role:`, mappedRoles[0]);
               allProgramRoles.push(...mappedRoles);
             }
 
@@ -422,6 +430,12 @@ function RolesPage() {
   };
 
   const handleEdit = async (role: Role) => {
+    console.log('=== handleEdit called ===');
+    console.log('Role object:', role);
+    console.log('Role ID:', role.id, 'Type:', typeof role.id);
+    console.log('Program ID:', role.program_id, 'Type:', typeof role.program_id);
+    console.log('Is default user:', role.is_default_user);
+    
     setEditingRole(role);
     setEditUsername(role.username);
     setEditEmail(role.email);
@@ -435,9 +449,14 @@ function RolesPage() {
       let url: string;
       if (activeTab === 'system-roles') {
         url = `${API_URL}/system-roles/${role.id}`;
+      } else if (role.is_default_user) {
+        // Default program users: use /users endpoint
+        url = `${API_URL}/programs/${role.program_id}/users/${role.id}`;
       } else {
+        // Custom roles: use /roles endpoint
         url = `${API_URL}/programs/${role.program_id}/roles/${role.id}`;
       }
+      console.log('Fetching role from URL:', url);
       
       const response = await fetch(url, {
         headers,
@@ -462,6 +481,12 @@ function RolesPage() {
   const handleUpdateRole = async () => {
     if (!editingRole) return;
 
+    console.log('=== handleUpdateRole called ===');
+    console.log('Editing role:', editingRole);
+    console.log('Editing role ID:', editingRole.id, 'Type:', typeof editingRole.id);
+    console.log('Program ID:', editingRole.program_id, 'Type:', typeof editingRole.program_id);
+    console.log('Is default user:', editingRole.is_default_user);
+
     try {
       setLoading(true);
       const headers = getAuthHeaders();
@@ -481,14 +506,18 @@ function RolesPage() {
         updateData.service_ids = editSelectedServices;
       }
 
-      // Determine the correct endpoint based on active tab
+      // Determine the correct endpoint based on active tab and user type
       let url: string;
       if (activeTab === 'system-roles') {
         url = `${API_URL}/system-roles/${editingRole.id}`;
+      } else if (editingRole.is_default_user) {
+        // Default program users: use /users endpoint
+        url = `${API_URL}/programs/${editingRole.program_id}/users/${editingRole.id}`;
       } else {
-        // Program users tab always uses /roles endpoint
+        // Custom roles: use /roles endpoint
         url = `${API_URL}/programs/${editingRole.program_id}/roles/${editingRole.id}`;
       }
+      console.log('Update URL:', url);
 
       const response = await fetch(url, {
         method: 'PUT',
@@ -553,12 +582,15 @@ function RolesPage() {
       setLoading(true);
       const headers = getAuthHeaders();
 
-      // Determine the correct endpoint based on active tab
+      // Determine the correct endpoint based on active tab and user type
       let url: string;
       if (activeTab === 'system-roles') {
         url = `${API_URL}/system-roles/${roleToDelete.id}`;
+      } else if (roleToDelete.is_default_user) {
+        // Default program users: use /users endpoint
+        url = `${API_URL}/programs/${roleToDelete.program_id}/users/${roleToDelete.id}`;
       } else {
-        // Program users tab always uses /roles endpoint
+        // Custom roles: use /roles endpoint
         url = `${API_URL}/programs/${roleToDelete.program_id}/roles/${roleToDelete.id}`;
       }
 

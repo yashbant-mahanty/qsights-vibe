@@ -33,6 +33,7 @@ interface SliderScaleProps {
       min: number;
       max: number;
       label: string;
+      type?: 'lessThan' | 'greaterThan' | 'between';
     }>;
     textMappings?: Array<{
       value: number;
@@ -54,8 +55,8 @@ export function SliderScale({
   const {
     min = 0,
     valueDisplayMode = 'number',
-    rangeMappings = [],
-    textMappings = [],
+    rangeMappings: rawRangeMappings = [],
+    textMappings: rawTextMappings = [],
     max = 10,
     step = 1,
     orientation = 'horizontal',
@@ -69,6 +70,14 @@ export function SliderScale({
     showImageLabels = true,
   } = settings;
 
+  // Parse rangeMappings and textMappings if they are JSON strings
+  const rangeMappings = typeof rawRangeMappings === 'string' 
+    ? (rawRangeMappings ? JSON.parse(rawRangeMappings) : [])
+    : rawRangeMappings;
+  const textMappings = typeof rawTextMappings === 'string'
+    ? (rawTextMappings ? JSON.parse(rawTextMappings) : [])
+    : rawTextMappings;
+
   const [isDragging, setIsDragging] = useState(false);
   const [localValue, setLocalValue] = useState(value ?? min);
   const sliderRef = useRef<HTMLDivElement>(null);
@@ -76,8 +85,11 @@ export function SliderScale({
   useEffect(() => {
     if (value !== null) {
       setLocalValue(value);
+    } else {
+      // Reset to min when value is null (new/unanswered question)
+      setLocalValue(min);
     }
-  }, [value]);
+  }, [value, min]);
 
   const calculateValue = useCallback(
     (clientX: number, clientY: number) => {

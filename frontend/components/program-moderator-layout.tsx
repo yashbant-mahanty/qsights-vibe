@@ -34,7 +34,10 @@ export default function ProgramModeratorLayout({ children }: ProgramModeratorLay
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoLoading, setLogoLoading] = useState(true);
   const pathname = usePathname();
+  
   useEffect(() => {
     async function loadLogo() {
       try {

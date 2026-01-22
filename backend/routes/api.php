@@ -129,22 +129,30 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 // Program Routes
 Route::middleware(['auth:sanctum'])->group(function () {
-    // Public read operations (all authenticated users)
-    Route::get('/programs', [ProgramController::class, 'index']);
-    Route::get('/programs/{id}', [ProgramController::class, 'show']);
-    Route::get('/programs/{id}/statistics', [ProgramController::class, 'statistics']);
-    Route::get('/programs/{id}/users', [ProgramController::class, 'getProgramUsers']);
+    // Public read operations (all authenticated users) - CRITICAL: program.scope middleware enforces program-scoping
+    Route::middleware(['program.scope'])->group(function () {
+        Route::get('/programs', [ProgramController::class, 'index']);
+        Route::get('/programs/{id}', [ProgramController::class, 'show']);
+        Route::get('/programs/{id}/statistics', [ProgramController::class, 'statistics']);
+        Route::get('/programs/{id}/users', [ProgramController::class, 'getProgramUsers']);
+    });
     
     // Program Users Management (Super Admin and Program Admin only)
-    Route::middleware(['role:super-admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,program-admin', 'program.scope'])->group(function () {
         Route::put('/programs/{id}/users/{userId}', [ProgramController::class, 'updateProgramUser']);
         Route::patch('/programs/{id}/users/{userId}', [ProgramController::class, 'updateProgramUser']);
         Route::delete('/programs/{id}/users/{userId}', [ProgramController::class, 'deleteProgramUser']);
         Route::post('/programs/{id}/users/{userId}/reset-password', [ProgramController::class, 'resetProgramUserPassword']);
     });
     
+    // Update user services (Super Admin and Admin only)
+    Route::middleware(['role:super-admin,admin'])->group(function () {
+        Route::put('/programs/{id}/users/{userId}/services', [ProgramController::class, 'updateProgramUserServices']);
+        Route::patch('/programs/{id}/users/{userId}/services', [ProgramController::class, 'updateProgramUserServices']);
+    });
+    
     // Program Roles Routes (Super Admin and Program Admin only)
-    Route::middleware(['role:super-admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,program-admin', 'program.scope'])->group(function () {
         Route::get('/programs/{programId}/roles', [ProgramRoleController::class, 'index']);
         Route::get('/programs/{programId}/roles/available-activities', [ProgramRoleController::class, 'getAvailableActivities']);
         Route::get('/programs/{programId}/roles/{roleId}', [ProgramRoleController::class, 'show']);
@@ -165,7 +173,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 
     // Hierarchy Mapping Routes (Super Admin and Program Admin)
-    Route::middleware(['role:super-admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,program-admin', 'program.scope'])->group(function () {
         Route::get('/hierarchy-mappings', [\App\Http\Controllers\Api\HierarchyMappingController::class, 'index']);
         Route::post('/hierarchy-mappings', [\App\Http\Controllers\Api\HierarchyMappingController::class, 'store']);
         Route::delete('/hierarchy-mappings/{id}', [\App\Http\Controllers\Api\HierarchyMappingController::class, 'destroy']);
@@ -192,13 +200,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
 // Participant Routes
 Route::middleware(['auth:sanctum'])->group(function () {
     
-    // Public read operations
-    Route::get('/participants', [ParticipantController::class, 'index']);
-    Route::get('/participants/{id}', [ParticipantController::class, 'show']);
+    // Public read operations - CRITICAL: program.scope middleware enforces program-scoping
+    Route::middleware(['program.scope'])->group(function () {
+        Route::get('/participants', [ParticipantController::class, 'index']);
+        Route::get('/participants/{id}', [ParticipantController::class, 'show']);
+    });
     Route::get('/participants/template/download', [ParticipantController::class, 'downloadTemplate']);
     
     // Admin and Program roles can manage participants
-    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager', 'program.scope'])->group(function () {
         Route::post('/participants', [ParticipantController::class, 'store']);
         Route::post('/participants/bulk-import', [ParticipantController::class, 'bulkImport']);
         Route::post('/participants/bulk-delete', [ParticipantController::class, 'bulkDelete']);
@@ -226,18 +236,21 @@ Route::middleware(['auth:sanctum'])->prefix('uploads/s3')->group(function () {
     Route::delete('/', [App\Http\Controllers\Api\S3UploadController::class, 'delete']);
     Route::post('/presigned-url', [App\Http\Controllers\Api\S3UploadController::class, 'getPresignedUrl']);
     Route::post('/view-url', [App\Http\Controllers\Api\S3UploadController::class, 'getViewUrl']);
+    Route::post('/bulk-view-urls', [App\Http\Controllers\Api\S3UploadController::class, 'getBulkViewUrls']);
 });
 
 // Questionnaire Routes
 Route::middleware(['auth:sanctum'])->group(function () {
 
     
-    // Public read operations
-    Route::get('/questionnaires', [QuestionnaireController::class, 'index']);
-    Route::get('/questionnaires/{id}', [QuestionnaireController::class, 'show']);
+    // Public read operations - CRITICAL: program.scope middleware enforces program-scoping
+    Route::middleware(['program.scope'])->group(function () {
+        Route::get('/questionnaires', [QuestionnaireController::class, 'index']);
+        Route::get('/questionnaires/{id}', [QuestionnaireController::class, 'show']);
+    });
     
     // Admin and Program roles can manage questionnaires
-    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager', 'program.scope'])->group(function () {
         Route::post('/questionnaires', [QuestionnaireController::class, 'store']);
         Route::put('/questionnaires/{id}', [QuestionnaireController::class, 'update']);
         Route::patch('/questionnaires/{id}', [QuestionnaireController::class, 'update']);
@@ -283,16 +296,18 @@ Route::middleware(['auth:sanctum'])->group(function () {
             ->middleware(['role:super-admin,admin']);
     });
     
-    // Public read operations
-    Route::get('/activities', [ActivityController::class, 'index']);
-    Route::get('/activities/statistics', [ActivityController::class, 'statistics']);
-    Route::post('/activities/participant-counts', [ActivityController::class, 'getParticipantCounts']);
-    Route::get('/activities/{id}/participants', [ActivityController::class, 'getParticipants']);
-    Route::get('/activities/{id}', [ActivityController::class, 'show']);
-    Route::get('/activities/{id}/links', [ActivityController::class, 'getActivityLinks']);
+    // Public read operations - CRITICAL: program.scope middleware enforces program-scoping
+    Route::middleware(['program.scope'])->group(function () {
+        Route::get('/activities', [ActivityController::class, 'index']);
+        Route::get('/activities/statistics', [ActivityController::class, 'statistics']);
+        Route::post('/activities/participant-counts', [ActivityController::class, 'getParticipantCounts']);
+        Route::get('/activities/{id}/participants', [ActivityController::class, 'getParticipants']);
+        Route::get('/activities/{id}', [ActivityController::class, 'show']);
+        Route::get('/activities/{id}/links', [ActivityController::class, 'getActivityLinks']);
+    });
     
     // Admin and Program roles can manage activities
-    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager', 'program.scope'])->group(function () {
         Route::post('/activities', [ActivityController::class, 'store']);
         Route::put('/activities/{id}', [ActivityController::class, 'update']);
         Route::patch('/activities/{id}', [ActivityController::class, 'update']);
@@ -360,8 +375,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
-// Report Routes
-Route::middleware(['auth:sanctum'])->prefix('reports')->group(function () {
+// Report Routes - CRITICAL: program.scope middleware enforces program-scoping
+Route::middleware(['auth:sanctum', 'program.scope'])->prefix('reports')->group(function () {
     // Activity-level reports
     Route::get('/participation/{activityId}', [App\Http\Controllers\Api\ReportController::class, 'participationMetrics']);
     Route::get('/completion/{activityId}', [App\Http\Controllers\Api\ReportController::class, 'completionMetrics']);
@@ -733,6 +748,16 @@ Route::middleware(['auth:sanctum', 'log.manager.actions', 'validate.data.scope']
 // ==========================================
 
 Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
+    
+    // Evaluation Departments (Admin-only for create/update/delete)
+    Route::get('/departments', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'index']);
+    Route::get('/departments/{id}', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'show']);
+    
+    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+        Route::post('/departments', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'store']);
+        Route::put('/departments/{id}', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'update']);
+        Route::delete('/departments/{id}', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'destroy']);
+    });
     
     // Evaluation Roles (Admin-only for create/update/delete)
     Route::get('/roles', [App\Http\Controllers\Api\EvaluationRoleController::class, 'index']);
