@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import RoleBasedLayout from "@/components/role-based-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import {
   ArrowLeft,
   BarChart3,
@@ -99,6 +100,8 @@ export default function ActivityResultsPage() {
   const [notificationReports, setNotificationReports] = useState<NotificationReport[]>([]);
   const [orphanedResponses, setOrphanedResponses] = useState<string[]>([]);
   const [deletingResponses, setDeletingResponses] = useState<Set<string>>(new Set());
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [responseToDelete, setResponseToDelete] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -237,7 +240,7 @@ export default function ActivityResultsPage() {
   }
 
   // Export to Excel/CSV
-  async function exportToExcel(format: 'xlsx' | 'csv') {
+  async function exportToExcel(format: 'xlsx' | 'csv', includeOrphaned: boolean = false) {
     try {
       // Dynamically import xlsx (client-side only)
       const XLSX = await import('xlsx');
@@ -252,9 +255,59 @@ export default function ActivityResultsPage() {
         return;
       }
 
-      console.log('Starting export...', { format, responsesCount: responses.length });
+      console.log('Starting export...', { format, responsesCount: responses.length, includeOrphaned });
 
-      // Prepare data for export
+      if (includeOrphaned) {
+        // Export ALL answers including orphaned ones
+        const exportData = responses.map((response, index) => {
+          const row: any = {
+            '#': index + 1,
+            'Response ID': response.id,
+            'Participant': response.participant?.name || response.participant?.email || 'Anonymous',
+            'Email': response.participant?.email || response.guest_email || 'N/A',
+            'Status': response.status || 'N/A',
+            'Submitted At': response.submitted_at 
+              ? new Date(response.submitted_at).toLocaleString()
+              : 'N/A',
+            'Is Orphaned': orphanedResponses.includes(response.id) ? 'YES' : 'NO',
+          };
+
+          // Add ALL answers regardless of whether question exists in current questionnaire
+          if (Array.isArray(response.answers) && response.answers.length > 0) {
+            response.answers.forEach((answer: any, idx: number) => {
+              const questionLabel = `Q${answer.question_id}`;
+              const answerValue = answer.value_array || answer.value;
+              row[questionLabel] = Array.isArray(answerValue) 
+                ? answerValue.map((v: any) => formatAnswerForDisplay(v)).join(', ') 
+                : formatAnswerForDisplay(answerValue);
+            });
+          }
+
+          return row;
+        });
+
+        // Create worksheet
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'All Responses');
+
+        // Generate file
+        const filename = `${activity?.name || 'activity'}_complete_export_${new Date().toISOString().split('T')[0]}.${format}`;
+        if (format === 'csv') {
+          XLSX.writeFile(wb, filename, { bookType: 'csv' });
+        } else {
+          XLSX.writeFile(wb, filename);
+        }
+
+        toast({ 
+          title: "Success", 
+          description: `Complete data exported as ${format.toUpperCase()} successfully (including ${orphanedResponses.length} orphaned responses)!`,
+          variant: "success" 
+        });
+        return;
+      }
+
+      // Standard export - only current questionnaire questions
       const exportData = responses.map((response, index) => {
         const row: any = {
           '#': index + 1,
@@ -518,15 +571,19 @@ export default function ActivityResultsPage() {
   }
 
   // Delete orphaned response
-  async function deleteResponse(responseId: string) {
-    if (!confirm('Are you sure you want to delete this response? This action cannot be undone.')) {
-      return;
-    }
+  async function deleteResponse(responseId: string, participantName: string) {
+    setResponseToDelete({ id: responseId, name: participantName });
+    setDeleteModalOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!responseToDelete) return;
 
     try {
-      setDeletingResponses(prev => new Set(prev).add(responseId));
+      setDeletingResponses(prev => new Set(prev).add(responseToDelete.id));
+      setDeleteModalOpen(false);
       
-      const response = await fetch(`/api/activities/${activityId}/responses/${responseId}`, {
+      const response = await fetch(`/api/activities/${activityId}/responses/${responseToDelete.id}`, {
         method: 'DELETE',
       });
 
@@ -535,8 +592,8 @@ export default function ActivityResultsPage() {
       }
 
       // Remove from local state
-      setResponses(prev => prev.filter(r => r.id !== responseId));
-      setOrphanedResponses(prev => prev.filter(id => id !== responseId));
+      setResponses(prev => prev.filter(r => r.id !== responseToDelete.id));
+      setOrphanedResponses(prev => prev.filter(id => id !== responseToDelete.id));
       
       toast({ 
         title: "Success", 
@@ -556,9 +613,10 @@ export default function ActivityResultsPage() {
     } finally {
       setDeletingResponses(prev => {
         const newSet = new Set(prev);
-        newSet.delete(responseId);
+        newSet.delete(responseToDelete.id);
         return newSet;
       });
+      setResponseToDelete(null);
     }
   }
 
@@ -684,6 +742,34 @@ export default function ActivityResultsPage() {
                   </button>
                   
                   <div className="border-t border-gray-100 my-1"></div>
+                  
+                  {orphanedResponses.length > 0 && (
+                    <>
+                      <button
+                        onClick={() => {
+                          try {
+                            exportToExcel('xlsx', true);
+                            setShowExportMenu(false);
+                          } catch (error) {
+                            console.error('Export error:', error);
+                            toast({
+                              title: "Export Error",
+                              description: error instanceof Error ? error.message : 'Failed to export',
+                              variant: "error"
+                            });
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-amber-50 flex items-center gap-3 transition-colors"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-amber-600" />
+                        <div>
+                          <div className="font-medium">Export All Data (Orphaned)</div>
+                          <div className="text-xs text-amber-600">Includes {orphanedResponses.length} orphaned responses</div>
+                        </div>
+                      </button>
+                      <div className="border-t border-gray-100 my-1"></div>
+                    </>
+                  )}
                   
                   <button
                     onClick={() => {
@@ -1029,7 +1115,10 @@ export default function ActivityResultsPage() {
                                   ⚠️ Old Data
                                 </span>
                                 <button
-                                  onClick={() => deleteResponse(response.id)}
+                                  onClick={() => deleteResponse(
+                                    response.id,
+                                    response.participant?.name || response.participant?.email || 'Anonymous User'
+                                  )}
                                   disabled={isDeleting}
                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 >
@@ -1693,6 +1782,19 @@ export default function ActivityResultsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setResponseToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Delete Orphaned Response?"
+        itemName={responseToDelete?.name}
+        itemType="response with old question IDs"
+      />
     </RoleBasedLayout>
   );
 }
