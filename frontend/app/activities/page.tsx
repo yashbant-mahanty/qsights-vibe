@@ -672,18 +672,20 @@ export default function ActivitiesPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat, index) => (
-            <GradientStatCard
-              key={index}
-              title={stat.title}
-              value={stat.value}
-              subtitle={stat.subtitle}
-              icon={stat.icon}
-              variant={stat.variant}
-            />
-          ))}
-        </div>
+        {!loading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {stats.map((stat, index) => (
+              <GradientStatCard
+                key={index}
+                title={stat.title}
+                value={stat.value}
+                subtitle={stat.subtitle}
+                icon={stat.icon}
+                variant={stat.variant}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Tabs */}
         <Card>

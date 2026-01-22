@@ -131,6 +131,13 @@ function RolesPage() {
           setCurrentUser(data.user);
           console.log('🔍 User loaded for roles page:', { role: data.user.role, programId: data.user.programId });
           
+          // CRITICAL: Only program-admin and super-admin can access Roles & Services
+          if (!['super-admin', 'program-admin'].includes(data.user.role)) {
+            console.warn('⚠️ Unauthorized access attempt to Roles page by:', data.user.role);
+            window.location.href = data.user.role === 'program-manager' ? '/program-manager' : '/dashboard';
+            return;
+          }
+          
           // If not super-admin and trying to access system-roles, redirect to program-users
           if (data.user.role !== 'super-admin' && activeTab === 'system-roles') {
             setActiveTab('program-users');

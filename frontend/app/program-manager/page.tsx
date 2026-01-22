@@ -171,9 +171,26 @@ export default function ProgramManagerDashboard() {
       const active = participantsData.filter((p: any) => p.status === 'active').length;
       const authenticated = participantsData.filter((p: any) => !p.is_guest && !p.isGuest).length;
       const guests = participantsData.filter((p: any) => p.is_guest || p.isGuest).length;
-      const completed = activitiesData.filter((a: any) => a.status === 'completed').length;
-      const pending = activitiesData.filter((a: any) => a.status === 'active' || a.status === 'scheduled').length;
-      const rate = active > 0 ? Math.round((participantsData.filter((p: any) => p.responses_count > 0).length / active) * 100) : 0;
+      
+      // Calculate completed activities - count activities with at least 1 response
+      const completed = activitiesData.filter((a: any) => {
+        const responsesCount = a.responses_count || 0;
+        return responsesCount > 0;
+      }).length;
+      
+      // Calculate total responses and pending (same logic as program-admin)
+      let totalResponses = 0;
+      let totalExpected = 0;
+      activitiesData.forEach((activity: any) => {
+        const activeCount = activity.active_participants_count || 0;
+        const anonCount = activity.anonymous_participants_count || 0;
+        const participantCount = activeCount + anonCount;
+        const responsesCount = activity.responses_count || 0;
+        totalExpected += participantCount;
+        totalResponses += responsesCount;
+      });
+      const pending = totalExpected - totalResponses;
+      const rate = totalExpected > 0 ? Math.round((totalResponses / totalExpected) * 100) : 0;
 
       setTotalParticipants(total);
       setActiveParticipants(active);

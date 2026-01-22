@@ -20,6 +20,7 @@ import {
   Bell,
   ChevronDown,
   FolderTree,
+  ClipboardCheck,
 } from "lucide-react";
 
 interface ProgramManagerLayoutProps {
@@ -32,7 +33,8 @@ const sidebarItems = [
   { icon: UserCheck, label: "Participants", href: "/participants" },
   { icon: FileText, label: "Questionnaires", href: "/questionnaires" },
   { icon: Activity, label: "Events", href: "/activities" },
-  { icon: BarChart3, label: "Reports", href: "/reports" },
+  { icon: BarChart3, label: "Reports & Analytics", href: "/analytics" },
+  { icon: ClipboardCheck, label: "Evaluation", href: "/evaluation-new" },
 ];
 
 export default function ProgramManagerLayout({ children }: ProgramManagerLayoutProps) {
@@ -130,7 +132,8 @@ export default function ProgramManagerLayout({ children }: ProgramManagerLayoutP
         {/* Navigation */}
         <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100%-4rem)]">
           {sidebarItems.map((item, index) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            // FIXED: Exact match only to prevent wrong tab highlighting
+            const isActive = pathname === item.href;
             return (
               <a
                 key={index}
