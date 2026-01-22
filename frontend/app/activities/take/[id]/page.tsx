@@ -1158,7 +1158,7 @@ export default function TakeActivityPage() {
     if (!participantId || !activityId || isPreview) return;
 
     try {
-      await fetch(`/api/public/activities/${activityId}/save-progress`, {
+      const response = await fetch(`/api/public/activities/${activityId}/save-progress`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1168,6 +1168,15 @@ export default function TakeActivityPage() {
           answers: updatedResponses,
         }),
       });
+      
+      // If already submitted (409), redirect to thank you page
+      if (response.status === 409) {
+        const data = await response.json();
+        console.log('Already submitted, redirecting to thank you page');
+        setSubmitted(true);
+        return;
+      }
+      
       console.log('Progress saved to backend');
     } catch (err) {
       console.error('Failed to save progress:', err);
@@ -1266,30 +1275,28 @@ export default function TakeActivityPage() {
       console.log("Response:", data);
 
       if (!response.ok) {
-        // Check if it's a duplicate submission error or retakes exhausted
-        if (response.status === 422) {
-          if (data.data?.already_submitted || data.data?.retakes_exhausted) {
-            setSubmitted(true);
-            // If there's assessment data in the error response, set it
-            if (data.data?.score !== undefined) {
-              setAssessmentResult({
-                score: data.data.score,
-                assessmentResult: data.data.assessment_result,
-                correctAnswersCount: data.data.correct_answers_count || 0,
-                totalQuestions: data.data.total_questions || 0,
-                attemptNumber: data.data.attempts_used || 1,
-                canRetake: false,
-                retakesRemaining: 0,
-              });
-            }
-            toast({ 
-              title: data.data?.retakes_exhausted ? "No Retakes Remaining" : "Already Submitted", 
-              description: data.message || "You have already completed this activity.", 
-              variant: "warning",
-              duration: 6000
+        // Check if it's a duplicate submission error or retakes exhausted (409 or 422)
+        if (response.status === 409 || response.status === 422) {
+          // Always treat 409 or 422 as already submitted - redirect to thank you page
+          console.log('User already submitted (409/422), redirecting to thank you page');
+          setSubmitted(true);
+          
+          // If there's assessment data in the error response, set it
+          if (data.data?.score !== undefined) {
+            setAssessmentResult({
+              score: data.data.score,
+              assessmentResult: data.data.assessment_result,
+              correctAnswersCount: data.data.correct_answers_count || 0,
+              totalQuestions: data.data.total_questions || 0,
+              attemptNumber: data.data.attempts_used || 1,
+              canRetake: false,
+              retakesRemaining: 0,
             });
-            return;
           }
+          
+          // Redirect to thank you page instead of showing error
+          router.push(`/activities/thank-you/${activityId}`);
+          return;
         }
         throw new Error(data.error || data.message || "Failed to submit response");
       }

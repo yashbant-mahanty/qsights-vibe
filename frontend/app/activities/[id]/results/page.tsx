@@ -1136,10 +1136,10 @@ export default function ActivityResultsPage() {
                                   )}
                                 </div>
                                 <CardTitle className="text-lg font-bold text-gray-900 break-words">
-                                  {question.title || question.text || question.question || `Question ${qIndex + 1}`}
+                                  <div dangerouslySetInnerHTML={{ __html: question.title || question.text || question.question || `Question ${qIndex + 1}` }} />
                                 </CardTitle>
                                 {question.description && (
-                                  <p className="text-sm text-gray-600 mt-2">{question.description}</p>
+                                  <div className="text-sm text-gray-600 mt-2" dangerouslySetInnerHTML={{ __html: question.description }} />
                                 )}
                               </div>
                               <div className="flex gap-4">

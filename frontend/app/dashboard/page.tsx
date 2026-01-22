@@ -51,16 +51,14 @@ export default function DashboardPage() {
         if (response.ok) {
           const data = await response.json();
           const userRole = data.user?.role as UserRole;
+          const programId = data.user?.programId;
           
-          if (userRole === 'program-admin') {
-            router.push('/program-admin');
-            return;
-          } else if (userRole === 'program-manager') {
-            router.push('/program-manager');
-            return;
-          } else if (userRole === 'program-moderator') {
-            router.push('/program-moderator');
-            return;
+          // NEW: Redirect to program-scoped pages
+          if (userRole === 'program-admin' || userRole === 'program-manager' || userRole === 'program-moderator') {
+            if (programId) {
+              router.push(`/program/${programId}/dashboard`);
+              return;
+            }
           }
         }
       } catch (error) {
