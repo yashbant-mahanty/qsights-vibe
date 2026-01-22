@@ -293,3 +293,34 @@ export function getRoleDisplayName(role: UserRole): string {
   };
   return roleMap[role] || role;
 }
+
+// ==========================================
+// PROGRAM-SCOPED ROLE HELPERS
+// ==========================================
+
+// Program-scoped roles
+export const PROGRAM_ROLES = ['program-admin', 'program-manager', 'program-moderator'];
+
+// Check if user has a program-scoped role
+export function isProgramRole(user: any): boolean {
+  return user ? PROGRAM_ROLES.includes(user.role) : false;
+}
+
+// Get user's program ID
+export function getUserProgramId(user: any): number | null {
+  return user?.programId || null;
+}
+
+// Get visible tabs for program roles
+export function getProgramRoleTabs(role: string): string[] {
+  switch (role) {
+    case 'program-admin':
+      return ['dashboard', 'programs', 'questionnaires', 'events', 'reports', 'evaluation'];
+    case 'program-manager':
+      return ['dashboard', 'programs', 'questionnaires', 'events', 'reports', 'evaluation'];
+    case 'program-moderator':
+      return ['dashboard', 'programs', 'events', 'reports', 'evaluation'];
+    default:
+      return [];
+  }
+}
