@@ -88,10 +88,13 @@ export default function ProgramAdminDashboard() {
       const userData = await userResponse.json();
       setCurrentUser(userData.user);
       
-      // Load programs for the filter dropdown
+      // CRITICAL: Load ONLY programs for the user's assigned programId
       try {
-        const programsData = await programsApi.getAll();
+        const programsData = userData.user.programId 
+          ? await programsApi.getAll({ program_id: userData.user.programId })
+          : await programsApi.getAll();
         setPrograms(programsData);
+        console.log('[PROGRAM-ADMIN] Loaded programs for programId:', userData.user.programId, '- Count:', programsData.length);
       } catch (err) {
         console.error('Error loading programs:', err);
       }

@@ -92,7 +92,7 @@ class ActivityApprovalRequestController extends Controller
     {
         $validated = $request->validate([
             'program_id' => 'required|uuid|exists:programs,id',
-            'questionnaire_id' => 'nullable|uuid|exists:questionnaires,id',
+            'questionnaire_id' => 'nullable|exists:questionnaires,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'type' => 'required|in:survey,poll,assessment',
@@ -100,6 +100,7 @@ class ActivityApprovalRequestController extends Controller
             'end_date' => 'required|date|after_or_equal:start_date',
             'close_date' => 'nullable|date|after_or_equal:end_date',
             'allow_guests' => 'nullable|boolean',
+            'contact_us_enabled' => 'nullable|boolean',
             'is_multilingual' => 'nullable|boolean',
             'languages' => 'nullable|array',
             'settings' => 'required|array',
@@ -109,17 +110,17 @@ class ActivityApprovalRequestController extends Controller
             'time_limit_minutes' => 'nullable|integer|min:1',
             'pass_percentage' => 'nullable|numeric|min:0|max:100',
             'max_retakes' => 'nullable|integer|min:0',
-            // Additional details fields - REQUIRED for approval request
+            // Additional details fields - OPTIONAL for approval request
             'sender_email' => 'nullable|email|max:255',
             'manager_name' => 'nullable|string|max:255',
             'manager_email' => 'nullable|email|max:255',
             'project_code' => 'nullable|string|max:255',
-            'configuration_date' => 'required|date',
-            'configuration_price' => 'required|numeric|min:0',
-            'subscription_price' => 'required|numeric|min:0',
-            'subscription_frequency' => 'required|in:one-time,monthly,quarterly,yearly',
-            'tax_percentage' => 'required|numeric|min:0|max:100',
-            'number_of_participants' => 'required|integer|min:0',
+            'configuration_date' => 'nullable|date',
+            'configuration_price' => 'nullable|numeric|min:0',
+            'subscription_price' => 'nullable|numeric|min:0',
+            'subscription_frequency' => 'nullable|in:one-time,monthly,quarterly,yearly',
+            'tax_percentage' => 'nullable|numeric|min:0|max:100',
+            'number_of_participants' => 'nullable|integer|min:0',
             'questions_to_randomize' => 'nullable|integer|min:0',
             // Link to existing draft activity (for Publish flow)
             'activity_id' => 'nullable|uuid|exists:activities,id',
@@ -187,27 +188,63 @@ class ActivityApprovalRequestController extends Controller
             if ($validated['action'] === 'approve') {
                 // Check if this approval is linked to an existing draft activity
                 if ($approvalRequest->activity_id) {
-                    // UPDATE existing activity to live status
+                    // UPDATE existing activity to live status and sync all fields from approval request
                     $activity = Activity::findOrFail($approvalRequest->activity_id);
                     $activity->update([
                         'status' => 'live',
+                        'questionnaire_id' => $approvalRequest->questionnaire_id,
+                        'name' => $approvalRequest->name,
+                        'description' => $approvalRequest->description,
+                        'type' => $approvalRequest->type,
+                        'start_date' => $approvalRequest->start_date,
+                        'end_date' => $approvalRequest->end_date,
+                        'close_date' => $approvalRequest->close_date,
+                        'allow_guests' => $approvalRequest->allow_guests,
+                        'contact_us_enabled' => $approvalRequest->contact_us_enabled ?? false,
+                        'is_multilingual' => $approvalRequest->is_multilingual,
+                        'languages' => $approvalRequest->languages,
+                        'settings' => $approvalRequest->settings,
+                        'registration_form_fields' => $approvalRequest->registration_form_fields,
+                        'landing_config' => $approvalRequest->landing_config,
+                        'time_limit_enabled' => $approvalRequest->time_limit_enabled,
+                        'time_limit_minutes' => $approvalRequest->time_limit_minutes,
+                        'pass_percentage' => $approvalRequest->pass_percentage,
+                        'max_retakes' => $approvalRequest->max_retakes,
+                        'sender_email' => $approvalRequest->sender_email,
+                        'manager_name' => $approvalRequest->manager_name,
+                        'manager_email' => $approvalRequest->manager_email,
+                        'project_code' => $approvalRequest->project_code,
+                        'configuration_date' => $approvalRequest->configuration_date,
+                        'configuration_price' => $approvalRequest->configuration_price,
+                        'subscription_price' => $approvalRequest->subscription_price,
+                        'subscription_frequency' => $approvalRequest->subscription_frequency,
+                        'tax_percentage' => $approvalRequest->tax_percentage,
+                        'number_of_participants' => $approvalRequest->number_of_participants,
+                        'questions_to_randomize' => $approvalRequest->questions_to_randomize,
                         'approved_by' => $user->id,
                         'approved_at' => Carbon::now(),
                         'approval_comments' => $validated['remarks'],
                     ]);
                 } else {
-                    // Legacy: Create new activity (fallback for old approvals without activity_id)
+                    // Create new activity as LIVE (Published upon Super Admin approval)
+                    $program = \App\Models\Program::findOrFail($approvalRequest->program_id);
+                    
                     $activity = Activity::create([
                         'program_id' => $approvalRequest->program_id,
+                        'organization_id' => $program->organization_id,
                         'questionnaire_id' => $approvalRequest->questionnaire_id,
                         'name' => $approvalRequest->name,
                         'description' => $approvalRequest->description,
                         'type' => $approvalRequest->type,
-                        'status' => 'live', // Directly live since approved
+                        'status' => 'live', // Published directly upon Super Admin approval
+                        'approved_by' => $user->id,
+                        'approved_at' => Carbon::now(),
+                        'approval_comments' => $validated['remarks'],
                     'start_date' => $approvalRequest->start_date,
                     'end_date' => $approvalRequest->end_date,
                     'close_date' => $approvalRequest->close_date,
                     'allow_guests' => $approvalRequest->allow_guests,
+                    'contact_us_enabled' => $approvalRequest->contact_us_enabled ?? false,
                     'is_multilingual' => $approvalRequest->is_multilingual,
                     'languages' => $approvalRequest->languages,
                     'settings' => $approvalRequest->settings,

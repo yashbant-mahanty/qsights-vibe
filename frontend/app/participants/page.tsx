@@ -393,7 +393,19 @@ export default function ParticipantsPage() {
   const totalActiveParticipants = authenticatedCount + anonymousCount;
   const activeParticipantsCount = displayParticipants.filter((p) => p.status === "active").length;
   const inactiveParticipantsCount = displayParticipants.filter((p) => p.status === "inactive").length;
-  const totalEnrolledPrograms = displayParticipants.reduce((sum, p) => sum + p.programs.length, 0);
+  
+  // Total Enrollment = Number of participants registered (Participants + Anonymous) in this program
+  // For program roles: displayParticipants is already filtered by program_id
+  // For super admin: displayParticipants shows all participants
+  const totalEnrollment = totalActiveParticipants;
+  
+  // Calculate enrollment percentage
+  // For program roles: % of participants enrolled in their program
+  // For super admin: % of total active participants with program assignments
+  const participantsWithPrograms = displayParticipants.filter(p => p.programs && p.programs.length > 0).length;
+  const enrollmentPercentage = totalActiveParticipants > 0 
+    ? Math.round((participantsWithPrograms / totalActiveParticipants) * 100)
+    : 0;
 
   const stats = [
     {
@@ -418,9 +430,9 @@ export default function ParticipantsPage() {
       variant: 'red' as const,
     },
     {
-      title: "Enrolled Programs",
-      value: totalEnrolledPrograms,
-      subtitle: `${totalEnrolledPrograms} enrollments`,
+      title: "Total Enrollment",
+      value: totalEnrollment,
+      subtitle: `${enrollmentPercentage}% enrolled`,
       icon: FolderOpen,
       variant: 'purple' as const,
     },

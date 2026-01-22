@@ -454,88 +454,60 @@ export default function CreateActivityPage() {
       const requiresApproval = currentUser && ['program-admin', 'program-manager'].includes(currentUser.role);
 
       if (requiresApproval) {
-        // For program-admin: First create the activity as draft, then create approval request with activity_id
-        const activityPayload = {
+        // CRITICAL: Event will NOT be created until Super Admin approves
+        // Submit approval request ONLY - no activity creation yet
+        
+        // Build approval payload - only include defined values
+        const approvalPayload: any = {
           name: activityData.title,
           description: activityData.description,
           type: activityData.type as "survey" | "poll" | "assessment" | "evaluation" | "feedback",
-          status: "draft" as const, // Created as draft, will become live upon approval
           program_id: activityData.programId,
-          organization_id: selectedProgram.organization_id,
-          start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
-          end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0],
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
           time_limit_enabled: activityData.timeLimitEnabled,
-          time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
-          pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
-          max_retakes: activityData.type === 'assessment' ? activityData.maxRetakes ?? undefined : undefined,
           settings: {
             display_mode: activityData.displayMode || 'all',
             enable_per_question_language_switch: activityData.enablePerQuestionLanguageSwitch
           },
-          // Additional Details fields
-          sender_email: activityData.senderEmail || undefined,
-          manager_name: activityData.managerName || undefined,
-          manager_email: activityData.managerEmail || undefined,
-          project_code: activityData.projectCode || undefined,
-          configuration_date: activityData.configurationDate || undefined,
-          configuration_price: activityData.configurationPrice ? parseFloat(activityData.configurationPrice) : undefined,
-          subscription_price: activityData.subscriptionPrice ? parseFloat(activityData.subscriptionPrice) : undefined,
-          subscription_frequency: activityData.subscriptionFrequency || undefined,
-          tax_percentage: activityData.taxPercentage ? parseFloat(activityData.taxPercentage) : undefined,
-          number_of_participants: activityData.numberOfParticipants ? parseInt(activityData.numberOfParticipants) : undefined,
-          questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
         };
 
-        // Step 1: Create the activity as draft first
-        const createdActivity = await activitiesApi.create(activityPayload);
+        // Conditionally add optional fields only if they have values
+        if (activityData.senderEmail) approvalPayload.sender_email = activityData.senderEmail;
+        if (activityData.startDate) approvalPayload.start_date = `${activityData.startDate}T00:00:00`;
+        if (activityData.endDate) approvalPayload.end_date = `${activityData.endDate}T23:59:59`;
+        if (activityData.timeLimitEnabled && activityData.timeLimitMinutes) approvalPayload.time_limit_minutes = activityData.timeLimitMinutes;
+        if (activityData.type === 'assessment' && activityData.passPercentage) approvalPayload.pass_percentage = activityData.passPercentage;
+        if (activityData.type === 'assessment') approvalPayload.max_retakes = activityData.maxRetakes ?? undefined;
         
-        // Step 2: Create approval request with activity_id linking to the draft
-        const approvalPayload = {
-          activity_id: createdActivity.id, // Link to existing draft activity
-          name: activityData.title,
-          sender_email: activityData.senderEmail || undefined,
-          description: activityData.description,
-          type: activityData.type as "survey" | "poll" | "assessment" | "evaluation" | "feedback",
-          program_id: activityData.programId,
-          start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
-          end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0],
-          allow_guests: activityData.allowGuests,
-          contact_us_enabled: activityData.contactUsEnabled,
-          is_multilingual: activityData.isMultilingual,
-          languages: activityData.selectedLanguages,
-          registration_form_fields: normalizedRegistrationFields,
-          time_limit_enabled: activityData.timeLimitEnabled,
-          time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
-          pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
-          max_retakes: activityData.type === 'assessment' ? activityData.maxRetakes ?? undefined : undefined,
-          settings: {
-            display_mode: activityData.displayMode || 'all',
-            enable_per_question_language_switch: activityData.enablePerQuestionLanguageSwitch
-          },
-          // Additional Details fields
-          manager_name: activityData.managerName || undefined,
-          manager_email: activityData.managerEmail || undefined,
-          project_code: activityData.projectCode || undefined,
-          configuration_date: activityData.configurationDate || undefined,
-          configuration_price: activityData.configurationPrice ? parseFloat(activityData.configurationPrice) : undefined,
-          subscription_price: activityData.subscriptionPrice ? parseFloat(activityData.subscriptionPrice) : undefined,
-          subscription_frequency: activityData.subscriptionFrequency || undefined,
-          tax_percentage: activityData.taxPercentage ? parseFloat(activityData.taxPercentage) : undefined,
-          number_of_participants: activityData.numberOfParticipants ? parseInt(activityData.numberOfParticipants) : undefined,
-          questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
-        };
+        // Additional Details fields
+        if (activityData.managerName) approvalPayload.manager_name = activityData.managerName;
+        if (activityData.managerEmail) approvalPayload.manager_email = activityData.managerEmail;
+        if (activityData.projectCode) approvalPayload.project_code = activityData.projectCode;
+        if (activityData.configurationDate) approvalPayload.configuration_date = activityData.configurationDate;
+        if (activityData.configurationPrice) approvalPayload.configuration_price = parseFloat(activityData.configurationPrice);
+        if (activityData.subscriptionPrice) approvalPayload.subscription_price = parseFloat(activityData.subscriptionPrice);
+        if (activityData.subscriptionFrequency) approvalPayload.subscription_frequency = activityData.subscriptionFrequency;
+        if (activityData.taxPercentage) approvalPayload.tax_percentage = parseFloat(activityData.taxPercentage);
+        if (activityData.numberOfParticipants) approvalPayload.number_of_participants = parseInt(activityData.numberOfParticipants);
+        if (activityData.questionsToRandomize) approvalPayload.questions_to_randomize = parseInt(activityData.questionsToRandomize);
+        
+        // Only include questionnaire_id if a questionnaire is actually selected
+        if (selectedQuestionnaires.length > 0 && selectedQuestionnaires[0]) {
+          approvalPayload.questionnaire_id = selectedQuestionnaires[0];
+        }
+
+        console.log('[CREATE ACTIVITY] selectedQuestionnaires:', selectedQuestionnaires);
+        console.log('[CREATE ACTIVITY] approvalPayload.questionnaire_id:', approvalPayload.questionnaire_id);
+        console.log('[CREATE ACTIVITY] Full approval payload:', approvalPayload);
 
         await activityApprovalsApi.create(approvalPayload);
         toast({ 
           title: "Approval Request Submitted!", 
-          description: "Your event has been created as draft and submitted for Super Admin approval. You'll be notified once reviewed.", 
+          description: "Your event approval request has been submitted to Super Admin. Event will be created after approval.", 
           variant: "success" 
         });
         router.push("/activities");
@@ -550,7 +522,7 @@ export default function CreateActivityPage() {
           organization_id: selectedProgram.organization_id,
           start_date: activityData.startDate ? `${activityData.startDate}T00:00:00` : undefined,
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
-          questionnaire_id: selectedQuestionnaires[0],
+          questionnaire_id: selectedQuestionnaires[0] || undefined,
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
           is_multilingual: activityData.isMultilingual,
