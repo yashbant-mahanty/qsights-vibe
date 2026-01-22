@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Bell,
   ChevronDown,
+  ClipboardCheck,
 } from "lucide-react";
 
 interface ProgramModeratorLayoutProps {
@@ -26,7 +27,8 @@ interface ProgramModeratorLayoutProps {
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/program-moderator" },
   { icon: Activity, label: "Events", href: "/activities" },
-  { icon: BarChart3, label: "Reports", href: "/reports" },
+  { icon: BarChart3, label: "Reports & Analytics", href: "/analytics" },
+  { icon: ClipboardCheck, label: "Evaluation", href: "/evaluation-new" },
 ];
 
 export default function ProgramModeratorLayout({ children }: ProgramModeratorLayoutProps) {
@@ -125,7 +127,8 @@ export default function ProgramModeratorLayout({ children }: ProgramModeratorLay
         {/* Navigation */}
         <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100%-4rem)]">
           {sidebarItems.map((item, index) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            // FIXED: Exact match only to prevent wrong tab highlighting and re-renders
+            const isActive = pathname === item.href;
             return (
               <a
                 key={index}
