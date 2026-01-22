@@ -2239,6 +2239,7 @@ export default function TakeActivityPage() {
               onChange={(value) => handleResponseChange(questionId, value)}
               settings={question.settings || DEFAULT_SETTINGS.likert_visual}
               disabled={isSubmitted}
+              showBottomLabels={false}
             />
           </div>
         );
@@ -3774,10 +3775,13 @@ export default function TakeActivityPage() {
                             </span>
                             <div className="flex-1">
                               <div className="flex items-center justify-between">
-                                <p className="text-base font-medium text-gray-900">
-                                  {getTranslatedText(question, 'question')}
+                                <div className="flex items-center">
+                                  <p 
+                                    className="text-base font-medium text-gray-900"
+                                    dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                  />
                                   {question.is_required && <span className="text-red-500 ml-1">*</span>}
-                                </p>
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-gray-400 hidden">{question.type}</span>
                                   <PerQuestionLanguageSwitcher
@@ -3826,10 +3830,13 @@ export default function TakeActivityPage() {
                             </span>
                             <div className="flex-1">
                               <div className="flex items-center justify-between">
-                                <p className="text-base font-medium text-gray-900">
-                                  {getTranslatedText(question, 'question')}
+                                <div className="flex items-center">
+                                  <p 
+                                    className="text-base font-medium text-gray-900"
+                                    dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                  />
                                   {question.is_required && <span className="text-red-500 ml-1">*</span>}
-                                </p>
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-gray-400 hidden">{question.type}</span>
                                   <PerQuestionLanguageSwitcher
@@ -3892,10 +3899,13 @@ export default function TakeActivityPage() {
                                   </span>
                                   <div className="flex-1">
                                     <div className="flex items-center justify-between">
-                                      <p className="text-base font-medium text-gray-900">
-                                        {getTranslatedText(question, 'question')}
+                                      <div className="flex items-center">
+                                        <p 
+                                          className="text-base font-medium text-gray-900"
+                                          dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                        />
                                         {question.is_required && <span className="text-red-500 ml-1">*</span>}
-                                      </p>
+                                      </div>
                                       <div className="flex items-center gap-2">
                                         <span className="text-xs text-gray-400 hidden">{question.type}</span>
                                         <PerQuestionLanguageSwitcher

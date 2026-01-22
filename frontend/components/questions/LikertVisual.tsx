@@ -8,6 +8,7 @@ interface LikertLabel {
   value: number;
   label: string;
   icon?: 'angry' | 'frown' | 'meh' | 'smile' | 'smileplus';
+  emoji?: string; // Custom emoji character
   imageUrl?: string; // Custom image URL
 }
 
@@ -19,7 +20,7 @@ interface LikertVisualProps {
     labels?: LikertLabel[] | string[]; // Support both formats
     showLabels?: boolean;
     showIcons?: boolean;
-    iconStyle?: 'emoji' | 'filled' | 'outline' | 'custom'; // Added 'custom' for images
+    iconStyle?: 'emoji' | 'face' | 'simple' | 'custom'; // emoji=emojis, face=face icons, simple=numbers, custom=images
     size?: 'sm' | 'md' | 'lg';
     activeColor?: string;
     inactiveColor?: string;
@@ -27,6 +28,7 @@ interface LikertVisualProps {
   };
   disabled?: boolean;
   className?: string;
+  showBottomLabels?: boolean; // Control visibility of bottom scale labels (start/end)
 }
 
 const defaultLabels2: LikertLabel[] = [
@@ -78,23 +80,34 @@ export function LikertVisual({
   settings = {},
   disabled = false,
   className,
+  showBottomLabels = true, // Default to true to maintain backward compatibility
 }: LikertVisualProps) {
   const {
     scale = 5,
     labels: customLabels,
     showLabels = true,
     showIcons = true,
-    iconStyle = 'outline',
+    iconStyle = 'emoji',
     size = 'md',
     activeColor = '#0284c7',
     inactiveColor = '#9ca3af',
     customImages = [],
   } = settings;
 
+  // Emoji map for default emojis based on position
+  const defaultEmojiMap: { [key: number]: string } = {
+    1: '😠', // angry
+    2: '🙁', // frown
+    3: '😐', // meh
+    4: '🙂', // smile
+    5: '😄', // big smile
+  };
+
   const [localValue, setLocalValue] = useState(value);
   const [hoveredValue, setHoveredValue] = useState<number | null>(null);
 
   useEffect(() => {
+    // Always update localValue to match value (including null)
     setLocalValue(value);
   }, [value]);
 
@@ -216,19 +229,39 @@ export function LikertVisual({
                     filter: isSelected ? 'brightness(1.1)' : isHovered ? 'brightness(1.05)' : 'grayscale(0.3)',
                   }}
                 />
-              ) : showIcons ? (
+              ) : iconStyle === 'emoji' ? (
+                /* Display Emoji */
+                <span
+                  className="transition-all duration-200"
+                  style={{
+                    fontSize: `${iconSize}px`,
+                    lineHeight: 1,
+                    filter: isSelected ? 'brightness(1.1)' : 'none',
+                    opacity: isSelected ? 1 : isHovered ? 0.9 : 0.7,
+                  }}
+                >
+                  {item.emoji || defaultEmojiMap[item.value] || defaultEmojiMap[Math.min(item.value, 5)] || '😐'}
+                </span>
+              ) : iconStyle === 'face' && showIcons ? (
+                /* Display Face Icons */
                 <IconComponent
                   size={iconSize}
-                  className={cn(
-                    'transition-colors duration-200',
-                    iconStyle === 'filled' && isSelected ? 'fill-white' : ''
-                  )}
+                  className="transition-colors duration-200"
                   style={{
                     color: isSelected ? 'white' : isHovered ? activeColor : inactiveColor,
                   }}
-                  strokeWidth={iconStyle === 'outline' ? 1.5 : 2}
+                  strokeWidth={2}
                 />
+              ) : iconStyle === 'simple' || !showIcons ? (
+                /* Display Numbers */
+                <span
+                  className={cn('font-bold', fontSize)}
+                  style={{ color: isSelected ? 'white' : inactiveColor }}
+                >
+                  {item.value}
+                </span>
               ) : (
+                /* Fallback to numbers */
                 <span
                   className={cn('font-bold', fontSize)}
                   style={{ color: isSelected ? 'white' : inactiveColor }}
@@ -242,7 +275,7 @@ export function LikertVisual({
       </div>
 
       {/* Scale labels (start/end) */}
-      {showLabels && (
+      {showBottomLabels && showLabels && (
         <div className="flex justify-between w-full px-4">
           <span className="text-xs text-gray-500">{labels[0]?.label}</span>
           <span className="text-xs text-gray-500">{labels[labels.length - 1]?.label}</span>

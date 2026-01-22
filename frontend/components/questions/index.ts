@@ -75,7 +75,7 @@ export interface DialGaugeSettings {
 
 export interface LikertVisualSettings {
   scale?: 2 | 3 | 5 | 7 | 10;
-  labels?: string[];
+  labels?: Array<string | { value: number; label: string; icon?: string; emoji?: string }>;
   showLabels?: boolean;
   showIcons?: boolean;
   iconStyle?: 'emoji' | 'face' | 'simple' | 'custom';
@@ -136,19 +136,18 @@ export const DEFAULT_SETTINGS = {
   dial_gauge: {
     min: 0,
     max: 10,
-    labels: [
-      { value: 0, label: 'Poor', color: '#ef4444' },
-      { value: 5, label: 'Average', color: '#f59e0b' },
-      { value: 10, label: 'Excellent', color: '#22c55e' },
-    ],
+    labels: [],
     gaugeType: 'gradient',
     colorStops: [
-      { percent: 0, color: '#ef4444' },
-      { percent: 50, color: '#f59e0b' },
-      { percent: 100, color: '#22c55e' },
+      { percent: 0, color: '#1e3a5f' },
+      { percent: 25, color: '#2563eb' },
+      { percent: 50, color: '#60a5fa' },
+      { percent: 75, color: '#93c5fd' },
+      { percent: 100, color: '#dbeafe' },
     ],
     size: 'md',
     showValue: true,
+    instructionText: '',
   } as DialGaugeSettings,
   
   likert_visual: {
