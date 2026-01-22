@@ -3,7 +3,8 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { canCreate } from '@/lib/permissions';
+import { canCreateResource } from '@/lib/permissions';
+import { activitiesApi } from '@/lib/api';
 
 interface Event {
   id: number;
@@ -24,22 +25,23 @@ export default function ProgramEventsPage() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const response = await fetch(`/api/activities?program_id=${programId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setEvents(data);
-        }
+        // Use activitiesApi with program_id filter
+        const data = await activitiesApi.getAll({ program_id: programId });
+        setEvents(Array.isArray(data) ? data : []);
       } catch (error) {
         console.error('Failed to load events:', error);
+        setEvents([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchEvents();
+    if (programId) {
+      fetchEvents();
+    }
   }, [programId]);
 
-  const canCreateEvent = canCreate(currentUser, 'event');
+  const canCreateEvent = currentUser ? canCreateResource(currentUser.role, 'activities') : false;
 
   return (
     <div className="p-8">

@@ -3,7 +3,8 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { canCreate } from '@/lib/permissions';
+import { canCreateResource } from '@/lib/permissions';
+import { questionnairesApi } from '@/lib/api';
 
 interface Questionnaire {
   id: number;
@@ -23,22 +24,23 @@ export default function ProgramQuestionnairesPage() {
   useEffect(() => {
     const fetchQuestionnaires = async () => {
       try {
-        const response = await fetch(`/api/questionnaires?program_id=${programId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setQuestionnaires(data);
-        }
+        // Use questionnairesApi with program_id filter
+        const data = await questionnairesApi.getAll({ program_id: programId });
+        setQuestionnaires(Array.isArray(data) ? data : []);
       } catch (error) {
         console.error('Failed to load questionnaires:', error);
+        setQuestionnaires([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchQuestionnaires();
+    if (programId) {
+      fetchQuestionnaires();
+    }
   }, [programId]);
 
-  const canCreateQuestionnaire = canCreate(currentUser, 'questionnaire');
+  const canCreateQuestionnaire = currentUser ? canCreateResource(currentUser.role, 'questionnaires') : false;
 
   return (
     <div className="p-8">

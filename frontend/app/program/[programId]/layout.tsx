@@ -67,8 +67,16 @@ export default function ProgramLayout({
     }
 
     // Verify user has access to this program
-    if (currentUser.programId?.toString() !== programId) {
-      console.warn('Access denied: User program ID does not match');
+    // Super Admin and Admin can access any program
+    const isGlobalAdmin = currentUser.role === 'super-admin' || currentUser.role === 'admin';
+    const isProgramRole = ['program-admin', 'program-manager', 'program-moderator'].includes(currentUser.role);
+    
+    if (isProgramRole && currentUser.programId?.toString() !== programId) {
+      console.warn('Access denied: User program ID does not match', {
+        userProgramId: currentUser.programId,
+        requestedProgramId: programId,
+        role: currentUser.role
+      });
       router.push('/unauthorized');
       return;
     }
