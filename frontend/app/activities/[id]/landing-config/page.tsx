@@ -142,12 +142,23 @@ interface LandingPageConfig {
   loginBoxCustomTitle: string;
   loginBoxCustomSubtitle: string;
   
-  // Thank You Page
+  // Thank You Page / Post Submission Page
   thankYouTitle: string;
   thankYouMessage: string;
   thankYouSubMessage: string;
   thankYouIconColor: string;
   thankYouShowConfirmation: boolean;
+  thankYouBackgroundColor: string;
+  thankYouBackgroundStyle: string; // solid, gradient
+  thankYouGradientFrom: string;
+  thankYouGradientTo: string;
+  thankYouTitleColor: string;
+  thankYouMessageColor: string;
+  thankYouSubMessageColor: string;
+  thankYouButtonText: string;
+  thankYouButtonColor: string;
+  thankYouButtonTextColor: string;
+  thankYouShowButton: boolean;
   
   // Additional Branding
   accentColor: string;
@@ -286,6 +297,17 @@ const defaultConfig: LandingPageConfig = {
   thankYouSubMessage: "We appreciate your participation",
   thankYouIconColor: "#10B981",
   thankYouShowConfirmation: true,
+  thankYouBackgroundColor: "#FFFFFF",
+  thankYouBackgroundStyle: "solid",
+  thankYouGradientFrom: "#F0FDF4",
+  thankYouGradientTo: "#DCFCE7",
+  thankYouTitleColor: "#1F2937",
+  thankYouMessageColor: "#4B5563",
+  thankYouSubMessageColor: "#6B7280",
+  thankYouButtonText: "Close",
+  thankYouButtonColor: "#10B981",
+  thankYouButtonTextColor: "#FFFFFF",
+  thankYouShowButton: true,
   accentColor: "#3B82F6",
   fontFamily: "system",
   borderRadius: "rounded",
@@ -2795,12 +2817,12 @@ export default function LandingPageConfigPage() {
                 {/* Thank You Page Configuration */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Thank You Page Configuration</CardTitle>
+                    <CardTitle>Post Submission Page Configuration</CardTitle>
                     <p className="text-sm text-gray-500 mt-1">Customize the thank you message and appearance shown after successful submission</p>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <Label>Thank You Title</Label>
+                      <Label>Title</Label>
                       <Input
                         value={config.thankYouTitle}
                         onChange={(e) => updateConfig("thankYouTitle", e.target.value)}
@@ -2826,9 +2848,104 @@ export default function LandingPageConfigPage() {
                         className="mt-2"
                       />
                     </div>
+                    
+                    <div className="border-t border-gray-200 pt-4">
+                      <Label className="text-sm font-semibold">Button Configuration</Label>
+                      <p className="text-xs text-gray-500 mt-1 mb-3">Configure the action button on the thank you page</p>
+                      
+                      <div className="space-y-4">
+                        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <label className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={config.thankYouShowButton !== false}
+                              onChange={(e) => updateConfig("thankYouShowButton", e.target.checked)}
+                              className="w-4 h-4 text-blue-600"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">Show Action Button</span>
+                              <p className="text-xs text-gray-600 mt-0.5">Display a button for users to close or navigate</p>
+                            </div>
+                          </label>
+                        </div>
+                        
+                        {config.thankYouShowButton !== false && (
+                          <>
+                            <div>
+                              <Label>Button Text</Label>
+                              <Input
+                                value={config.thankYouButtonText || "Close"}
+                                onChange={(e) => updateConfig("thankYouButtonText", e.target.value)}
+                                placeholder="Close"
+                                className="mt-2"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label>Button Color</Label>
+                                <div className="flex items-center space-x-2 mt-2">
+                                  <input
+                                    type="color"
+                                    value={config.thankYouButtonColor || "#10B981"}
+                                    onChange={(e) => updateConfig("thankYouButtonColor", e.target.value)}
+                                    className="h-10 w-20"
+                                  />
+                                  <Input
+                                    value={config.thankYouButtonColor || "#10B981"}
+                                    onChange={(e) => updateConfig("thankYouButtonColor", e.target.value)}
+                                    placeholder="#10B981"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <Label>Button Text Color</Label>
+                                <div className="flex items-center space-x-2 mt-2">
+                                  <input
+                                    type="color"
+                                    value={config.thankYouButtonTextColor || "#FFFFFF"}
+                                    onChange={(e) => updateConfig("thankYouButtonTextColor", e.target.value)}
+                                    className="h-10 w-20"
+                                  />
+                                  <Input
+                                    value={config.thankYouButtonTextColor || "#FFFFFF"}
+                                    onChange={(e) => updateConfig("thankYouButtonTextColor", e.target.value)}
+                                    placeholder="#FFFFFF"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.thankYouShowConfirmation !== false}
+                          onChange={(e) => updateConfig("thankYouShowConfirmation", e.target.checked)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">Show email confirmation message</span>
+                          <p className="text-xs text-gray-600 mt-0.5">Display "A confirmation has been sent to your email"</p>
+                        </div>
+                      </label>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                {/* Colors & Styling */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Colors & Styling</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Customize the visual appearance of the post submission page</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     <div>
                       <Label>Icon Color</Label>
-                      <p className="text-xs text-gray-500 mt-1">Color of the checkmark icon</p>
+                      <p className="text-xs text-gray-500 mt-1">Color of the success checkmark icon</p>
                       <div className="flex items-center space-x-2 mt-2">
                         <input
                           type="color"
@@ -2843,19 +2960,219 @@ export default function LandingPageConfigPage() {
                         />
                       </div>
                     </div>
-                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <label className="flex items-center space-x-3 cursor-pointer">
+                    
+                    <div>
+                      <Label>Title Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
                         <input
-                          type="checkbox"
-                          checked={config.thankYouShowConfirmation !== false}
-                          onChange={(e) => updateConfig("thankYouShowConfirmation", e.target.checked)}
-                          className="w-4 h-4 text-blue-600"
+                          type="color"
+                          value={config.thankYouTitleColor || "#1F2937"}
+                          onChange={(e) => updateConfig("thankYouTitleColor", e.target.value)}
+                          className="h-10 w-20"
                         />
+                        <Input
+                          value={config.thankYouTitleColor || "#1F2937"}
+                          onChange={(e) => updateConfig("thankYouTitleColor", e.target.value)}
+                          placeholder="#1F2937"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label>Main Message Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.thankYouMessageColor || "#4B5563"}
+                          onChange={(e) => updateConfig("thankYouMessageColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.thankYouMessageColor || "#4B5563"}
+                          onChange={(e) => updateConfig("thankYouMessageColor", e.target.value)}
+                          placeholder="#4B5563"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label>Sub Message Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.thankYouSubMessageColor || "#6B7280"}
+                          onChange={(e) => updateConfig("thankYouSubMessageColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.thankYouSubMessageColor || "#6B7280"}
+                          onChange={(e) => updateConfig("thankYouSubMessageColor", e.target.value)}
+                          placeholder="#6B7280"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-gray-200 pt-4">
+                      <Label className="text-sm font-semibold">Background Style</Label>
+                      <p className="text-xs text-gray-500 mt-1 mb-3">Choose between solid color or gradient background</p>
+                      
+                      <div className="space-y-4">
                         <div>
-                          <span className="text-sm font-medium text-gray-900">Show email confirmation message</span>
-                          <p className="text-xs text-gray-600 mt-0.5">Display "A confirmation has been sent to your email"</p>
+                          <Label>Background Type</Label>
+                          <select
+                            value={config.thankYouBackgroundStyle || "solid"}
+                            onChange={(e) => updateConfig("thankYouBackgroundStyle", e.target.value)}
+                            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg"
+                          >
+                            <option value="solid">Solid Color</option>
+                            <option value="gradient">Gradient</option>
+                          </select>
                         </div>
-                      </label>
+                        
+                        {config.thankYouBackgroundStyle === "solid" && (
+                          <div>
+                            <Label>Background Color</Label>
+                            <div className="flex items-center space-x-2 mt-2">
+                              <input
+                                type="color"
+                                value={config.thankYouBackgroundColor || "#FFFFFF"}
+                                onChange={(e) => updateConfig("thankYouBackgroundColor", e.target.value)}
+                                className="h-10 w-20"
+                              />
+                              <Input
+                                value={config.thankYouBackgroundColor || "#FFFFFF"}
+                                onChange={(e) => updateConfig("thankYouBackgroundColor", e.target.value)}
+                                placeholder="#FFFFFF"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        
+                        {config.thankYouBackgroundStyle === "gradient" && (
+                          <div className="space-y-4">
+                            <div>
+                              <Label>Gradient From (Top)</Label>
+                              <div className="flex items-center space-x-2 mt-2">
+                                <input
+                                  type="color"
+                                  value={config.thankYouGradientFrom || "#F0FDF4"}
+                                  onChange={(e) => updateConfig("thankYouGradientFrom", e.target.value)}
+                                  className="h-10 w-20"
+                                />
+                                <Input
+                                  value={config.thankYouGradientFrom || "#F0FDF4"}
+                                  onChange={(e) => updateConfig("thankYouGradientFrom", e.target.value)}
+                                  placeholder="#F0FDF4"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <Label>Gradient To (Bottom)</Label>
+                              <div className="flex items-center space-x-2 mt-2">
+                                <input
+                                  type="color"
+                                  value={config.thankYouGradientTo || "#DCFCE7"}
+                                  onChange={(e) => updateConfig("thankYouGradientTo", e.target.value)}
+                                  className="h-10 w-20"
+                                />
+                                <Input
+                                  value={config.thankYouGradientTo || "#DCFCE7"}
+                                  onChange={(e) => updateConfig("thankYouGradientTo", e.target.value)}
+                                  placeholder="#DCFCE7"
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Gradient Preview */}
+                            <div className="p-6 rounded-lg" style={{
+                              background: `linear-gradient(to bottom, ${config.thankYouGradientFrom || "#F0FDF4"}, ${config.thankYouGradientTo || "#DCFCE7"})`
+                            }}>
+                              <p className="text-xs text-gray-600 text-center">Gradient Preview</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                {/* Preview */}
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Live Preview</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Preview of your post submission page</p>
+                  </CardHeader>
+                  <CardContent>
+                    <div 
+                      className="p-12 rounded-lg flex flex-col items-center justify-center min-h-[400px]"
+                      style={{
+                        background: config.thankYouBackgroundStyle === "gradient" 
+                          ? `linear-gradient(to bottom, ${config.thankYouGradientFrom || "#F0FDF4"}, ${config.thankYouGradientTo || "#DCFCE7"})`
+                          : config.thankYouBackgroundColor || "#FFFFFF"
+                      }}
+                    >
+                      {/* Success Icon */}
+                      <div 
+                        className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
+                        style={{ backgroundColor: `${config.thankYouIconColor}20` }}
+                      >
+                        <svg 
+                          className="w-12 h-12" 
+                          style={{ color: config.thankYouIconColor }}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      
+                      {/* Title */}
+                      <h2 
+                        className="text-3xl font-bold mb-3 text-center"
+                        style={{ color: config.thankYouTitleColor || "#1F2937" }}
+                      >
+                        {config.thankYouTitle || "Thank you!"}
+                      </h2>
+                      
+                      {/* Main Message */}
+                      <p 
+                        className="text-lg mb-2 text-center"
+                        style={{ color: config.thankYouMessageColor || "#4B5563" }}
+                      >
+                        {config.thankYouMessage || "Your response has been submitted"}
+                      </p>
+                      
+                      {/* Sub Message */}
+                      <p 
+                        className="text-base mb-6 text-center"
+                        style={{ color: config.thankYouSubMessageColor || "#6B7280" }}
+                      >
+                        {config.thankYouSubMessage || "We appreciate your participation"}
+                      </p>
+                      
+                      {/* Email Confirmation */}
+                      {config.thankYouShowConfirmation !== false && (
+                        <p 
+                          className="text-sm mb-6 text-center italic"
+                          style={{ color: config.thankYouSubMessageColor || "#6B7280" }}
+                        >
+                          A confirmation has been sent to your email
+                        </p>
+                      )}
+                      
+                      {/* Action Button */}
+                      {config.thankYouShowButton !== false && (
+                        <button
+                          className="px-8 py-3 rounded-lg font-medium transition-all hover:shadow-lg"
+                          style={{
+                            backgroundColor: config.thankYouButtonColor || "#10B981",
+                            color: config.thankYouButtonTextColor || "#FFFFFF"
+                          }}
+                        >
+                          {config.thankYouButtonText || "Close"}
+                        </button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

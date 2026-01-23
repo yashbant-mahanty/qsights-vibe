@@ -33,6 +33,8 @@ import {
   BellRing,
   X,
   QrCode,
+  ChevronDown,
+  FileSpreadsheet,
 } from "lucide-react";
 import { activitiesApi, type Activity, fetchWithAuth } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
@@ -57,6 +59,7 @@ export default function ActivitiesPage({ params }: { params: { programId: string
   const [linksDropdown, setLinksDropdown] = useState<{ activityId: string | null; links: any | null; loading: boolean }>({ activityId: null, links: null, loading: false });
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{ isOpen: boolean; url: string; title: string; subtitle: string; color: string }>({ isOpen: false, url: '', title: '', subtitle: '', color: 'blue' });
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     loadActivities();
@@ -75,11 +78,14 @@ export default function ActivitiesPage({ params }: { params: { programId: string
       setCurrentPage(1);
     };
 
-    // Close links dropdown when clicking outside
+    // Close dropdowns when clicking outside
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.links-dropdown-container')) {
         setLinksDropdown({ activityId: null, links: null, loading: false });
+      }
+      if (!target.closest('.export-dropdown')) {
+        setShowExportMenu(false);
       }
     };
 
@@ -234,34 +240,116 @@ export default function ActivitiesPage({ params }: { params: { programId: string
     }
   };
 
-  const handleExport = () => {
-    const csvContent = [
-      'ACTIVITIES REPORT',
-      `Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n`,
-      'SUMMARY STATISTICS',
-      `Total Activities,${totalActivities}`,
-      `Active,${activeActivities}`,
-      `Scheduled,${scheduledActivities}`,
-      `Completed,${completedActivities}`,
-      `Surveys,${activities.filter(a => a.type === 'survey').length}`,
-      `Polls,${activities.filter(a => a.type === 'poll').length}`,
-      `Assessments,${activities.filter(a => a.type === 'assessment').length}\n`,
-      'ACTIVITY DETAILS',
-      'Title,Code,Type,Program,Participants,Responses,Progress,Status,Languages,Start Date,End Date',
-      ...displayActivities.map(a => 
-        `"${a.title}",${a.code},${a.type},${a.program},${a.participants},${a.responses},${a.progress}%,${a.status},"${a.languages.join('; ')}",${a.startDate},${a.endDate}`
-      ),
-    ].join('\n');
+  // Export to Excel/CSV
+  const exportToExcel = async (format: 'xlsx' | 'csv') => {
+    try {
+      const XLSX = await import('xlsx');
+      
+      const data = displayActivities.map((a) => ({
+        'Title': a.title,
+        'Code': a.code,
+        'Type': a.type,
+        'Program': a.program,
+        'Participants': a.participants,
+        'Responses': a.responses,
+        'Progress': `${a.progress}%`,
+        'Status': a.status,
+        'Languages': a.languages.join('; '),
+        'Start Date': a.startDate,
+        'End Date': a.endDate,
+      }));
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `activities-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Events Report");
+
+      if (format === 'xlsx') {
+        XLSX.writeFile(wb, `events-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+      } else {
+        XLSX.writeFile(wb, `events-report-${new Date().toISOString().split('T')[0]}.csv`);
+      }
+      
+      setShowExportMenu(false);
+      toast({ title: "Success", description: `Report exported as ${format.toUpperCase()}`, variant: "success" });
+    } catch (err) {
+      console.error('Export failed:', err);
+      toast({ title: "Error", description: "Failed to export report", variant: "error" });
+    }
+  };
+
+  // Export to PDF
+  const exportToPDF = async () => {
+    try {
+      // Dynamically import jspdf and jspdf-autotable (client-side only)
+      const { default: jsPDF } = await import('jspdf');
+      // Import autotable - it auto-registers on jsPDF prototype when imported
+      await import('jspdf-autotable');
+      
+      const doc = new jsPDF();
+
+      // Header
+      doc.setFontSize(20);
+      doc.setTextColor(59, 130, 246);
+      doc.text('Events Report', 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+
+      // Summary statistics
+      doc.setFontSize(14);
+      doc.setTextColor(40, 40, 40);
+      doc.text('Summary Statistics', 14, 40);
+
+      const summaryData = [
+        ['Total Events', totalActivities.toString()],
+        ['Active', activeActivities.toString()],
+        ['Scheduled', scheduledActivities.toString()],
+        ['Completed', completedActivities.toString()],
+      ];
+
+      // @ts-ignore - autoTable extends jsPDF prototype
+      doc.autoTable({
+        startY: 45,
+        head: [['Metric', 'Value']],
+        body: summaryData,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246] },
+      });
+
+      // Event details
+      doc.addPage();
+      doc.setFontSize(14);
+      doc.text('Event Details', 14, 20);
+
+      const tableData = displayActivities.map((a, idx) => [
+        (idx + 1).toString(),
+        a.title,
+        a.type,
+        a.participants.toString(),
+        a.responses.toString(),
+        `${a.progress}%`,
+        a.status,
+      ]);
+
+      // @ts-ignore - autoTable extends jsPDF prototype
+      doc.autoTable({
+        startY: 25,
+        head: [['#', 'Title', 'Type', 'Participants', 'Responses', 'Progress', 'Status']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246] },
+        styles: { fontSize: 8 },
+      });
+
+      doc.save(`events-report-${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      setShowExportMenu(false);
+      toast({ title: "Success", description: "Report exported as PDF", variant: "success" });
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      toast({ title: "Error", description: "Failed to export PDF", variant: "error" });
+    }
   };
 
   const handleToggleStatus = async (activityId: string, currentStatus: string) => {
@@ -583,13 +671,58 @@ export default function ActivitiesPage({ params }: { params: { programId: string
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={handleExport}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
+            {/* Export Dropdown */}
+            <div className="relative export-dropdown">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export
+                <ChevronDown className="w-4 h-4" />
+              </button>
+
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  <div className="py-2">
+                    <button
+                      onClick={() => exportToExcel('xlsx')}
+                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                      <div>
+                        <div className="font-medium">Export as Excel</div>
+                        <div className="text-xs text-gray-500">Download .xlsx file</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => exportToExcel('csv')}
+                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <FileText className="w-4 h-4 text-blue-600" />
+                      <div>
+                        <div className="font-medium">Export as CSV</div>
+                        <div className="text-xs text-gray-500">Download .csv file</div>
+                      </div>
+                    </button>
+                    
+                    <div className="border-t border-gray-100 my-1"></div>
+                    
+                    <button
+                      onClick={exportToPDF}
+                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <FileText className="w-4 h-4 text-red-600" />
+                      <div>
+                        <div className="font-medium">Export as PDF</div>
+                        <div className="text-xs text-gray-500">Download .pdf file</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             {currentUser?.role !== 'program-moderator' && (
               <a
                 href="/activities/create"

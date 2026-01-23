@@ -42,8 +42,18 @@ export default function ProgramManagerLayout({ children }: ProgramManagerLayoutP
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [logoLoading, setLogoLoading] = useState(true);
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('qsights_logo');
+    }
+    return null;
+  });
+  const [logoLoading, setLogoLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !localStorage.getItem('qsights_logo');
+    }
+    return true;
+  });
   const pathname = usePathname();
   useEffect(() => {
     async function loadLogo() {

@@ -46,9 +46,34 @@ export default function ProgramAdminLayout({ children }: ProgramAdminLayoutProps
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [sidebarItems, setSidebarItems] = useState<any[]>([]);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [logoLoading, setLogoLoading] = useState(true);
+  const [sidebarItems, setSidebarItems] = useState<any[]>(() => {
+    // Try to get cached sidebar items on initial load
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem('qsights_program_admin_sidebar');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          return parsed.map((item: any) => ({
+            ...item,
+            icon: iconMap[item.iconName] || LayoutDashboard
+          }));
+        } catch (e) {}
+      }
+    }
+    return [];
+  });
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('qsights_logo');
+    }
+    return null;
+  });
+  const [logoLoading, setLogoLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !localStorage.getItem('qsights_logo');
+    }
+    return true;
+  });
   const pathname = usePathname();
 
   useEffect(() => {
@@ -93,9 +118,17 @@ export default function ProgramAdminLayout({ children }: ProgramAdminLayoutProps
       
       const mappedItems = filteredItems.map(item => ({
         ...item,
-        icon: iconMap[item.icon] || LayoutDashboard
+        icon: iconMap[item.icon] || LayoutDashboard,
+        iconName: item.icon
       }));
       setSidebarItems(mappedItems);
+      // Cache for instant load on navigation
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('qsights_program_admin_sidebar', JSON.stringify(filteredItems.map(item => ({
+          ...item,
+          iconName: item.icon
+        }))));
+      }
     }
   }, [currentUser]);
 

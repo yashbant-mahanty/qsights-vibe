@@ -321,11 +321,9 @@ export default function AdvancedAnalyticsPage() {
   };
 
   const exportToPDF = async () => {
-    // Dynamically import jspdf and jspdf-autotable only when needed (client-side only)
-    // @ts-ignore - jspdf types may not be available
-    const jsPDFModule = await import('jspdf');
-    const jsPDF = jsPDFModule.default;
-    // @ts-ignore - jspdf-autotable extends jsPDF prototype
+    // Dynamically import jspdf and jspdf-autotable (client-side only)
+    const { default: jsPDF } = await import('jspdf');
+    // Import autotable - it auto-registers on jsPDF prototype when imported
     await import('jspdf-autotable');
     
     const doc = new jsPDF();
