@@ -24,6 +24,7 @@ import {
   Monitor,
   Tablet,
   Smartphone,
+  FileText,
 } from "lucide-react";
 import { activitiesApi } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -148,6 +149,20 @@ interface LandingPageConfig {
   thankYouSubMessage: string;
   thankYouIconColor: string;
   thankYouShowConfirmation: boolean;
+  
+  // Post Session Registration Page
+  postSessionRegTitle: string;
+  postSessionRegSubtitle: string;
+  postSessionRegDescription: string;
+  postSessionRegButtonText: string;
+  postSessionRegBackgroundColor: string;
+  postSessionRegBackgroundImageUrl: string;
+  postSessionRegBackgroundOpacity: number;
+  postSessionRegFormBackgroundColor: string;
+  postSessionRegFormBorderColor: string;
+  postSessionRegButtonColor: string;
+  postSessionRegTitleColor: string;
+  postSessionRegDescriptionColor: string;
   
   // Additional Branding
   accentColor: string;
@@ -286,6 +301,19 @@ const defaultConfig: LandingPageConfig = {
   thankYouSubMessage: "We appreciate your participation",
   thankYouIconColor: "#10B981",
   thankYouShowConfirmation: true,
+  // Post Session Registration defaults
+  postSessionRegTitle: "Complete Your Registration",
+  postSessionRegSubtitle: "One more step to finish!",
+  postSessionRegDescription: "Please provide your details below to complete your participation.",
+  postSessionRegButtonText: "Submit Registration",
+  postSessionRegBackgroundColor: "#F3F4F6",
+  postSessionRegBackgroundImageUrl: "",
+  postSessionRegBackgroundOpacity: 100,
+  postSessionRegFormBackgroundColor: "#FFFFFF",
+  postSessionRegFormBorderColor: "#E5E7EB",
+  postSessionRegButtonColor: "#3B82F6",
+  postSessionRegTitleColor: "#1F2937",
+  postSessionRegDescriptionColor: "#6B7280",
   accentColor: "#3B82F6",
   fontFamily: "system",
   borderRadius: "rounded",
@@ -684,6 +712,7 @@ export default function LandingPageConfigPage() {
             {[
               { id: "landing-page", label: "Design for Landing Page", icon: Layout, description: "Configure the initial landing and login experience" },
               { id: "post-landing", label: "Post Landing Page", icon: Palette, description: "Customize the page shown after login" },
+              { id: "post-session-reg", label: "Post Session Registration", icon: FileText, description: "Configure the post-submission registration page" },
               { id: "thank-you", label: "Thank You Page", icon: Type, description: "Configure the completion message" },
               { id: "css-fonts", label: "CSS & Fonts", icon: Code, description: "Advanced styling and typography controls" },
             ].map((tab) => (
@@ -2774,6 +2803,558 @@ export default function LandingPageConfigPage() {
                           className="mt-2"
                           disabled={config.footerEnabled === false}
                         />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+
+          {/* Post Session Registration Tab */}
+          {activeTab === "post-session-reg" && (
+            <>
+              {/* Tab Info */}
+              <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-indigo-900 mb-1">Post Session Registration Page</h3>
+                <p className="text-sm text-indigo-700">Configure the registration page shown after participants complete their questionnaire but before final submission. This is used for triggered email flows where participants answer first and register later.</p>
+              </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Page Content Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Page Content</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Customize the text and messages shown on the registration page</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Page Title</Label>
+                      <p className="text-xs text-gray-500 mt-1">Main heading shown at the top of the registration form</p>
+                      <Input
+                        value={config.postSessionRegTitle}
+                        onChange={(e) => updateConfig("postSessionRegTitle", e.target.value)}
+                        placeholder="Complete Your Registration"
+                        className="mt-2"
+                      />
+                    </div>
+                    <div>
+                      <Label>Subtitle</Label>
+                      <p className="text-xs text-gray-500 mt-1">Secondary heading below the title</p>
+                      <Input
+                        value={config.postSessionRegSubtitle}
+                        onChange={(e) => updateConfig("postSessionRegSubtitle", e.target.value)}
+                        placeholder="One more step to finish!"
+                        className="mt-2"
+                      />
+                    </div>
+                    <div>
+                      <Label>Description</Label>
+                      <p className="text-xs text-gray-500 mt-1">Explanatory text shown above the form fields</p>
+                      <textarea
+                        value={config.postSessionRegDescription}
+                        onChange={(e) => updateConfig("postSessionRegDescription", e.target.value)}
+                        placeholder="Please provide your details below to complete your participation."
+                        className="w-full mt-2 p-2 border border-gray-300 rounded-md min-h-[80px]"
+                      />
+                    </div>
+                    <div>
+                      <Label>Submit Button Text</Label>
+                      <p className="text-xs text-gray-500 mt-1">Text displayed on the submit button</p>
+                      <Input
+                        value={config.postSessionRegButtonText}
+                        onChange={(e) => updateConfig("postSessionRegButtonText", e.target.value)}
+                        placeholder="Submit Registration"
+                        className="mt-2"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Color Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Colors & Styling</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Customize colors for text and UI elements</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Title Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegTitleColor}
+                          onChange={(e) => updateConfig("postSessionRegTitleColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegTitleColor}
+                          onChange={(e) => updateConfig("postSessionRegTitleColor", e.target.value)}
+                          placeholder="#1F2937"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Description Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegDescriptionColor}
+                          onChange={(e) => updateConfig("postSessionRegDescriptionColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegDescriptionColor}
+                          onChange={(e) => updateConfig("postSessionRegDescriptionColor", e.target.value)}
+                          placeholder="#6B7280"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Submit Button Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegButtonColor}
+                          onChange={(e) => updateConfig("postSessionRegButtonColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegButtonColor}
+                          onChange={(e) => updateConfig("postSessionRegButtonColor", e.target.value)}
+                          placeholder="#3B82F6"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Form Background Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegFormBackgroundColor}
+                          onChange={(e) => updateConfig("postSessionRegFormBackgroundColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegFormBackgroundColor}
+                          onChange={(e) => updateConfig("postSessionRegFormBackgroundColor", e.target.value)}
+                          placeholder="#FFFFFF"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Form Border Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegFormBorderColor}
+                          onChange={(e) => updateConfig("postSessionRegFormBorderColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegFormBorderColor}
+                          onChange={(e) => updateConfig("postSessionRegFormBorderColor", e.target.value)}
+                          placeholder="#E5E7EB"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Background Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Page Background</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Set the background color or image for the page</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Background Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegBackgroundColor}
+                          onChange={(e) => updateConfig("postSessionRegBackgroundColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegBackgroundColor}
+                          onChange={(e) => updateConfig("postSessionRegBackgroundColor", e.target.value)}
+                          placeholder="#F3F4F6"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Background Image URL</Label>
+                      <p className="text-xs text-gray-500 mt-1">Optional background image (leave empty for solid color)</p>
+                      <Input
+                        value={config.postSessionRegBackgroundImageUrl}
+                        onChange={(e) => updateConfig("postSessionRegBackgroundImageUrl", e.target.value)}
+                        placeholder="https://example.com/background.jpg"
+                        className="mt-2"
+                      />
+                    </div>
+                    {config.postSessionRegBackgroundImageUrl && (
+                      <div>
+                        <Label>Background Image Opacity (%)</Label>
+                        <div className="flex items-center space-x-4 mt-2">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={config.postSessionRegBackgroundOpacity}
+                            onChange={(e) => updateConfig("postSessionRegBackgroundOpacity", Number(e.target.value))}
+                            className="flex-1"
+                          />
+                          <span className="text-sm font-medium w-12 text-center">{config.postSessionRegBackgroundOpacity}%</span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Preview Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Preview</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">See how your registration page will look</p>
+                  </CardHeader>
+                  <CardContent>
+                    <div 
+                      className="relative rounded-lg overflow-hidden border" 
+                      style={{ 
+                        backgroundColor: config.postSessionRegBackgroundColor,
+                        backgroundImage: config.postSessionRegBackgroundImageUrl ? `url(${config.postSessionRegBackgroundImageUrl})` : 'none',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        minHeight: '400px'
+                      }}
+                    >
+                      {config.postSessionRegBackgroundImageUrl && (
+                        <div 
+                          className="absolute inset-0" 
+                          style={{ 
+                            backgroundColor: config.postSessionRegBackgroundColor,
+                            opacity: (100 - config.postSessionRegBackgroundOpacity) / 100 
+                          }}
+                        />
+                      )}
+                      <div className="relative p-8 flex items-center justify-center min-h-[400px]">
+                        <div 
+                          className="max-w-md w-full rounded-lg shadow-lg p-6" 
+                          style={{ 
+                            backgroundColor: config.postSessionRegFormBackgroundColor,
+                            borderColor: config.postSessionRegFormBorderColor,
+                            borderWidth: '1px'
+                          }}
+                        >
+                          <h2 className="text-2xl font-bold mb-2" style={{ color: config.postSessionRegTitleColor }}>
+                            {config.postSessionRegTitle || "Complete Your Registration"}
+                          </h2>
+                          {config.postSessionRegSubtitle && (
+                            <p className="text-lg mb-4" style={{ color: config.postSessionRegDescriptionColor }}>
+                              {config.postSessionRegSubtitle}
+                            </p>
+                          )}
+                          {config.postSessionRegDescription && (
+                            <p className="text-sm mb-6" style={{ color: config.postSessionRegDescriptionColor }}>
+                              {config.postSessionRegDescription}
+                            </p>
+                          )}
+                          <div className="space-y-4 mb-6">
+                            <div>
+                              <div className="text-sm font-medium text-gray-700 mb-1">Name</div>
+                              <div className="border border-gray-300 rounded px-3 py-2 text-gray-400 text-sm">John Doe</div>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-700 mb-1">Email</div>
+                              <div className="border border-gray-300 rounded px-3 py-2 text-gray-400 text-sm">john@example.com</div>
+                            </div>
+                          </div>
+                          <button 
+                            className="w-full py-2 px-4 rounded text-white font-medium"
+                            style={{ backgroundColor: config.postSessionRegButtonColor }}
+                            disabled
+                          >
+                            {config.postSessionRegButtonText || "Submit Registration"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+
+          {/* Post Session Registration Tab */}
+          {activeTab === "post-session-reg" && (
+            <>
+              {/* Tab Info */}
+              <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-indigo-900 mb-1">Post Session Registration Page</h3>
+                <p className="text-sm text-indigo-700">Configure the registration page shown after participants complete their questionnaire but before final submission. This is used for triggered email flows where participants answer first and register later.</p>
+              </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Page Content Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Page Content</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Customize the text and messages shown on the registration page</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Page Title</Label>
+                      <p className="text-xs text-gray-500 mt-1">Main heading shown at the top of the registration form</p>
+                      <Input
+                        value={config.postSessionRegTitle}
+                        onChange={(e) => updateConfig("postSessionRegTitle", e.target.value)}
+                        placeholder="Complete Your Registration"
+                        className="mt-2"
+                      />
+                    </div>
+                    <div>
+                      <Label>Subtitle</Label>
+                      <p className="text-xs text-gray-500 mt-1">Secondary heading below the title</p>
+                      <Input
+                        value={config.postSessionRegSubtitle}
+                        onChange={(e) => updateConfig("postSessionRegSubtitle", e.target.value)}
+                        placeholder="One more step to finish!"
+                        className="mt-2"
+                      />
+                    </div>
+                    <div>
+                      <Label>Description</Label>
+                      <p className="text-xs text-gray-500 mt-1">Explanatory text shown above the form fields</p>
+                      <textarea
+                        value={config.postSessionRegDescription}
+                        onChange={(e) => updateConfig("postSessionRegDescription", e.target.value)}
+                        placeholder="Please provide your details below to complete your participation."
+                        className="w-full mt-2 p-2 border border-gray-300 rounded-md min-h-[80px]"
+                      />
+                    </div>
+                    <div>
+                      <Label>Submit Button Text</Label>
+                      <p className="text-xs text-gray-500 mt-1">Text displayed on the submit button</p>
+                      <Input
+                        value={config.postSessionRegButtonText}
+                        onChange={(e) => updateConfig("postSessionRegButtonText", e.target.value)}
+                        placeholder="Submit Registration"
+                        className="mt-2"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Color Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Colors & Styling</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Customize colors for text and UI elements</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Title Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegTitleColor}
+                          onChange={(e) => updateConfig("postSessionRegTitleColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegTitleColor}
+                          onChange={(e) => updateConfig("postSessionRegTitleColor", e.target.value)}
+                          placeholder="#1F2937"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Description Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegDescriptionColor}
+                          onChange={(e) => updateConfig("postSessionRegDescriptionColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegDescriptionColor}
+                          onChange={(e) => updateConfig("postSessionRegDescriptionColor", e.target.value)}
+                          placeholder="#6B7280"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Submit Button Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegButtonColor}
+                          onChange={(e) => updateConfig("postSessionRegButtonColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegButtonColor}
+                          onChange={(e) => updateConfig("postSessionRegButtonColor", e.target.value)}
+                          placeholder="#3B82F6"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Form Background Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegFormBackgroundColor}
+                          onChange={(e) => updateConfig("postSessionRegFormBackgroundColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegFormBackgroundColor}
+                          onChange={(e) => updateConfig("postSessionRegFormBackgroundColor", e.target.value)}
+                          placeholder="#FFFFFF"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Form Border Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegFormBorderColor}
+                          onChange={(e) => updateConfig("postSessionRegFormBorderColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegFormBorderColor}
+                          onChange={(e) => updateConfig("postSessionRegFormBorderColor", e.target.value)}
+                          placeholder="#E5E7EB"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Background Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Page Background</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">Set the background color or image for the page</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Background Color</Label>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <input
+                          type="color"
+                          value={config.postSessionRegBackgroundColor}
+                          onChange={(e) => updateConfig("postSessionRegBackgroundColor", e.target.value)}
+                          className="h-10 w-20"
+                        />
+                        <Input
+                          value={config.postSessionRegBackgroundColor}
+                          onChange={(e) => updateConfig("postSessionRegBackgroundColor", e.target.value)}
+                          placeholder="#F3F4F6"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Background Image URL</Label>
+                      <p className="text-xs text-gray-500 mt-1">Optional background image (leave empty for solid color)</p>
+                      <Input
+                        value={config.postSessionRegBackgroundImageUrl}
+                        onChange={(e) => updateConfig("postSessionRegBackgroundImageUrl", e.target.value)}
+                        placeholder="https://example.com/background.jpg"
+                        className="mt-2"
+                      />
+                    </div>
+                    {config.postSessionRegBackgroundImageUrl && (
+                      <div>
+                        <Label>Background Image Opacity (%)</Label>
+                        <div className="flex items-center space-x-4 mt-2">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={config.postSessionRegBackgroundOpacity}
+                            onChange={(e) => updateConfig("postSessionRegBackgroundOpacity", Number(e.target.value))}
+                            className="flex-1"
+                          />
+                          <span className="text-sm font-medium w-12 text-center">{config.postSessionRegBackgroundOpacity}%</span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Preview Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Preview</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">See how your registration page will look</p>
+                  </CardHeader>
+                  <CardContent>
+                    <div 
+                      className="relative rounded-lg overflow-hidden border" 
+                      style={{ 
+                        backgroundColor: config.postSessionRegBackgroundColor,
+                        backgroundImage: config.postSessionRegBackgroundImageUrl ? `url(${config.postSessionRegBackgroundImageUrl})` : 'none',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        minHeight: '400px'
+                      }}
+                    >
+                      {config.postSessionRegBackgroundImageUrl && (
+                        <div 
+                          className="absolute inset-0" 
+                          style={{ 
+                            backgroundColor: config.postSessionRegBackgroundColor,
+                            opacity: (100 - config.postSessionRegBackgroundOpacity) / 100 
+                          }}
+                        />
+                      )}
+                      <div className="relative p-8 flex items-center justify-center min-h-[400px]">
+                        <div 
+                          className="max-w-md w-full rounded-lg shadow-lg p-6" 
+                          style={{ 
+                            backgroundColor: config.postSessionRegFormBackgroundColor,
+                            borderColor: config.postSessionRegFormBorderColor,
+                            borderWidth: '1px'
+                          }}
+                        >
+                          <h2 className="text-2xl font-bold mb-2" style={{ color: config.postSessionRegTitleColor }}>
+                            {config.postSessionRegTitle || "Complete Your Registration"}
+                          </h2>
+                          {config.postSessionRegSubtitle && (
+                            <p className="text-lg mb-4" style={{ color: config.postSessionRegDescriptionColor }}>
+                              {config.postSessionRegSubtitle}
+                            </p>
+                          )}
+                          {config.postSessionRegDescription && (
+                            <p className="text-sm mb-6" style={{ color: config.postSessionRegDescriptionColor }}>
+                              {config.postSessionRegDescription}
+                            </p>
+                          )}
+                          <div className="space-y-4 mb-6">
+                            <div>
+                              <div className="text-sm font-medium text-gray-700 mb-1">Name</div>
+                              <div className="border border-gray-300 rounded px-3 py-2 text-gray-400 text-sm">John Doe</div>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-700 mb-1">Email</div>
+                              <div className="border border-gray-300 rounded px-3 py-2 text-gray-400 text-sm">john@example.com</div>
+                            </div>
+                          </div>
+                          <button 
+                            className="w-full py-2 px-4 rounded text-white font-medium"
+                            style={{ backgroundColor: config.postSessionRegButtonColor }}
+                            disabled
+                          >
+                            {config.postSessionRegButtonText || "Submit Registration"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
