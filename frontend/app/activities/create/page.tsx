@@ -15,6 +15,7 @@ import {
   Eye,
   Save,
   CheckCircle,
+  AlertCircle,
   Settings,
   Plus,
   X,
@@ -90,6 +91,7 @@ export default function CreateActivityPage() {
     passPercentage: number;
     maxRetakes: number | null;
     displayMode?: string;
+    registrationFlow?: string; // NEW: 'pre_submission' or 'post_submission'
   }>({
     title: "",
     senderEmail: "",
@@ -118,6 +120,7 @@ export default function CreateActivityPage() {
     passPercentage: 80,
     maxRetakes: null,
     displayMode: "all",
+    registrationFlow: "pre_submission", // NEW: Default to pre-submission
   });
 
   // Registration form fields - Name and Email are mandatory
@@ -468,6 +471,7 @@ export default function CreateActivityPage() {
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
+          registration_flow: activityData.registrationFlow || 'pre_submission',
           time_limit_enabled: activityData.timeLimitEnabled,
           settings: {
             display_mode: activityData.displayMode || 'all',
@@ -528,6 +532,7 @@ export default function CreateActivityPage() {
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
+          registration_flow: activityData.registrationFlow || 'pre_submission',
           time_limit_enabled: activityData.timeLimitEnabled,
           time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
           pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
@@ -606,6 +611,7 @@ export default function CreateActivityPage() {
         is_multilingual: activityData.isMultilingual,
         languages: activityData.selectedLanguages,
         registration_form_fields: normalizedRegistrationFields,
+        registration_flow: activityData.registrationFlow || 'pre_submission',
         time_limit_enabled: activityData.timeLimitEnabled,
         time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
         pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
@@ -1593,6 +1599,80 @@ export default function CreateActivityPage() {
                       </p>
                     </div>
                   )}
+                </div>
+
+                {/* Registration Flow */}
+                <div className="space-y-3 pt-4 border-t border-gray-200">
+                  <div className="flex items-start gap-2">
+                    <UserPlus className="w-4 h-4 text-gray-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        Registration Flow
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                        When should participants register?
+                      </p>
+                      
+                      <div className="space-y-2">
+                        <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                          <input
+                            type="radio"
+                            name="registrationFlow"
+                            value="pre_submission"
+                            checked={activityData.registrationFlow === 'pre_submission'}
+                            onChange={(e) =>
+                              setActivityData((prev) => ({
+                                ...prev,
+                                registrationFlow: e.target.value,
+                              }))
+                            }
+                            className="mt-0.5"
+                          />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              Pre-Submission (Default)
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              Register first → Answer questions → Submit
+                            </div>
+                          </div>
+                        </label>
+                        
+                        <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                          <input
+                            type="radio"
+                            name="registrationFlow"
+                            value="post_submission"
+                            checked={activityData.registrationFlow === 'post_submission'}
+                            onChange={(e) =>
+                              setActivityData((prev) => ({
+                                ...prev,
+                                registrationFlow: e.target.value,
+                              }))
+                            }
+                            className="mt-0.5"
+                          />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              Post-Submission
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              Answer questions → Register → Submit
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+
+                      {activityData.registrationFlow === 'post_submission' && (
+                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                          <p className="text-xs text-amber-800 flex items-start gap-1">
+                            <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                            <span>Responses are temporarily stored until registration is completed (24h expiry)</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Multilingual Support */}

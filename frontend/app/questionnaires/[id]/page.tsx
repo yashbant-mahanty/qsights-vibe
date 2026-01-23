@@ -1145,9 +1145,15 @@ export default function ViewQuestionnairePage() {
                   }}
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
                 >
+                  <option value="1">1 Star</option>
+                  <option value="2">2 Stars</option>
                   <option value="3">3 Stars</option>
+                  <option value="4">4 Stars</option>
                   <option value="5">5 Stars</option>
+                  <option value="6">6 Stars</option>
                   <option value="7">7 Stars</option>
+                  <option value="8">8 Stars</option>
+                  <option value="9">9 Stars</option>
                   <option value="10">10 Stars</option>
                 </select>
               </div>
@@ -2711,9 +2717,15 @@ export default function ViewQuestionnairePage() {
                       }}
                       className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
                     >
+                      <option value={1}>1 Star</option>
+                      <option value={2}>2 Stars</option>
                       <option value={3}>3 Stars</option>
+                      <option value={4}>4 Stars</option>
                       <option value={5}>5 Stars</option>
+                      <option value={6}>6 Stars</option>
                       <option value={7}>7 Stars</option>
+                      <option value={8}>8 Stars</option>
+                      <option value={9}>9 Stars</option>
                       <option value={10}>10 Stars</option>
                     </select>
                   </div>

@@ -241,6 +241,7 @@ class ActivityController extends Controller
             'registration_form_fields.*.label' => 'sometimes|required|string',
             'registration_form_fields.*.type' => 'sometimes|required|string',
             'registration_form_fields.*.required' => 'sometimes|required|boolean',
+            'registration_flow' => 'nullable|in:pre_submission,post_submission',
             // Additional details fields - all optional
             'sender_email' => 'nullable|email|max:255',
             'manager_name' => 'nullable|string|max:255',
@@ -276,6 +277,7 @@ class ActivityController extends Controller
             'pass_percentage' => $validated['pass_percentage'] ?? null,
             'max_retakes' => $validated['max_retakes'] ?? null,
             'registration_form_fields' => $validated['registration_form_fields'] ?? [],
+            'registration_flow' => $validated['registration_flow'] ?? 'pre_submission',
             // Additional details fields - all optional
             'sender_email' => $validated['sender_email'] ?? null,
             'manager_name' => $validated['manager_name'] ?? null,
@@ -375,6 +377,7 @@ class ActivityController extends Controller
             'registration_form_fields.*.label' => 'required|string',
             'registration_form_fields.*.type' => 'required|string',
             'registration_form_fields.*.required' => 'required|boolean',
+            'registration_flow' => 'nullable|in:pre_submission,post_submission',
             // Additional fields
             'sender_email' => 'nullable|email',
             'manager_name' => 'nullable|string|max:255',

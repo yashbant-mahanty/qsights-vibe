@@ -219,6 +219,7 @@ export default function TakeActivityPage() {
   const legacyType = searchParams.get("type"); // Legacy: 'registration'
   const legacyPreview = searchParams.get("preview") === "true"; // Legacy preview mode
   const legacyMode = searchParams.get("mode"); // Legacy: 'anonymous'
+  const submittedParam = searchParams.get("submitted") === "true"; // Coming back from post-submission registration
   
   // State for decrypted link token data
   const [tokenDecrypted, setTokenDecrypted] = useState(false);
@@ -340,6 +341,11 @@ export default function TakeActivityPage() {
   
   // Assessment submission tracking - track which questions have been submitted
   const [submittedQuestions, setSubmittedQuestions] = useState<Set<string>>(new Set());
+  
+  // Post-submission registration flow state
+  const [isPostSubmissionFlow, setIsPostSubmissionFlow] = useState(false);
+  const [tempSessionToken, setTempSessionToken] = useState<string | null>(null);
+  const [showRegistrationAfterSubmit, setShowRegistrationAfterSubmit] = useState(false);
   
   // Assessment result state
   const [assessmentResult, setAssessmentResult] = useState<{
@@ -681,6 +687,15 @@ export default function TakeActivityPage() {
     loadData();
   }, [activityId]);
 
+  // Handle post-submission registration redirect
+  useEffect(() => {
+    if (submittedParam) {
+      setSubmitted(true);
+      setShowForm(false);
+      setStarted(false);
+    }
+  }, [submittedParam]);
+
   // Validate token if present - only once when both token and activity are available
   useEffect(() => {
     if (token && !tokenValidated && !tokenValidating && activity) {
@@ -840,6 +855,29 @@ export default function TakeActivityPage() {
       }
       const activityData = await activityResponse.json();
       setActivity(activityData.data);
+
+      // Check if this activity uses post-submission registration flow
+      const registrationFlow = activityData.data.registration_flow || 'pre_submission';
+      setIsPostSubmissionFlow(registrationFlow === 'post_submission');
+      
+      // For post-submission flow, skip registration form initially
+      // BUT: Don't reset state if user has already submitted (prevents infinite loop after submission)
+      if (registrationFlow === 'post_submission' && !isPreview && !token && !submitted) {
+        setShowForm(false);
+        setStarted(true);
+        
+        // Generate or retrieve session token from localStorage
+        const storedToken = localStorage.getItem(`temp_session_${activityId}`);
+        const sessionToken = storedToken || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        if (!storedToken) {
+          localStorage.setItem(`temp_session_${activityId}`, sessionToken);
+        }
+        setTempSessionToken(sessionToken);
+        
+        // Set start time
+        const now = Date.now();
+        setStartTime(now);
+      }
 
       // Use questionnaire data from activity response (already eager loaded)
       if (activityData.data.questionnaire) {
@@ -1061,6 +1099,81 @@ export default function TakeActivityPage() {
       const participantIdValue = registerData.data.participant_id;
       setParticipantId(participantIdValue);
       
+      // POST-SUBMISSION FLOW: Link temporary submission after registration
+      if (showRegistrationAfterSubmit && tempSessionToken) {
+        console.log('[POST-SUBMIT REG] Starting link and final submission...');
+        try {
+          const linkResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions/link`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              session_token: tempSessionToken,
+              participant_id: participantIdValue,
+            }),
+          });
+
+          if (!linkResponse.ok) {
+            throw new Error("Failed to link temporary submission");
+          }
+
+          const linkData = await linkResponse.json();
+          console.log('[POST-SUBMIT REG] Linked successfully, submitting final response...');
+          
+          // Now submit the final response
+          const submitPayload = {
+            participant_id: participantIdValue,
+            answers: linkData.data.responses,
+            started_at: startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
+            is_preview: false,
+          };
+
+          const submitResponse = await fetch(`/api/public/activities/${activityId}/submit`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify(submitPayload),
+          });
+
+          if (!submitResponse.ok) {
+            throw new Error("Failed to submit final response");
+          }
+
+          console.log('[POST-SUBMIT REG] Final submission successful, showing thank you page');
+          
+          // Clean up temporary data
+          localStorage.removeItem(`temp_session_${activityId}`);
+          localStorage.removeItem(`temp_responses_${activityId}`);
+          
+          // Show thank you page
+          setSubmitted(true);
+          setShowForm(false);
+          setStarted(false); // Important: Don't start the activity
+          setShowRegistrationAfterSubmit(false); // Reset flag
+          
+          toast({
+            title: "Success!",
+            description: "Your response has been submitted successfully",
+            variant: "success"
+          });
+          
+          setSubmitting(false);
+          return;
+        } catch (err) {
+          console.error("Failed to complete post-submission registration:", err);
+          toast({
+            title: "Error",
+            description: "Failed to complete submission. Please try again.",
+            variant: "error"
+          });
+          setSubmitting(false);
+          return;
+        }
+      }
+      
       // Check if participant has already submitted
       // IMPORTANT: Do NOT auto-redirect to thank you page for registration/anonymous links
       // Let them go through the full flow - backend will handle duplicate submission
@@ -1215,7 +1328,95 @@ export default function TakeActivityPage() {
 
       setSubmitting(true);
 
-      if (!participantId) {
+      // POST-SUBMISSION FLOW: For regular users, save responses and redirect to registration page
+      // For preview/anonymous, skip registration and submit directly
+      if (isPostSubmissionFlow && !participantId && !isPreview && !isAnonymous) {
+        try {
+          // Save responses to temporary storage
+          const tempResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              answers: responses,
+              session_token: tempSessionToken,
+            }),
+          });
+
+          if (!tempResponse.ok) {
+            throw new Error("Failed to save temporary submission");
+          }
+
+          const tempData = await tempResponse.json();
+          
+          // Store in localStorage
+          localStorage.setItem(`temp_session_${activityId}`, tempData.data.session_token);
+          localStorage.setItem(`temp_responses_${activityId}`, JSON.stringify(responses));
+          
+          // Redirect to registration page
+          router.push(`/activities/register/${activityId}`);
+          
+          setSubmitting(false);
+          return;
+        } catch (err) {
+          console.error("Failed to save temporary submission:", err);
+          toast({
+            title: "Error",
+            description: "Failed to save your responses. Please try again.",
+            variant: "error"
+          });
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      // For post-submission flow with preview/anonymous, create participantId if not exists
+      // Use local variable to avoid state update delay
+      let currentParticipantId = participantId;
+      
+      if (isPostSubmissionFlow && !currentParticipantId) {
+        if (isPreview) {
+          // Create dummy participant ID for preview mode
+          const dummyParticipantId = 'preview-' + Date.now();
+          setParticipantId(dummyParticipantId);
+          currentParticipantId = dummyParticipantId;
+        } else if (isAnonymous) {
+          // Register anonymous participant
+          try {
+            const registerResponse = await fetch(`/api/public/activities/${activityId}/register`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                activity_id: activityId,
+                anonymous: true,
+              }),
+            });
+
+            if (!registerResponse.ok) {
+              throw new Error("Failed to register anonymous participant");
+            }
+
+            const registerData = await registerResponse.json();
+            const newParticipantId = registerData.data.participant_id;
+            setParticipantId(newParticipantId);
+            currentParticipantId = newParticipantId;
+          } catch (err) {
+            console.error("Failed to register anonymous participant:", err);
+            toast({
+              title: "Error",
+              description: "Failed to register. Please try again.",
+              variant: "error"
+            });
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      if (!currentParticipantId) {
         throw new Error("Participant not registered");
       }
 
@@ -1251,7 +1452,7 @@ export default function TakeActivityPage() {
       }
 
       const payload = {
-        participant_id: participantId,
+        participant_id: currentParticipantId,
         answers: responses,
         started_at,
         time_expired_at,
@@ -3216,11 +3417,11 @@ export default function TakeActivityPage() {
               {submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  {isAnonymous ? 'Starting...' : isPreview ? 'Loading Preview...' : token && tokenValidated ? 'Starting...' : 'Registering...'}
+                  {isAnonymous ? 'Starting...' : isPreview ? 'Loading Preview...' : token && tokenValidated ? 'Starting...' : showRegistrationAfterSubmit ? 'Submitting...' : 'Registering...'}
                 </>
               ) : (
                 <>
-                  {isPreview ? 'Start Preview' : token && tokenValidated ? 'Continue' : `Start ${activity?.type === 'assessment' ? 'Assessment' : activity?.type === 'poll' ? 'Poll' : 'Survey'}`}
+                  {showRegistrationAfterSubmit ? 'Submit' : isPreview ? 'Start Preview' : token && tokenValidated ? 'Continue' : `Start ${activity?.type === 'assessment' ? 'Assessment' : activity?.type === 'poll' ? 'Poll' : 'Survey'}`}
                   <ChevronRight className="w-4 h-4" />
                 </>
               )}

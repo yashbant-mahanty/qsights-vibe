@@ -15,6 +15,7 @@ import {
   Eye,
   Save,
   CheckCircle,
+  AlertCircle,
   Settings,
   Plus,
   X,
@@ -93,6 +94,7 @@ export default function EditActivityPage() {
     passPercentage: number;
     maxRetakes: number | null;
     displayMode?: string;
+    registrationFlow?: string; // NEW: 'pre_submission' or 'post_submission'
   }>({
     title: "",
     senderEmail: "",
@@ -121,6 +123,7 @@ export default function EditActivityPage() {
     passPercentage: 80,
     maxRetakes: null,
     displayMode: "all",
+    registrationFlow: "pre_submission", // NEW: Default to pre-submission
   });
 
   // Registration form fields - Name and Email are mandatory
@@ -374,8 +377,11 @@ export default function EditActivityPage() {
         timeLimitMinutes: activity.time_limit_minutes || 30,
         passPercentage: activity.pass_percentage || 80,
         maxRetakes: activity.max_retakes || null,
-        displayMode: activity.display_mode || "all",
+        displayMode: activity.settings?.display_mode || "all",
+        registrationFlow: activity.registration_flow || 'pre_submission', // NEW
       });
+
+      console.log('[LOAD] Loaded registration_flow from API:', activity.registration_flow);
 
       // Load selected questionnaires
       console.log('[Edit Activity] activity.questionnaire_id:', activity.questionnaire_id);
@@ -613,6 +619,7 @@ export default function EditActivityPage() {
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
+          registration_flow: activityData.registrationFlow || 'pre_submission',
           time_limit_enabled: activityData.timeLimitEnabled,
           time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
           pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
@@ -664,6 +671,7 @@ export default function EditActivityPage() {
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
+          registration_flow: activityData.registrationFlow || 'pre_submission',
           time_limit_enabled: activityData.timeLimitEnabled,
           time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
           pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
@@ -694,6 +702,7 @@ export default function EditActivityPage() {
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
+          registration_flow: activityData.registrationFlow || 'pre_submission',
           time_limit_enabled: activityData.timeLimitEnabled,
           time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
           pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
@@ -716,6 +725,7 @@ export default function EditActivityPage() {
           questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
         };
 
+        console.log('[UPDATE] Sending payload with registration_flow:', activityPayload.registration_flow);
         await activitiesApi.update(activityId, activityPayload);
         toast({ title: "Success!", description: "Event updated successfully!", variant: "success" });
         router.push("/activities");
@@ -771,6 +781,7 @@ export default function EditActivityPage() {
         is_multilingual: activityData.isMultilingual,
         languages: activityData.selectedLanguages,
         registration_form_fields: normalizedRegistrationFields,
+        registration_flow: activityData.registrationFlow || 'pre_submission',
         time_limit_enabled: activityData.timeLimitEnabled,
         time_limit_minutes: activityData.timeLimitEnabled ? activityData.timeLimitMinutes : undefined,
         pass_percentage: activityData.type === 'assessment' ? activityData.passPercentage : undefined,
@@ -1772,6 +1783,82 @@ export default function EditActivityPage() {
                       </p>
                     </div>
                   )}
+                </div>
+
+                {/* Registration Flow */}
+                <div className="space-y-3 pt-4 border-t border-gray-200">
+                  <div className="flex items-start gap-2">
+                    <UserPlus className="w-4 h-4 text-gray-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        Registration Flow
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                        When should participants register?
+                      </p>
+                      
+                      <div className="space-y-2">
+                        <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                          <input
+                            type="radio"
+                            name="registrationFlow"
+                            value="pre_submission"
+                            checked={activityData.registrationFlow === 'pre_submission'}
+                            onChange={(e) =>
+                              setActivityData((prev) => ({
+                                ...prev,
+                                registrationFlow: e.target.value,
+                              }))
+                            }
+                            className="mt-0.5"
+                            disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
+                          />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              Pre-Submission (Default)
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              Register first → Answer questions → Submit
+                            </div>
+                          </div>
+                        </label>
+                        
+                        <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                          <input
+                            type="radio"
+                            name="registrationFlow"
+                            value="post_submission"
+                            checked={activityData.registrationFlow === 'post_submission'}
+                            onChange={(e) =>
+                              setActivityData((prev) => ({
+                                ...prev,
+                                registrationFlow: e.target.value,
+                              }))
+                            }
+                            className="mt-0.5"
+                            disabled={currentUser && ['program-admin', 'program-manager'].includes(currentUser.role) && isApprovedActivity}
+                          />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              Post-Submission
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              Answer questions → Register → Submit
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+
+                      {activityData.registrationFlow === 'post_submission' && (
+                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                          <p className="text-xs text-amber-800 flex items-start gap-1">
+                            <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                            <span>Responses are temporarily stored until registration is completed (24h expiry)</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Multilingual Support */}

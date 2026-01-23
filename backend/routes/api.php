@@ -395,6 +395,11 @@ Route::prefix('public')->group(function () {
     Route::post('activities/validate-link-token', [App\Http\Controllers\Api\ActivityController::class, 'validateLinkToken']);
     Route::get('questionnaire/{id}', [App\Http\Controllers\Api\PublicQuestionnaireController::class, 'show']); // Singular alias for compatibility
     
+    // Temporary submissions for post-submission registration flow
+    Route::post('activities/{id}/temporary-submissions', [App\Http\Controllers\Api\TemporarySubmissionController::class, 'store']);
+    Route::get('activities/{id}/temporary-submissions/{sessionToken}', [App\Http\Controllers\Api\TemporarySubmissionController::class, 'show']);
+    Route::post('activities/{id}/temporary-submissions/link', [App\Http\Controllers\Api\TemporarySubmissionController::class, 'link']);
+    
     // Token-based access routes
     Route::get('access-tokens/{token}/validate', [App\Http\Controllers\Api\PublicActivityController::class, 'validateAccessToken']);
     Route::post('access-tokens/{token}/mark-used', [App\Http\Controllers\Api\PublicActivityController::class, 'markTokenAsUsed']);

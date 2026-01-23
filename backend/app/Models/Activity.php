@@ -74,6 +74,7 @@ class Activity extends Model
         'languages',
         'settings',
         'registration_form_fields',
+        'registration_flow', // NEW: 'pre_submission' or 'post_submission'
         'landing_config',
         'time_limit_enabled',
         'time_limit_minutes',
