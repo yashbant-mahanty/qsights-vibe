@@ -392,12 +392,14 @@ export default function ActivityResultsPage() {
     }
   }
 
-  // Export to PDF
+  // Export to PDF (Updated: 2026-01-24)
   async function exportToPDF() {
     try {
       // Dynamically import jspdf and jspdf-autotable (client-side only)
       const { default: jsPDF } = await import('jspdf');
-      // Import autotable - it auto-registers on jsPDF prototype when imported
+      
+      // Import autotable - MUST import without assignment to extend jsPDF prototype
+      // This import has a side effect of adding autoTable method to jsPDF
       await import('jspdf-autotable');
       
       // Validate that we have data to export
