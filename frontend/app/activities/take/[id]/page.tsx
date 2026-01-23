@@ -861,8 +861,9 @@ export default function TakeActivityPage() {
       setIsPostSubmissionFlow(registrationFlow === 'post_submission');
       
       // For post-submission flow, skip registration form initially
+      // This applies to ALL modes: regular, preview, and anonymous
       // BUT: Don't reset state if user has already submitted (prevents infinite loop after submission)
-      if (registrationFlow === 'post_submission' && !isPreview && !token && !submitted) {
+      if (registrationFlow === 'post_submission' && !token && !submitted) {
         setShowForm(false);
         setStarted(true);
         
@@ -1328,70 +1329,31 @@ export default function TakeActivityPage() {
 
       setSubmitting(true);
 
-      // POST-SUBMISSION FLOW: For regular users, save responses and redirect to registration page
-      // For preview/anonymous, skip registration and submit directly
-      if (isPostSubmissionFlow && !participantId && !isPreview && !isAnonymous) {
-        try {
-          // Save responses to temporary storage
-          const tempResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              answers: responses,
-              session_token: tempSessionToken,
-            }),
-          });
-
-          if (!tempResponse.ok) {
-            throw new Error("Failed to save temporary submission");
-          }
-
-          const tempData = await tempResponse.json();
-          
-          // Store in localStorage
-          localStorage.setItem(`temp_session_${activityId}`, tempData.data.session_token);
-          localStorage.setItem(`temp_responses_${activityId}`, JSON.stringify(responses));
-          
-          // Redirect to registration page
-          router.push(`/activities/register/${activityId}`);
-          
-          setSubmitting(false);
-          return;
-        } catch (err) {
-          console.error("Failed to save temporary submission:", err);
-          toast({
-            title: "Error",
-            description: "Failed to save your responses. Please try again.",
-            variant: "error"
-          });
-          setSubmitting(false);
-          return;
-        }
-      }
-
-      // For post-submission flow with preview/anonymous, create participantId if not exists
-      // Use local variable to avoid state update delay
-      let currentParticipantId = participantId;
-      
-      if (isPostSubmissionFlow && !currentParticipantId) {
+      // POST-SUBMISSION FLOW: Different behavior based on mode
+      if (isPostSubmissionFlow && !participantId) {
+        // For PREVIEW mode: Create dummy participant and continue to submission
         if (isPreview) {
-          // Create dummy participant ID for preview mode
           const dummyParticipantId = 'preview-' + Date.now();
           setParticipantId(dummyParticipantId);
-          currentParticipantId = dummyParticipantId;
-        } else if (isAnonymous) {
-          // Register anonymous participant
+          // Continue to normal preview submission below
+        }
+        // For ANONYMOUS mode: Create anonymous participant and continue to submission
+        else if (isAnonymous) {
           try {
+            const anonymousName = `Anonymous_${Date.now()}`;
+            const anonymousEmail = `anonymous_${Date.now()}@anonymous.local`;
+            
             const registerResponse = await fetch(`/api/public/activities/${activityId}/register`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                "Accept": "application/json",
               },
               body: JSON.stringify({
-                activity_id: activityId,
-                anonymous: true,
+                name: anonymousName,
+                email: anonymousEmail,
+                additional_data: {},
+                is_anonymous: true,
               }),
             });
 
@@ -1402,7 +1364,7 @@ export default function TakeActivityPage() {
             const registerData = await registerResponse.json();
             const newParticipantId = registerData.data.participant_id;
             setParticipantId(newParticipantId);
-            currentParticipantId = newParticipantId;
+            // Continue to normal submission below
           } catch (err) {
             console.error("Failed to register anonymous participant:", err);
             toast({
@@ -1414,7 +1376,51 @@ export default function TakeActivityPage() {
             return;
           }
         }
+        // For REGULAR users: Save to temporary storage and redirect to registration
+        else {
+          try {
+            // Save responses to temporary storage
+            const tempResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                answers: responses,
+                session_token: tempSessionToken,
+              }),
+            });
+
+            if (!tempResponse.ok) {
+              throw new Error("Failed to save temporary submission");
+            }
+
+            const tempData = await tempResponse.json();
+            
+            // Store in localStorage
+            localStorage.setItem(`temp_session_${activityId}`, tempData.data.session_token);
+            localStorage.setItem(`temp_responses_${activityId}`, JSON.stringify(responses));
+            
+            // Redirect to registration page
+            router.push(`/activities/register/${activityId}`);
+            
+            setSubmitting(false);
+            return;
+          } catch (err) {
+            console.error("Failed to save temporary submission:", err);
+            toast({
+              title: "Error",
+              description: "Failed to save your responses. Please try again.",
+              variant: "error"
+            });
+            setSubmitting(false);
+            return;
+          }
+        }
       }
+
+      // Get participantId (either existing or just created above)
+      const currentParticipantId = participantId;
 
       if (!currentParticipantId) {
         throw new Error("Participant not registered");
