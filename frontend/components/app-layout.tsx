@@ -67,9 +67,35 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [logoLoading, setLogoLoading] = useState(true);
-  const [sidebarItems, setSidebarItems] = useState<any[]>([]);
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('qsights_logo');
+    }
+    return null;
+  });
+  const [logoLoading, setLogoLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !localStorage.getItem('qsights_logo');
+    }
+    return true;
+  });
+  const [sidebarItems, setSidebarItems] = useState<any[]>(() => {
+    // Try to get cached sidebar items on initial load
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem('qsights_sidebar_items');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          // Re-map icons since they can't be serialized
+          return parsed.map((item: any) => ({
+            ...item,
+            icon: iconMap[item.iconName] || LayoutDashboard
+          }));
+        } catch (e) {}
+      }
+    }
+    return [];
+  });
 
   useEffect(() => {
     async function loadLogo() {
@@ -107,9 +133,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
       const navItems = getNavigationItems(currentUser.role as UserRole, userServices);
       const mappedItems = navItems.map(item => ({
         ...item,
-        icon: iconMap[item.icon] || LayoutDashboard
+        icon: iconMap[item.icon] || LayoutDashboard,
+        iconName: item.icon // Store icon name for caching
       }));
       setSidebarItems(mappedItems);
+      // Cache for instant load on navigation
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('qsights_sidebar_items', JSON.stringify(navItems.map(item => ({
+          ...item,
+          iconName: item.icon
+        }))));
+      }
     }
   }, [currentUser]);
 
@@ -140,7 +174,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <img 
               src={logoUrl} 
               alt="Logo" 
-              className={`object-contain transition-all ${sidebarOpen ? 'h-8' : 'h-10 w-10'}`}
+              className={`object-contain ${sidebarOpen ? 'h-8' : 'h-10 w-10'}`}
             />
           ) : logoLoading ? (
             <div className={`bg-gray-100 rounded ${sidebarOpen ? 'h-8 w-24' : 'h-10 w-10'}`} />
@@ -173,8 +207,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
         {/* Navigation */}
         <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100%-4rem)]">
-          {isLoading ? (
-            // Loading skeleton while user data loads
+          {isLoading && sidebarItems.length === 0 ? (
+            // Loading skeleton only when no cached items
             [...Array(6)].map((_, i) => (
               <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg animate-pulse">
                 <div className="w-5 h-5 bg-gray-200 rounded"></div>
@@ -188,7 +222,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <Link
                   key={index}
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
+                  prefetch={true}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg group ${
                     !sidebarOpen && "justify-center"
                   } ${
                     isActive 
@@ -208,7 +243,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
             // Fallback: show default navigation for super-admin if no items loaded
             <Link
               href="/dashboard"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
+              prefetch={true}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg group ${
                 !sidebarOpen && "justify-center"
               } ${
                 pathname === '/dashboard' || pathname.startsWith('/dashboard/')

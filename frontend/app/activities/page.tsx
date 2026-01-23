@@ -49,7 +49,7 @@ export default function ActivitiesPage() {
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ role?: string; programId?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; activityId: string | null; activityName: string | null }>({ isOpen: false, activityId: null, activityName: null });
@@ -60,7 +60,6 @@ export default function ActivitiesPage() {
 
   useEffect(() => {
     loadActivities();
-    loadCurrentUser();
 
     // Listen for global search events
     const handleGlobalSearch = (e: CustomEvent) => {
@@ -96,9 +95,8 @@ export default function ActivitiesPage() {
 
   async function loadCurrentUser() {
     try {
-      const response = await fetch('/api/auth/me');
-      if (response.ok) {
-        const userData = await response.json();
+      const userData = await fetchWithAuth('/auth/me');
+      if (userData?.user) {
         setCurrentUser(userData.user);
       }
     } catch (error) {
@@ -108,21 +106,25 @@ export default function ActivitiesPage() {
 
   async function loadActivities() {
     try {
-      setLoading(true);
       setError(null);
       
       // Get current user to filter by program_id for program roles
-      const userResponse = await fetch('/api/auth/me');
       let programId = null;
       let isProgramRole = false;
       let isSuperAdminOrAdmin = false;
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
+      try {
+        const userData = await fetchWithAuth('/auth/me');
         isProgramRole = userData?.user?.role && ['program-admin', 'program-manager', 'program-moderator'].includes(userData.user.role);
         isSuperAdminOrAdmin = userData?.user?.role && ['super-admin', 'admin'].includes(userData.user.role);
         if (isProgramRole) {
           programId = userData.user.programId;
         }
+        // Set current user to avoid duplicate API call
+        if (userData?.user) {
+          setCurrentUser(userData.user);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user for filtering:', error);
       }
       
       // Load activities
@@ -363,7 +365,7 @@ export default function ActivitiesPage() {
     }
   };
 
-  const activities_display = activities.map(a => {
+  const activities_display = useMemo(() => activities.map(a => {
     const participants = a.participants_count || 0;
     const authenticatedParticipants = a.authenticated_participants_count || 0;
     const guestParticipants = a.guest_participants_count || 0;
@@ -399,10 +401,10 @@ export default function ActivitiesPage() {
       isApprovalRequest: false,
       approvalId: null as string | null,
     };
-  });
+  }), [activities]);
 
   // Add pending approval requests as virtual "activities" with status "pending-approval"
-  const pendingApprovalDisplay = pendingApprovals.map(pa => ({
+  const pendingApprovalDisplay = useMemo(() => pendingApprovals.map(pa => ({
     id: pa.id,
     title: pa.name || "",
     code: pa.id ? String(pa.id).substring(0, 8) : "",
@@ -425,10 +427,13 @@ export default function ActivitiesPage() {
     allow_participant_reminders: false,
     isApprovalRequest: true,
     approvalId: pa.id,
-  }));
+  })), [pendingApprovals]);
 
   // Combine activities with pending approvals (pending approvals shown first)
-  const allActivitiesDisplay = [...pendingApprovalDisplay, ...activities_display];
+  const allActivitiesDisplay = useMemo(() => 
+    [...pendingApprovalDisplay, ...activities_display],
+    [pendingApprovalDisplay, activities_display]
+  );
 
   const totalActivities = activities.length + pendingApprovals.length;
   const activeActivities = activities.filter(a => a.status === 'live').length;
@@ -475,46 +480,37 @@ export default function ActivitiesPage() {
 
   // Mock data removed - using only real API data
 
-  const tabs = [
+  const filteredActivities = useMemo(() => {
+    return allActivitiesDisplay.filter((activity) => {
+      const matchesTab =
+        selectedTab === "all" ||
+        activity.type.toLowerCase() === selectedTab;
+      const matchesStatus =
+        selectedStatus === "all" || activity.status === selectedStatus;
+      const matchesSearch =
+        searchQuery === "" ||
+        activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        activity.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        activity.program.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesTab && matchesStatus && matchesSearch;
+    });
+  }, [allActivitiesDisplay, selectedTab, selectedStatus, searchQuery]);
+
+  const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
+  
+  const currentActivities = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredActivities.slice(startIndex, endIndex);
+  }, [filteredActivities, currentPage, itemsPerPage]);
+
+  // Memoize tabs to prevent recalculation
+  const tabs = useMemo(() => [
     { id: "all", label: "All Events", count: allActivitiesDisplay.length },
     { id: "survey", label: "Surveys", count: allActivitiesDisplay.filter(a => a.type === 'survey').length },
     { id: "poll", label: "Polls", count: allActivitiesDisplay.filter(a => a.type === 'poll').length },
     { id: "assessment", label: "Assessments", count: allActivitiesDisplay.filter(a => a.type === 'assessment').length },
-  ];
-
-  const displayActivities = allActivitiesDisplay;
-
-  const filteredActivities = displayActivities.filter((activity) => {
-    const matchesTab =
-      selectedTab === "all" ||
-      activity.type.toLowerCase() === selectedTab;
-    const matchesStatus =
-      selectedStatus === "all" || activity.status === selectedStatus;
-    const matchesSearch =
-      searchQuery === "" ||
-      activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      activity.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      activity.program.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesStatus && matchesSearch;
-  });
-
-  const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentActivities = filteredActivities.slice(startIndex, endIndex);
-
-  if (loading) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qsights-blue mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading events...</p>
-          </div>
-        </div>
-      </AppLayout>
-    );
-  }
+  ], [allActivitiesDisplay]);
 
   if (error) {
     return (
@@ -674,32 +670,16 @@ export default function ActivitiesPage() {
 
         {/* Stats Grid - Always render to prevent layout shift */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {loading ? (
-            // Skeleton loaders
-            Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 animate-pulse">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="h-4 bg-gray-300 rounded w-20 mb-3"></div>
-                    <div className="h-8 bg-gray-300 rounded w-16 mb-2"></div>
-                    <div className="h-3 bg-gray-300 rounded w-24"></div>
-                  </div>
-                  <div className="w-12 h-12 bg-gray-300 rounded-full"></div>
-                </div>
-              </div>
-            ))
-          ) : (
-            stats.map((stat, index) => (
-              <GradientStatCard
-                key={index}
-                title={stat.title}
-                value={stat.value}
-                subtitle={stat.subtitle}
-                icon={stat.icon}
-                variant={stat.variant}
-              />
-            ))
-          )}
+          {stats.map((stat, index) => (
+            <GradientStatCard
+              key={index}
+              title={stat.title}
+              value={stat.value}
+              subtitle={stat.subtitle}
+              icon={stat.icon}
+              variant={stat.variant}
+            />
+          ))}
         </div>
 
         {/* Tabs */}
@@ -711,10 +691,10 @@ export default function ActivitiesPage() {
                   <button
                     key={tab.id}
                     onClick={() => setSelectedTab(tab.id)}
-                    className={`px-6 py-4 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                    className={`px-6 py-4 font-medium text-sm border-b-2 whitespace-nowrap ${
                       selectedTab === tab.id
                         ? "border-qsights-blue text-qsights-blue"
-                        : "border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300"
+                        : "border-transparent text-gray-600"
                     }`}
                   >
                     {tab.label}
@@ -801,7 +781,20 @@ export default function ActivitiesPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {currentActivities.map((activity) => (
+                  {currentActivities.length === 0 && loading ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-qsights-blue mx-auto mb-2"></div>
+                        Loading...
+                      </td>
+                    </tr>
+                  ) : currentActivities.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                        No events found
+                      </td>
+                    </tr>
+                  ) : currentActivities.map((activity) => (
                     <tr
                       key={activity.id}
                       className="hover:bg-gray-50 transition-colors"

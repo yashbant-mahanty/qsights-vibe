@@ -213,7 +213,7 @@ export default function EvaluationNewPage() {
   useEffect(() => {
     const fetchOrgId = async () => {
       try {
-        const response = await fetchWithAuth('/api/auth/me');
+        const response = await fetchWithAuth('/auth/me');
         if (response.success && response.user) {
           setOrganizationId(response.user.organization_id);
         }

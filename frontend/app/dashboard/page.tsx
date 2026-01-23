@@ -66,7 +66,8 @@ export default function DashboardPage() {
       }
     }
     checkUserRole();
-  }, [router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
