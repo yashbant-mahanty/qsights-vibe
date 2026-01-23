@@ -860,10 +860,10 @@ export default function TakeActivityPage() {
       const registrationFlow = activityData.data.registration_flow || 'pre_submission';
       setIsPostSubmissionFlow(registrationFlow === 'post_submission');
       
-      // For post-submission flow, skip registration form initially
-      // This applies to ALL modes: regular, preview, and anonymous
+      // For post-submission flow, skip registration form initially and show questionnaire first
+      // This applies to ALL modes: regular, preview, anonymous, and token-based access
       // BUT: Don't reset state if user has already submitted (prevents infinite loop after submission)
-      if (registrationFlow === 'post_submission' && !token && !submitted) {
+      if (registrationFlow === 'post_submission' && !submitted) {
         setShowForm(false);
         setStarted(true);
         
