@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,7 @@ interface Activity {
 export default function PostSubmissionRegistrationPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const activityId = params?.id as string;
 
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -46,6 +47,8 @@ export default function PostSubmissionRegistrationPage() {
   const [participantData, setParticipantData] = useState<Record<string, any>>({});
   const [tempSessionToken, setTempSessionToken] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState("2.0");
+  const [isPreview, setIsPreview] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   useEffect(() => {
     loadActivity();
@@ -55,6 +58,32 @@ export default function PostSubmissionRegistrationPage() {
     try {
       setLoading(true);
 
+      // Check if preview mode from URL or localStorage (take page stores as temp_preview_)
+      const previewParam = searchParams?.get('preview');
+      const storedPreview = localStorage.getItem(`temp_preview_${activityId}`);
+      const isPreviewMode = previewParam === 'true' || storedPreview === 'true';
+      setIsPreview(isPreviewMode);
+      
+      // Check if anonymous mode from URL or localStorage (take page stores as temp_anonymous_)
+      const anonymousParam = searchParams?.get('anonymous');
+      const storedAnonymous = localStorage.getItem(`temp_anonymous_${activityId}`);
+      const isAnonymousMode = anonymousParam === 'true' || storedAnonymous === 'true';
+      setIsAnonymous(isAnonymousMode);
+      
+      console.log('[REGISTER] Preview mode:', isPreviewMode, 'Anonymous mode:', isAnonymousMode);
+
+      // For anonymous mode, pre-fill with anonymous values
+      if (isAnonymousMode) {
+        setParticipantData({
+          name: 'Anonymous',
+          full_name: 'Anonymous',
+          email: 'anonymous@anonymous.com',
+          email_address: 'anonymous@anonymous.com',
+          phone: 'N/A',
+          organization: 'Anonymous',
+        });
+      }
+
       // Fetch activity data
       const activityResponse = await fetch(`/api/public/activities/${activityId}`);
       if (!activityResponse.ok) {
@@ -63,9 +92,9 @@ export default function PostSubmissionRegistrationPage() {
       const activityData = await activityResponse.json();
       setActivity(activityData.data);
 
-      // Get temporary session token from localStorage
+      // Get temporary session token from localStorage (skip check for preview)
       const storedToken = localStorage.getItem(`temp_session_${activityId}`);
-      if (!storedToken) {
+      if (!storedToken && !isPreviewMode) {
         // No temporary session found - redirect back to take page
         toast({
           title: "Error",
@@ -159,6 +188,101 @@ export default function PostSubmissionRegistrationPage() {
   };
 
   const handleSubmit = async () => {
+    console.log('[REGISTER] handleSubmit called, isPreview:', isPreview, 'isAnonymous:', isAnonymous);
+    
+    // For preview mode, skip validation and just redirect to thank you
+    if (isPreview) {
+      console.log('[REGISTER] Preview mode - skipping validation, redirecting to thank you');
+      // Clean up preview data
+      localStorage.removeItem(`temp_session_${activityId}`);
+      localStorage.removeItem(`temp_responses_${activityId}`);
+      localStorage.removeItem(`temp_preview_${activityId}`);
+      router.push(`/activities/take/${activityId}?submitted=true&preview=true`);
+      return;
+    }
+    
+    // For anonymous mode, skip validation and submit with anonymous participant
+    if (isAnonymous) {
+      console.log('[REGISTER] Anonymous mode - skipping validation, submitting anonymously');
+      try {
+        setSubmitting(true);
+        
+        // Get stored responses
+        const storedResponses = localStorage.getItem(`temp_responses_${activityId}`);
+        const responses = storedResponses ? JSON.parse(storedResponses) : {};
+        
+        // Step 1: Register as anonymous participant first (to get participant_id)
+        const anonymousName = `Anonymous_${Date.now()}`;
+        const anonymousEmail = `anonymous_${Date.now()}@anonymous.local`;
+        
+        const registerResponse = await fetch(`/api/public/activities/${activityId}/register`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify({
+            name: anonymousName,
+            email: anonymousEmail,
+            additional_data: {},
+            is_anonymous: true,
+          }),
+        });
+
+        if (!registerResponse.ok) {
+          const errorData = await registerResponse.json().catch(() => null);
+          console.error('[REGISTER] Anonymous registration failed:', errorData);
+          throw new Error("Failed to register anonymous participant");
+        }
+
+        const registerData = await registerResponse.json();
+        const participantId = registerData.data.participant_id;
+        console.log('[REGISTER] Anonymous participant created:', participantId);
+
+        // Step 2: Submit responses with participant_id
+        const submitPayload = {
+          participant_id: participantId,
+          answers: responses,
+          started_at: new Date().toISOString(),
+          is_anonymous: true,
+          is_preview: false,
+        };
+
+        const submitResponse = await fetch(`/api/public/activities/${activityId}/submit`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify(submitPayload),
+        });
+
+        if (!submitResponse.ok) {
+          const errorData = await submitResponse.json().catch(() => null);
+          console.error('[REGISTER] Anonymous submit failed:', errorData);
+          throw new Error("Failed to submit response");
+        }
+
+        // Clean up anonymous data
+        localStorage.removeItem(`temp_session_${activityId}`);
+        localStorage.removeItem(`temp_responses_${activityId}`);
+        localStorage.removeItem(`temp_anonymous_${activityId}`);
+        
+        // Redirect to thank you page
+        router.push(`/activities/take/${activityId}?submitted=true`);
+        return;
+      } catch (err) {
+        console.error('[REGISTER] Anonymous submission error:', err);
+        toast({
+          title: "Error",
+          description: "Failed to submit. Please try again.",
+          variant: "error"
+        });
+        setSubmitting(false);
+        return;
+      }
+    }
+    
     if (!tempSessionToken) {
       toast({
         title: "Error",
@@ -168,7 +292,7 @@ export default function PostSubmissionRegistrationPage() {
       return;
     }
 
-    // Validate required fields
+    // Validate required fields (only for non-preview/non-anonymous mode)
     const formFields = activity?.registration_form_fields || [
       { id: "name", name: "name", type: "text", label: "Full Name", required: true, order: 0, isMandatory: true },
       { id: "email", name: "email", type: "email", label: "Communication Email ID", required: true, order: 1, isMandatory: true },
@@ -343,26 +467,37 @@ export default function PostSubmissionRegistrationPage() {
               </div>
             </div>
 
-            {/* Form Fields */}
-            <div className="space-y-4">
-              {formFields
-                .sort((a, b) => a.order - b.order)
-                .map((field, idx) => {
-                  // Use the same field key logic as pre-registration
-                  const fieldKey = field.id || (field as any).name || `field-${idx}`;
-                  return (
-                    <div key={fieldKey} className="space-y-2">
-                      <Label htmlFor={fieldKey} className="text-sm font-medium text-gray-700">
-                        {field.label}
-                        {(field.required || field.isMandatory) && (
-                          <span className="text-red-500 ml-1">*</span>
-                        )}
-                      </Label>
-                      {renderFormField(field)}
-                    </div>
-                  );
-                })}
-            </div>
+            {/* Form Fields - Hidden for Anonymous mode */}
+            {isAnonymous ? (
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-600 text-center">
+                  You are submitting as <span className="font-semibold">Anonymous</span>
+                </p>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Your identity will not be recorded with this submission.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {formFields
+                  .sort((a, b) => a.order - b.order)
+                  .map((field, idx) => {
+                    // Use the same field key logic as pre-registration
+                    const fieldKey = field.id || (field as any).name || `field-${idx}`;
+                    return (
+                      <div key={fieldKey} className="space-y-2">
+                        <Label htmlFor={fieldKey} className="text-sm font-medium text-gray-700">
+                          {field.label}
+                          {(field.required || field.isMandatory) && (
+                            <span className="text-red-500 ml-1">*</span>
+                          )}
+                        </Label>
+                        {renderFormField(field)}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
 
             {/* Submit Button */}
             <button
@@ -376,6 +511,10 @@ export default function PostSubmissionRegistrationPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Submitting...
                 </>
+              ) : isAnonymous ? (
+                'Submit Anonymously'
+              ) : isPreview ? (
+                'Continue (Preview Mode)'
               ) : (
                 'Complete Registration'
               )}

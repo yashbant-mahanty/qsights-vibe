@@ -858,6 +858,7 @@ export default function TakeActivityPage() {
 
       // Check if this activity uses post-submission registration flow
       const registrationFlow = activityData.data.registration_flow || 'pre_submission';
+      console.log('[LOAD] Registration flow:', registrationFlow, 'Activity data:', activityData.data.registration_flow);
       setIsPostSubmissionFlow(registrationFlow === 'post_submission');
       
       // For post-submission flow, skip registration form initially and show questionnaire first
@@ -1332,9 +1333,18 @@ export default function TakeActivityPage() {
       // Use local variable to track participantId (state updates are async)
       let currentParticipantId = participantId;
 
+      console.log('[SUBMIT] Starting submission...', {
+        isPostSubmissionFlow,
+        currentParticipantId,
+        isPreview,
+        isAnonymous,
+        tempSessionToken
+      });
+
       // POST-SUBMISSION FLOW: ALWAYS show registration page after questionnaire
       // This applies to ALL modes: regular, preview, anonymous, registration links
       if (isPostSubmissionFlow) {
+        console.log('[SUBMIT] POST-SUBMISSION FLOW - Redirecting to registration page');
         try {
           // Save responses to temporary storage
           const tempResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions`, {
@@ -1350,11 +1360,16 @@ export default function TakeActivityPage() {
             }),
           });
 
+          console.log('[SUBMIT] Temp submission response:', tempResponse.status, tempResponse.ok);
+
           if (!tempResponse.ok) {
+            const errorData = await tempResponse.json().catch(() => ({}));
+            console.error('[SUBMIT] Temp submission failed:', errorData);
             throw new Error("Failed to save temporary submission");
           }
 
           const tempData = await tempResponse.json();
+          console.log('[SUBMIT] Temp submission saved:', tempData);
           
           // Store in localStorage
           localStorage.setItem(`temp_session_${activityId}`, tempData.data.session_token);
@@ -1369,12 +1384,13 @@ export default function TakeActivityPage() {
           }
           
           // Redirect to registration page
+          console.log('[SUBMIT] Redirecting to registration page...');
           router.push(`/activities/register/${activityId}`);
           
           setSubmitting(false);
           return;
         } catch (err) {
-          console.error("Failed to save temporary submission:", err);
+          console.error("[SUBMIT] Failed to save temporary submission:", err);
           toast({
             title: "Error",
             description: "Failed to save your responses. Please try again.",
@@ -1384,6 +1400,8 @@ export default function TakeActivityPage() {
           return;
         }
       }
+
+      console.log('[SUBMIT] NOT post-submission flow, proceeding with normal submission');
 
       if (!currentParticipantId) {
         throw new Error("Participant not registered");
