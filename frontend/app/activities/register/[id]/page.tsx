@@ -37,6 +37,19 @@ interface Activity {
     thankYouBackgroundColor?: string;
     thankYouGradientFrom?: string;
     thankYouGradientTo?: string;
+    // Post Session Registration config
+    postSessionRegTitle?: string;
+    postSessionRegSubtitle?: string;
+    postSessionRegDescription?: string;
+    postSessionRegButtonText?: string;
+    postSessionRegBackgroundColor?: string;
+    postSessionRegBackgroundImageUrl?: string;
+    postSessionRegBackgroundOpacity?: number;
+    postSessionRegFormBackgroundColor?: string;
+    postSessionRegFormBorderColor?: string;
+    postSessionRegButtonColor?: string;
+    postSessionRegTitleColor?: string;
+    postSessionRegDescriptionColor?: string;
   };
 }
 
@@ -502,15 +515,40 @@ export default function PostSubmissionRegistrationPage() {
     { id: "email", name: "email", type: "email" as const, label: "Communication Email ID", required: true, order: 1, isMandatory: true },
   ];
 
+  const backgroundStyle = {
+    backgroundColor: activity.landing_config?.postSessionRegBackgroundColor || "#F3F4F6",
+    ...(activity.landing_config?.postSessionRegBackgroundImageUrl && {
+      backgroundImage: `url(${activity.landing_config.postSessionRegBackgroundImageUrl})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      position: 'relative' as const,
+    }),
+  };
+
   return (
     <div 
       className="min-h-screen flex flex-col items-center justify-center p-4"
-      style={{
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-      }}
+      style={backgroundStyle}
     >
-      <div className="w-full max-w-md">
-        <Card className="shadow-2xl border-0 overflow-hidden backdrop-blur-sm bg-white/95">
+      {/* Background overlay for image opacity */}
+      {activity.landing_config?.postSessionRegBackgroundImageUrl && (
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundColor: activity.landing_config?.postSessionRegBackgroundColor || "#F3F4F6",
+            opacity: (100 - (activity.landing_config?.postSessionRegBackgroundOpacity || 100)) / 100,
+          }}
+        />
+      )}
+      <div className="w-full max-w-md relative z-10">
+        <Card 
+          className="shadow-2xl overflow-hidden backdrop-blur-sm"
+          style={{
+            backgroundColor: activity.landing_config?.postSessionRegFormBackgroundColor || "#FFFFFF",
+            borderColor: activity.landing_config?.postSessionRegFormBorderColor || "#E5E7EB",
+            borderWidth: '1px',
+          }}
+        >
           <CardHeader className="p-6 relative z-10">
             {activity.landing_config?.loginBoxContentType === 'logo' && activity.landing_config?.loginBoxLogoUrl ? (
               <div className="flex justify-center mb-3">
@@ -531,8 +569,32 @@ export default function PostSubmissionRegistrationPage() {
               </>
             ) : (
               <>
-                <CardTitle className="text-xl font-bold text-center">Complete Your Registration</CardTitle>
-                <p className="text-sm text-gray-600 mt-2 text-center">Please provide your details to finalize your submission</p>
+                <CardTitle 
+                  className="text-xl font-bold text-center"
+                  style={{ color: activity.landing_config?.postSessionRegTitleColor || "#1F2937" }}
+                >
+                  {activity.landing_config?.postSessionRegTitle || "Complete Your Registration"}
+                </CardTitle>
+                {(activity.landing_config?.postSessionRegSubtitle || activity.landing_config?.postSessionRegDescription) && (
+                  <div className="mt-2 text-center space-y-1">
+                    {activity.landing_config?.postSessionRegSubtitle && (
+                      <p 
+                        className="text-base font-medium"
+                        style={{ color: activity.landing_config?.postSessionRegDescriptionColor || "#6B7280" }}
+                      >
+                        {activity.landing_config.postSessionRegSubtitle}
+                      </p>
+                    )}
+                    {activity.landing_config?.postSessionRegDescription && (
+                      <p 
+                        className="text-sm"
+                        style={{ color: activity.landing_config?.postSessionRegDescriptionColor || "#6B7280" }}
+                      >
+                        {activity.landing_config.postSessionRegDescription}
+                      </p>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </CardHeader>
@@ -584,7 +646,7 @@ export default function PostSubmissionRegistrationPage() {
               onClick={handleSubmit}
               disabled={submitting}
               className="w-full px-4 py-3 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: activity.landing_config?.loginButtonColor || "#3B82F6" }}
+              style={{ backgroundColor: activity.landing_config?.postSessionRegButtonColor || activity.landing_config?.loginButtonColor || "#3B82F6" }}
             >
               {submitting ? (
                 <>
@@ -596,7 +658,7 @@ export default function PostSubmissionRegistrationPage() {
               ) : isPreview ? (
                 'Continue (Preview Mode)'
               ) : (
-                'Complete Registration'
+                activity.landing_config?.postSessionRegButtonText || 'Complete Registration'
               )}
             </button>
           </CardContent>
