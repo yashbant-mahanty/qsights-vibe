@@ -1332,16 +1332,16 @@ export default function TakeActivityPage() {
       // Use local variable to track participantId (state updates are async)
       let currentParticipantId = participantId;
 
-      // POST-SUBMISSION FLOW: Different behavior based on mode
-      if (isPostSubmissionFlow && !currentParticipantId) {
-        // For PREVIEW mode: Create dummy participant and continue to submission
-        if (isPreview) {
+      // POST-SUBMISSION FLOW: Handle different scenarios
+      if (isPostSubmissionFlow) {
+        // For PREVIEW mode: Skip registration, use dummy participant
+        if (isPreview && !currentParticipantId) {
           const dummyParticipantId = 'preview-' + Date.now();
           setParticipantId(dummyParticipantId);
           currentParticipantId = dummyParticipantId; // Use local variable
         }
-        // For ANONYMOUS mode: Create anonymous participant and continue to submission
-        else if (isAnonymous) {
+        // For ANONYMOUS mode: Auto-register anonymous participant
+        else if (isAnonymous && !currentParticipantId) {
           try {
             const anonymousName = `Anonymous_${Date.now()}`;
             const anonymousEmail = `anonymous_${Date.now()}@anonymous.local`;
@@ -1379,8 +1379,8 @@ export default function TakeActivityPage() {
             return;
           }
         }
-        // For REGULAR users: Save to temporary storage and redirect to registration
-        else {
+        // For ALL OTHER cases (including registration links): Save to temporary storage and show registration
+        else if (!isPreview && !isAnonymous) {
           try {
             // Save responses to temporary storage
             const tempResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions`, {
