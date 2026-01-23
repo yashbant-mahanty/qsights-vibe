@@ -1329,13 +1329,16 @@ export default function TakeActivityPage() {
 
       setSubmitting(true);
 
+      // Use local variable to track participantId (state updates are async)
+      let currentParticipantId = participantId;
+
       // POST-SUBMISSION FLOW: Different behavior based on mode
-      if (isPostSubmissionFlow && !participantId) {
+      if (isPostSubmissionFlow && !currentParticipantId) {
         // For PREVIEW mode: Create dummy participant and continue to submission
         if (isPreview) {
           const dummyParticipantId = 'preview-' + Date.now();
           setParticipantId(dummyParticipantId);
-          // Continue to normal preview submission below
+          currentParticipantId = dummyParticipantId; // Use local variable
         }
         // For ANONYMOUS mode: Create anonymous participant and continue to submission
         else if (isAnonymous) {
@@ -1364,7 +1367,7 @@ export default function TakeActivityPage() {
             const registerData = await registerResponse.json();
             const newParticipantId = registerData.data.participant_id;
             setParticipantId(newParticipantId);
-            // Continue to normal submission below
+            currentParticipantId = newParticipantId; // Use local variable
           } catch (err) {
             console.error("Failed to register anonymous participant:", err);
             toast({
@@ -1418,9 +1421,6 @@ export default function TakeActivityPage() {
           }
         }
       }
-
-      // Get participantId (either existing or just created above)
-      const currentParticipantId = participantId;
 
       if (!currentParticipantId) {
         throw new Error("Participant not registered");
