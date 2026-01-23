@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -441,7 +441,8 @@ export default function ActivitiesPage() {
   const authenticatedEventParticipants = activities.reduce((sum, a) => sum + (a.authenticated_responses_count || 0), 0);
   const anonymousEventParticipants = activities.reduce((sum, a) => sum + (a.guest_responses_count || 0), 0);
 
-  const stats = [
+  // Memoize stats to prevent recalculation on every render
+  const stats = useMemo(() => [
     {
       title: "Total Events",
       value: totalActivities.toString(),
@@ -470,7 +471,7 @@ export default function ActivitiesPage() {
       icon: TrendingUp,
       variant: 'purple' as const,
     },
-  ];
+  ], [totalActivities, activeActivities, completedActivities, totalEventParticipants, authenticatedEventParticipants, anonymousEventParticipants]);
 
   // Mock data removed - using only real API data
 
@@ -671,10 +672,24 @@ export default function ActivitiesPage() {
           </div>
         </div>
 
-        {/* Stats Grid */}
-        {!loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {stats.map((stat, index) => (
+        {/* Stats Grid - Always render to prevent layout shift */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {loading ? (
+            // Skeleton loaders
+            Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="h-4 bg-gray-300 rounded w-20 mb-3"></div>
+                    <div className="h-8 bg-gray-300 rounded w-16 mb-2"></div>
+                    <div className="h-3 bg-gray-300 rounded w-24"></div>
+                  </div>
+                  <div className="w-12 h-12 bg-gray-300 rounded-full"></div>
+                </div>
+              </div>
+            ))
+          ) : (
+            stats.map((stat, index) => (
               <GradientStatCard
                 key={index}
                 title={stat.title}
@@ -683,9 +698,9 @@ export default function ActivitiesPage() {
                 icon={stat.icon}
                 variant={stat.variant}
               />
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
 
         {/* Tabs */}
         <Card>
