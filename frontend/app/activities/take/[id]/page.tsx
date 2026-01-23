@@ -1332,93 +1332,56 @@ export default function TakeActivityPage() {
       // Use local variable to track participantId (state updates are async)
       let currentParticipantId = participantId;
 
-      // POST-SUBMISSION FLOW: Handle different scenarios
+      // POST-SUBMISSION FLOW: ALWAYS show registration page after questionnaire
+      // This applies to ALL modes: regular, preview, anonymous, registration links
       if (isPostSubmissionFlow) {
-        // For PREVIEW mode: Skip registration, use dummy participant
-        if (isPreview && !currentParticipantId) {
-          const dummyParticipantId = 'preview-' + Date.now();
-          setParticipantId(dummyParticipantId);
-          currentParticipantId = dummyParticipantId; // Use local variable
-        }
-        // For ANONYMOUS mode: Auto-register anonymous participant
-        else if (isAnonymous && !currentParticipantId) {
-          try {
-            const anonymousName = `Anonymous_${Date.now()}`;
-            const anonymousEmail = `anonymous_${Date.now()}@anonymous.local`;
-            
-            const registerResponse = await fetch(`/api/public/activities/${activityId}/register`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-              },
-              body: JSON.stringify({
-                name: anonymousName,
-                email: anonymousEmail,
-                additional_data: {},
-                is_anonymous: true,
-              }),
-            });
+        try {
+          // Save responses to temporary storage
+          const tempResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              answers: responses,
+              session_token: tempSessionToken,
+              is_preview: isPreview,
+              is_anonymous: isAnonymous,
+            }),
+          });
 
-            if (!registerResponse.ok) {
-              throw new Error("Failed to register anonymous participant");
-            }
-
-            const registerData = await registerResponse.json();
-            const newParticipantId = registerData.data.participant_id;
-            setParticipantId(newParticipantId);
-            currentParticipantId = newParticipantId; // Use local variable
-          } catch (err) {
-            console.error("Failed to register anonymous participant:", err);
-            toast({
-              title: "Error",
-              description: "Failed to register. Please try again.",
-              variant: "error"
-            });
-            setSubmitting(false);
-            return;
+          if (!tempResponse.ok) {
+            throw new Error("Failed to save temporary submission");
           }
-        }
-        // For ALL OTHER cases (including registration links): Save to temporary storage and show registration
-        else if (!isPreview && !isAnonymous) {
-          try {
-            // Save responses to temporary storage
-            const tempResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                answers: responses,
-                session_token: tempSessionToken,
-              }),
-            });
 
-            if (!tempResponse.ok) {
-              throw new Error("Failed to save temporary submission");
-            }
-
-            const tempData = await tempResponse.json();
-            
-            // Store in localStorage
-            localStorage.setItem(`temp_session_${activityId}`, tempData.data.session_token);
-            localStorage.setItem(`temp_responses_${activityId}`, JSON.stringify(responses));
-            
-            // Redirect to registration page
-            router.push(`/activities/register/${activityId}`);
-            
-            setSubmitting(false);
-            return;
-          } catch (err) {
-            console.error("Failed to save temporary submission:", err);
-            toast({
-              title: "Error",
-              description: "Failed to save your responses. Please try again.",
-              variant: "error"
-            });
-            setSubmitting(false);
-            return;
+          const tempData = await tempResponse.json();
+          
+          // Store in localStorage
+          localStorage.setItem(`temp_session_${activityId}`, tempData.data.session_token);
+          localStorage.setItem(`temp_responses_${activityId}`, JSON.stringify(responses));
+          
+          // Store mode flags for registration page
+          if (isPreview) {
+            localStorage.setItem(`temp_preview_${activityId}`, 'true');
           }
+          if (isAnonymous) {
+            localStorage.setItem(`temp_anonymous_${activityId}`, 'true');
+          }
+          
+          // Redirect to registration page
+          router.push(`/activities/register/${activityId}`);
+          
+          setSubmitting(false);
+          return;
+        } catch (err) {
+          console.error("Failed to save temporary submission:", err);
+          toast({
+            title: "Error",
+            description: "Failed to save your responses. Please try again.",
+            variant: "error"
+          });
+          setSubmitting(false);
+          return;
         }
       }
 
