@@ -395,12 +395,10 @@ export default function ActivityResultsPage() {
   // Export to PDF
   async function exportToPDF() {
     try {
-      // Dynamically import jspdf (client-side only)
-      // @ts-ignore - jspdf types may not be available
-      const jsPDFModule = await import('jspdf');
-      const jsPDF = jsPDFModule.default;
-      // @ts-ignore - jspdf-autotable extends jsPDF prototype
-      await import('jspdf-autotable');
+      // Dynamically import jspdf and jspdf-autotable (client-side only)
+      const jsPDF = (await import('jspdf')).default;
+      // Import autotable - it auto-registers on jsPDF prototype when imported
+      const autoTable = (await import('jspdf-autotable')).default;
       
       // Validate that we have data to export
       if (!responses || responses.length === 0) {
