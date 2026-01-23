@@ -533,14 +533,15 @@ export default function TakeActivityPage() {
       return;
     }
     
-    // If there's a token, DON'T restore session - force fresh start with form
+    // If there's a token, DON'T restore session - wait for token validation to decide what to show
     if (token) {
-      console.log('Token present - clearing any existing session and showing form');
+      console.log('Token present - clearing any existing session, waiting for token validation');
       localStorage.removeItem(`activity_${activityId}_session`);
       localStorage.removeItem(`activity_${activityId}_start_time`);
       sessionStorage.removeItem(`activity_${activityId}_session`);
       sessionStorage.removeItem(`activity_${activityId}_start_time`);
-      setShowForm(true);
+      // DON'T set showForm here - let token validation decide
+      // setShowForm(true);
       setStarted(false);
       setSubmitted(false);
       return;
@@ -696,12 +697,12 @@ export default function TakeActivityPage() {
     }
   }, [submittedParam]);
 
-  // Validate token if present - only once when both token and activity are available
+  // Validate token if present - start validation early (don't wait for activity)
   useEffect(() => {
-    if (token && !tokenValidated && !tokenValidating && activity) {
+    if (token && !tokenValidated && !tokenValidating) {
       validateAccessToken();
     }
-  }, [token, activity]);
+  }, [token]);
 
   async function validateAccessToken() {
     // Prevent duplicate calls
@@ -735,8 +736,8 @@ export default function TakeActivityPage() {
         // For invalid/expired tokens, just show the normal registration form
         // No error message - treat it like a regular registration link
         console.log('Token invalid or expired - showing normal registration form');
-        setTokenError(null); // Clear any error
-        setTokenValidated(false); // Mark as not validated
+        setTokenError('invalid'); // Mark as processed (but not blocking)
+        setTokenValidated(true); // Mark validation as complete (to exit loading state)
         setTokenValidating(false);
         setShowForm(true);
         
@@ -1381,6 +1382,17 @@ export default function TakeActivityPage() {
           }
           if (isAnonymous) {
             localStorage.setItem(`temp_anonymous_${activityId}`, 'true');
+          }
+          
+          // Store participant data from token for registration page (if token was validated)
+          if (tokenValidated && participantData && Object.keys(participantData).length > 0) {
+            localStorage.setItem(`temp_participant_${activityId}`, JSON.stringify(participantData));
+            console.log('[SUBMIT] Stored participant data for registration:', participantData);
+          }
+          
+          // Store access token for registration page to check completion status
+          if (token) {
+            localStorage.setItem(`temp_token_${activityId}`, token);
           }
           
           // Redirect to registration page
@@ -2476,8 +2488,11 @@ export default function TakeActivityPage() {
     }
   };
 
-  // Wait for both activity loading and token decryption
-  if (loading || !tokenDecrypted) {
+  // Wait for both activity loading, token decryption, AND token validation (if token exists)
+  // Key fix: If token exists but hasn't been validated yet, show loading
+  const tokenNeedsValidation = token && !tokenValidated && !tokenError;
+  
+  if (loading || !tokenDecrypted || tokenNeedsValidation) {
     return (
       <div 
         className="flex items-center justify-center min-h-screen"
@@ -2485,7 +2500,9 @@ export default function TakeActivityPage() {
       >
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-qsights-blue mx-auto" />
-          <p className="mt-2 text-sm text-gray-500">Loading activity...</p>
+          <p className="mt-2 text-sm text-gray-500">
+            {tokenNeedsValidation ? "Validating your access..." : "Loading activity..."}
+          </p>
         </div>
       </div>
     );

@@ -32,6 +32,11 @@ interface Activity {
     loginBoxCustomSubtitle?: string;
     loginButtonColor?: string;
     footerTextColor?: string;
+    // Thank you page background settings (reused for registration)
+    thankYouBackgroundStyle?: string;
+    thankYouBackgroundColor?: string;
+    thankYouGradientFrom?: string;
+    thankYouGradientTo?: string;
   };
 }
 
@@ -49,6 +54,8 @@ export default function PostSubmissionRegistrationPage() {
   const [appVersion, setAppVersion] = useState("2.0");
   const [isPreview, setIsPreview] = useState(false);
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false);
+  const [hasTokenData, setHasTokenData] = useState(false);
 
   useEffect(() => {
     loadActivity();
@@ -72,6 +79,45 @@ export default function PostSubmissionRegistrationPage() {
       
       console.log('[REGISTER] Preview mode:', isPreviewMode, 'Anonymous mode:', isAnonymousMode);
 
+      // Check for stored access token (from triggered email links)
+      const storedAccessToken = localStorage.getItem(`temp_token_${activityId}`);
+      
+      // If we have an access token, validate it and check completion status
+      if (storedAccessToken && !isPreviewMode && !isAnonymousMode) {
+        console.log('[REGISTER] Found access token, validating...');
+        try {
+          const tokenResponse = await fetch(`/api/public/access-tokens/${storedAccessToken}/validate`);
+          const tokenData = await tokenResponse.json();
+          
+          console.log('[REGISTER] Token validation response:', tokenData);
+          
+          // If participant already completed, redirect to thank you page
+          if (tokenData.already_completed) {
+            console.log('[REGISTER] Participant already completed - redirecting to thank you');
+            setAlreadyCompleted(true);
+            
+            // Clean up localStorage
+            localStorage.removeItem(`temp_session_${activityId}`);
+            localStorage.removeItem(`temp_responses_${activityId}`);
+            localStorage.removeItem(`temp_participant_${activityId}`);
+            localStorage.removeItem(`temp_token_${activityId}`);
+            localStorage.removeItem(`temp_preview_${activityId}`);
+            localStorage.removeItem(`temp_anonymous_${activityId}`);
+            
+            toast({
+              title: "Already Completed",
+              description: "You have already submitted this activity. Thank you!",
+              variant: "success"
+            });
+            
+            router.push(`/activities/take/${activityId}?submitted=true`);
+            return;
+          }
+        } catch (tokenErr) {
+          console.log('[REGISTER] Token validation failed, continuing with form:', tokenErr);
+        }
+      }
+
       // For anonymous mode, pre-fill with anonymous values
       if (isAnonymousMode) {
         setParticipantData({
@@ -82,6 +128,19 @@ export default function PostSubmissionRegistrationPage() {
           phone: 'N/A',
           organization: 'Anonymous',
         });
+      } else {
+        // Check for stored participant data from token (pre-fill registration form)
+        const storedParticipantData = localStorage.getItem(`temp_participant_${activityId}`);
+        if (storedParticipantData) {
+          try {
+            const parsedData = JSON.parse(storedParticipantData);
+            console.log('[REGISTER] Pre-filling form with token data:', parsedData);
+            setParticipantData(parsedData);
+            setHasTokenData(true);
+          } catch (parseErr) {
+            console.log('[REGISTER] Failed to parse participant data:', parseErr);
+          }
+        }
       }
 
       // Fetch activity data
@@ -193,10 +252,13 @@ export default function PostSubmissionRegistrationPage() {
     // For preview mode, skip validation and just redirect to thank you
     if (isPreview) {
       console.log('[REGISTER] Preview mode - skipping validation, redirecting to thank you');
-      // Clean up preview data
+      // Clean up all preview data
       localStorage.removeItem(`temp_session_${activityId}`);
       localStorage.removeItem(`temp_responses_${activityId}`);
       localStorage.removeItem(`temp_preview_${activityId}`);
+      localStorage.removeItem(`temp_participant_${activityId}`);
+      localStorage.removeItem(`temp_token_${activityId}`);
+      localStorage.removeItem(`temp_anonymous_${activityId}`);
       router.push(`/activities/take/${activityId}?submitted=true&preview=true`);
       return;
     }
@@ -263,10 +325,13 @@ export default function PostSubmissionRegistrationPage() {
           throw new Error("Failed to submit response");
         }
 
-        // Clean up anonymous data
+        // Clean up all anonymous data
         localStorage.removeItem(`temp_session_${activityId}`);
         localStorage.removeItem(`temp_responses_${activityId}`);
         localStorage.removeItem(`temp_anonymous_${activityId}`);
+        localStorage.removeItem(`temp_participant_${activityId}`);
+        localStorage.removeItem(`temp_token_${activityId}`);
+        localStorage.removeItem(`temp_preview_${activityId}`);
         
         // Redirect to thank you page
         router.push(`/activities/take/${activityId}?submitted=true`);
@@ -380,9 +445,26 @@ export default function PostSubmissionRegistrationPage() {
         throw new Error("Failed to submit response");
       }
 
-      // Clean up temporary data
+      // Mark access token as used (if token-based access) to prevent duplicate submissions
+      const storedAccessToken = localStorage.getItem(`temp_token_${activityId}`);
+      if (storedAccessToken) {
+        try {
+          await fetch(`/api/public/access-tokens/${storedAccessToken}/mark-used`, {
+            method: 'POST',
+          });
+          console.log('[REGISTER] Access token marked as used');
+        } catch (err) {
+          console.error('[REGISTER] Failed to mark token as used:', err);
+        }
+      }
+
+      // Clean up all temporary data
       localStorage.removeItem(`temp_session_${activityId}`);
       localStorage.removeItem(`temp_responses_${activityId}`);
+      localStorage.removeItem(`temp_participant_${activityId}`);
+      localStorage.removeItem(`temp_token_${activityId}`);
+      localStorage.removeItem(`temp_preview_${activityId}`);
+      localStorage.removeItem(`temp_anonymous_${activityId}`);
 
       // Success! Redirect to thank you page with submitted flag
       router.push(`/activities/take/${activityId}?submitted=true`);
@@ -424,9 +506,7 @@ export default function PostSubmissionRegistrationPage() {
     <div 
       className="min-h-screen flex flex-col items-center justify-center p-4"
       style={{
-        background: activity.landing_config?.loginBoxContentType === 'logo' || activity.landing_config?.loginBoxContentType === 'text'
-          ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-          : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
       }}
     >
       <div className="w-full max-w-md">
