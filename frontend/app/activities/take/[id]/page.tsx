@@ -34,6 +34,7 @@ import {
   LikertVisual,
   NPSScale,
   StarRating,
+  DragDropBucket,
   DEFAULT_SETTINGS,
 } from "@/components/questions";
 import { createAnswerPayload } from "@/lib/valueDisplayUtils";
@@ -2491,6 +2492,29 @@ export default function TakeActivityPage() {
               onChange={(value) => handleResponseChange(questionId, value)}
               settings={question.settings || DEFAULT_SETTINGS.star_rating}
               disabled={isSubmitted}
+            />
+          </div>
+        );
+
+      case "drag_and_drop":
+        const dndQuestion = {
+          type: 'drag_and_drop' as const,
+          question: question.title || question.question,
+          settings: question.settings || DEFAULT_SETTINGS.drag_and_drop,
+          required: question.is_required,
+          correctAnswers: question.correctAnswers,
+          points: question.points
+        };
+        return (
+          <div className="py-4">
+            <DragDropBucket
+              question={dndQuestion}
+              value={responses[questionId]}
+              onChange={(response) => handleResponseChange(questionId, response)}
+              disabled={isSubmitted}
+              showResults={isSubmitted && questionnaire?.type === 'assessment'}
+              isAssessment={questionnaire?.type === 'assessment'}
+              language={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
             />
           </div>
         );

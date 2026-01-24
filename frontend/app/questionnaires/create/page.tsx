@@ -44,6 +44,7 @@ import {
   Smile,
   Heart,
   Image as ImageIcon,
+  MoveVertical,
 } from "lucide-react";
 import {
   SliderScale,
@@ -223,6 +224,7 @@ export default function QuestionnaireBuilderPage() {
     { id: "likert_visual", label: "Likert Visual", icon: Smile, color: "text-amber-600" },
     { id: "nps", label: "NPS Scale", icon: ThumbsUp, color: "text-cyan-600" },
     { id: "star_rating", label: "Star Rating", icon: Heart, color: "text-rose-600" },
+    { id: "drag_and_drop", label: "Drag & Drop Bucket", icon: MoveVertical, color: "text-purple-600" },
   ];
 
   // Feedback-specific predefined question templates
@@ -559,6 +561,7 @@ export default function QuestionnaireBuilderPage() {
         ...(type === "likert_visual" ? { settings: { ...DEFAULT_SETTINGS.likert_visual } } : {}),
         ...(type === "nps" ? { settings: { ...DEFAULT_SETTINGS.nps } } : {}),
         ...(type === "star_rating" ? { settings: { ...DEFAULT_SETTINGS.star_rating } } : {}),
+        ...(type === "drag_and_drop" ? { settings: { ...DEFAULT_SETTINGS.drag_and_drop } } : {}),
       };
 
       setSections(prevSections =>
@@ -3549,6 +3552,373 @@ export default function QuestionnaireBuilderPage() {
                     <p className="text-xs text-gray-400 mt-2">💡 Upload or provide URLs for both states: one for selected (filled) and one for unselected (empty).</p>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        );
+      case "drag_and_drop":
+        const dndSettings = question.settings || DEFAULT_SETTINGS.drag_and_drop;
+        return (
+          <div className="py-4 space-y-4">
+            {/* Settings Panel */}
+            {!showPreview && (
+              <div className="space-y-4">
+                {/* Items Configuration */}
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm font-medium text-gray-700">Draggable Items</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newItem = {
+                          id: `item-${Date.now()}`,
+                          text: `Item ${(dndSettings.items?.length || 0) + 1}`,
+                        };
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dndSettings, items: [...(dndSettings.items || []), newItem] } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="px-3 py-1.5 text-xs bg-qsights-blue text-white rounded hover:bg-qsights-dark transition-colors flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Item
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {dndSettings.items?.map((item: any, idx: number) => (
+                      <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border">
+                        <GripVertical className="w-4 h-4 text-gray-400" />
+                        <Input
+                          value={item.text}
+                          onChange={(e) => {
+                            const newItems = [...(dndSettings.items || [])];
+                            newItems[idx] = { ...item, text: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dndSettings, items: newItems } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          placeholder="Item text"
+                          className="flex-1 h-8 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItems = dndSettings.items.filter((_: any, i: number) => i !== idx);
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dndSettings, items: newItems } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {(!dndSettings.items || dndSettings.items.length === 0) && (
+                      <p className="text-sm text-gray-500 text-center py-4">No items added yet. Click "Add Item" to start.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Buckets Configuration */}
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm font-medium text-gray-700">Buckets</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+                        const newBucket = {
+                          id: `bucket-${Date.now()}`,
+                          label: `Bucket ${(dndSettings.buckets?.length || 0) + 1}`,
+                          color: colors[(dndSettings.buckets?.length || 0) % colors.length],
+                        };
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dndSettings, buckets: [...(dndSettings.buckets || []), newBucket] } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Bucket
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {dndSettings.buckets?.map((bucket: any, idx: number) => (
+                      <div key={bucket.id} className="flex items-center gap-2 bg-white p-2 rounded border">
+                        <div 
+                          className="w-8 h-8 rounded flex-shrink-0"
+                          style={{ backgroundColor: bucket.color || '#gray' }}
+                        />
+                        <Input
+                          value={bucket.label}
+                          onChange={(e) => {
+                            const newBuckets = [...(dndSettings.buckets || [])];
+                            newBuckets[idx] = { ...bucket, label: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          placeholder="Bucket label"
+                          className="flex-1 h-8 text-sm"
+                        />
+                        <input
+                          type="color"
+                          value={bucket.color || '#3b82f6'}
+                          onChange={(e) => {
+                            const newBuckets = [...(dndSettings.buckets || [])];
+                            newBuckets[idx] = { ...bucket, color: e.target.value };
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="w-10 h-8 rounded cursor-pointer"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newBuckets = dndSettings.buckets.filter((_: any, i: number) => i !== idx);
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          }}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {(!dndSettings.buckets || dndSettings.buckets.length === 0) && (
+                      <p className="text-sm text-gray-500 text-center py-4">No buckets added yet. Click "Add Bucket" to start.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Assessment Mode - Correct Answers */}
+                {questionnaireType === "Assessment" && dndSettings.items?.length > 0 && dndSettings.buckets?.length > 0 && (
+                  <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckSquare className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-900">Correct Answers (Assessment Mode)</span>
+                    </div>
+                    <p className="text-xs text-amber-700 mb-3">Assign items to their correct buckets for scoring:</p>
+                    {dndSettings.buckets.map((bucket: any) => (
+                      <div key={bucket.id} className="mb-3 p-3 bg-white rounded border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div 
+                            className="w-4 h-4 rounded"
+                            style={{ backgroundColor: bucket.color }}
+                          />
+                          <span className="font-medium text-sm">{bucket.label}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {dndSettings.items.map((item: any) => {
+                            const isCorrect = question.correctAnswers?.find((b: any) => b.id === bucket.id)?.acceptedItems?.includes(item.id);
+                            return (
+                              <label key={item.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={isCorrect || false}
+                                  onChange={(e) => {
+                                    let correctAnswers = question.correctAnswers || dndSettings.buckets.map((b: any) => ({ id: b.id, label: b.label, acceptedItems: [] }));
+                                    correctAnswers = correctAnswers.map((ca: any) => {
+                                      if (ca.id === bucket.id) {
+                                        const items = ca.acceptedItems || [];
+                                        if (e.target.checked) {
+                                          return { ...ca, acceptedItems: [...items, item.id] };
+                                        } else {
+                                          return { ...ca, acceptedItems: items.filter((id: string) => id !== item.id) };
+                                        }
+                                      }
+                                      // Remove from other buckets if checked here
+                                      if (e.target.checked) {
+                                        return { ...ca, acceptedItems: (ca.acceptedItems || []).filter((id: string) => id !== item.id) };
+                                      }
+                                      return ca;
+                                    });
+                                    setSections(prevSections =>
+                                      prevSections.map(section =>
+                                        section.id === sectionId
+                                          ? {
+                                              ...section,
+                                              questions: section.questions.map((q: any) =>
+                                                q.id === question.id
+                                                  ? { ...q, correctAnswers }
+                                                  : q
+                                              )
+                                            }
+                                          : section
+                                      )
+                                    );
+                                  }}
+                                  className="rounded"
+                                />
+                                <span>{item.text}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Layout & Behavior Options */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-gray-50 rounded border">
+                    <Label className="text-xs text-gray-600 mb-2 block">Layout</Label>
+                    <select
+                      value={dndSettings.layout || 'responsive'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dndSettings, layout: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="responsive">Responsive (Auto)</option>
+                      <option value="horizontal">Horizontal</option>
+                      <option value="vertical">Vertical</option>
+                    </select>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded border">
+                    <Label className="text-xs text-gray-600 mb-2 block">Required Mode</Label>
+                    <select
+                      value={dndSettings.requiredMode || 'all'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dndSettings, requiredMode: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="all">All items must be placed</option>
+                      <option value="at-least-one">At least one item</option>
+                      <option value="custom">Custom requirement</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Preview Message */}
+            {dndSettings.items?.length > 0 && dndSettings.buckets?.length > 0 ? (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Preview:</strong> Participants will drag {dndSettings.items.length} item(s) into {dndSettings.buckets.length} bucket(s).
+                  {questionnaireType === "Assessment" && " Answers will be auto-scored based on correct bucket placements."}
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  Please add at least one item and one bucket to configure this question.
+                </p>
               </div>
             )}
           </div>

@@ -6,8 +6,9 @@ import { DialGauge } from './DialGauge';
 import { LikertVisual } from './LikertVisual';
 import { NPSScale } from './NPSScale';
 import { StarRating } from './StarRating';
+import DragDropBucket from './DragDropBucket';
 
-export { SliderScale, DialGauge, LikertVisual, NPSScale, StarRating };
+export { SliderScale, DialGauge, LikertVisual, NPSScale, StarRating, DragDropBucket };
 
 // Type definitions for question settings
 export interface SliderScaleSettings {
@@ -185,6 +186,17 @@ export const DEFAULT_SETTINGS = {
     showValue: true,
     orientation: 'horizontal',
   } as StarRatingSettings,
+  drag_and_drop: {
+    items: [],
+    buckets: [],
+    allowMultipleInBucket: false,
+    allowReorder: true,
+    allowRemove: true,
+    requiredMode: 'all',
+    mobileMode: 'both',
+    layout: 'responsive',
+    partialScoring: false,
+  },
 };
 
 // Helper to get component by type
@@ -200,6 +212,8 @@ export const getQuestionComponent = (type: string) => {
       return NPSScale;
     case INTERACTIVE_QUESTION_TYPES.STAR_RATING:
       return StarRating;
+    case 'drag_and_drop':
+      return DragDropBucket;
     default:
       return null;
   }
