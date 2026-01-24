@@ -714,6 +714,8 @@ export default function TakeActivityPage() {
       const response = await fetch(`/api/public/access-tokens/${token}/validate`);
       const data = await response.json();
 
+      console.log('[TOKEN VALIDATION] Response:', { valid: data.valid, already_completed: data.already_completed, status: response.status });
+
       if (!data.valid) {
         // Special handling for already completed - show thank you page directly
         if (data.already_completed) {
@@ -778,6 +780,10 @@ export default function TakeActivityPage() {
       const participantName = data.participant?.name || data.data?.participant?.name || 'there';
       const needsLanguage = activity?.is_multilingual && Array.isArray(activity?.languages) && activity.languages.length > 1;
       
+      // Check registration flow to determine behavior
+      const registrationFlow = activity?.registration_flow || 'pre_submission';
+      const isPostSubmission = registrationFlow === 'post_submission';
+      
       // Check if we can auto-skip to questionnaire:
       // 1. Token is validated with name and email from DB
       // 2. No additional registration fields beyond name/email exist
@@ -791,9 +797,20 @@ export default function TakeActivityPage() {
       
       const canAutoSkip = hasOnlyDefaultFields && !needsLanguage && nameFromToken && emailFromToken;
       
-      if (canAutoSkip) {
+      if (canAutoSkip || isPostSubmission) {
         // Auto-skip to questionnaire - no additional fields to collect
-        console.log('Auto-skipping to questionnaire - only default fields and all pre-filled');
+        // OR it's post-submission flow (questionnaire comes first)
+        console.log('Auto-skipping to questionnaire - only default fields and all pre-filled OR post-submission flow');
+        
+        // For post-submission flow, generate session token
+        if (isPostSubmission) {
+          const storedToken = localStorage.getItem(`temp_session_${activityId}`);
+          const sessionToken = storedToken || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          if (!storedToken) {
+            localStorage.setItem(`temp_session_${activityId}`, sessionToken);
+          }
+          setTempSessionToken(sessionToken);
+        }
         
         // Set start time
         const now = Date.now();
@@ -865,7 +882,10 @@ export default function TakeActivityPage() {
       // For post-submission flow, skip registration form initially and show questionnaire first
       // This applies to ALL modes: regular, preview, anonymous, and token-based access
       // BUT: Don't reset state if user has already submitted (prevents infinite loop after submission)
-      if (registrationFlow === 'post_submission' && !submitted) {
+      // ALSO: If token exists but hasn't been validated yet, wait for validation before starting
+      const hasUnvalidatedToken = token && !tokenValidated && !tokenValidating;
+      
+      if (registrationFlow === 'post_submission' && !submitted && !submittedParam && !hasUnvalidatedToken) {
         setShowForm(false);
         setStarted(true);
         
@@ -2490,7 +2510,7 @@ export default function TakeActivityPage() {
 
   // Wait for both activity loading, token decryption, AND token validation (if token exists)
   // Key fix: If token exists but hasn't been validated yet, show loading
-  const tokenNeedsValidation = token && !tokenValidated && !tokenError;
+  const tokenNeedsValidation = token && (!tokenValidated || tokenValidating) && !tokenError;
   
   if (loading || !tokenDecrypted || tokenNeedsValidation) {
     return (
@@ -2534,6 +2554,79 @@ export default function TakeActivityPage() {
       setAssessmentResult(null);
       setStartTime(Date.now());
       toast({ title: "Starting New Attempt", description: "Beginning a new assessment attempt", variant: "success" });
+    };
+
+    // NEW: Handle "Take Event Again" for kiosk mode (new participant on same device)
+    const handleTakeEventAgain = () => {
+      // Clear ALL session data
+      localStorage.removeItem(`activity_${activityId}_session`);
+      sessionStorage.removeItem(`activity_${activityId}_session`);
+      localStorage.removeItem(`activity_${activityId}_start_time`);
+      sessionStorage.removeItem(`activity_${activityId}_start_time`);
+      localStorage.removeItem(`temp_session_${activityId}`);
+      
+      // Check if this is post-submission registration flow
+      const registrationFlow = activity?.registration_flow || 'pre_submission';
+      const isPostSubmission = registrationFlow === 'post_submission';
+      
+      // Reset all state to initial values
+      setSubmitted(false);
+      setResponses({});
+      setParticipantData({});
+      setParticipantId(null);
+      setTokenData(null);
+      setTokenValidated(false);
+      setTokenError(null);
+      setCurrentSectionIndex(0);
+      setCurrentQuestionIndex(0);
+      setAssessmentResult(null);
+      setSubmittedQuestions(new Set());
+      setPollResults({});
+      setPollSubmittedQuestions(new Set());
+      setRemainingSeconds(null);
+      setSelectedLanguage(null);
+      setPerQuestionLanguages({});
+      setShowRegistrationAfterSubmit(false);
+      setTempSessionToken(null);
+      
+      // For post-submission flow: Go directly to questionnaire (skip registration)
+      // For pre-submission flow: Show registration form first
+      if (isPostSubmission) {
+        // Generate new session token for post-submission flow
+        const sessionToken = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem(`temp_session_${activityId}`, sessionToken);
+        setTempSessionToken(sessionToken);
+        
+        // Set start time
+        const now = Date.now();
+        setStartTime(now);
+        
+        // Go directly to questionnaire
+        setShowForm(false);
+        setStarted(true);
+        
+        toast({
+          title: "Ready for Next Participant",
+          description: "Starting questionnaire - registration after submission",
+          variant: "success",
+          duration: 3000
+        });
+      } else {
+        // Pre-submission flow: Show registration form first
+        setStarted(false);
+        setShowForm(true);
+        setStartTime(null);
+        
+        toast({
+          title: "Ready for Next Participant",
+          description: "Starting fresh - new participant can now register",
+          variant: "success",
+          duration: 3000
+        });
+      }
+      
+      // Scroll to top for better UX
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const isAssessment = questionnaire?.type === 'assessment' || activity?.type === 'assessment';
@@ -2645,6 +2738,22 @@ export default function TakeActivityPage() {
               <p className="text-sm text-gray-500 pt-2">
                 A confirmation has been sent to your email
               </p>
+              
+              {/* Take Event Again Button - Kiosk Mode (for assessments too) */}
+              {activity?.landing_config?.enableTakeEventAgainButton && !token && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={handleTakeEventAgain}
+                    className="w-full max-w-md mx-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                    Take Event Again
+                  </button>
+                  <p className="text-xs text-gray-500 mt-3">
+                    Start this event for a new participant
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             // General Thank You (Non-Assessment) - Clean & Simple
@@ -2686,6 +2795,22 @@ export default function TakeActivityPage() {
                 <p className="text-sm text-gray-500">
                   A confirmation has been sent to your email
                 </p>
+              )}
+              
+              {/* Take Event Again Button - Kiosk Mode */}
+              {activity?.landing_config?.enableTakeEventAgainButton && !token && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={handleTakeEventAgain}
+                    className="w-full max-w-md mx-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                    Take Event Again
+                  </button>
+                  <p className="text-xs text-gray-500 mt-3">
+                    Start this event for a new participant
+                  </p>
+                </div>
               )}
             </div>
           )}

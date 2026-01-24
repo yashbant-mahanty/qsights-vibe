@@ -2010,6 +2010,13 @@ export default function EditActivityPage() {
                   Preview Event
                 </button>
                 <button
+                  onClick={() => router.push(`/activities/${activityId}/landing-config`)}
+                  className="w-full px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  Landing Config
+                </button>
+                <button
                   onClick={handleSaveDraft}
                   disabled={saving}
                   className="w-full px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"

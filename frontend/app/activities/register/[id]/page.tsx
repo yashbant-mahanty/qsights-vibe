@@ -213,6 +213,10 @@ export default function PostSubmissionRegistrationPage() {
     // Use the same field key logic as pre-registration: support both 'id' and 'name'
     const fieldKey = field.id || (field as any).name || 'unknown';
     const value = participantData[fieldKey] || "";
+    
+    // Check if this is a name or email field and if we have token data
+    const isIdentityField = ['name', 'full_name', 'email', 'email_address'].includes(fieldKey) || field.type === 'email';
+    const isReadOnly = hasTokenData && isIdentityField && value; // Make read-only if pre-filled from token
 
     switch (field.type) {
       case "textarea":
@@ -224,7 +228,11 @@ export default function PostSubmissionRegistrationPage() {
             onChange={(e) => handleInputChange(fieldKey, e.target.value)}
             placeholder={field.placeholder || field.label}
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
+            className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent ${
+              isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+            }`}
+            readOnly={isReadOnly}
+            disabled={isReadOnly}
           />
         );
       case "select":
@@ -234,7 +242,10 @@ export default function PostSubmissionRegistrationPage() {
             name={fieldKey}
             value={value}
             onChange={(e) => handleInputChange(fieldKey, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
+            className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent ${
+              isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+            }`}
+            disabled={isReadOnly}
           >
             <option value="">-- Select an option --</option>
             {field.options?.map((option) => (
@@ -253,7 +264,9 @@ export default function PostSubmissionRegistrationPage() {
             value={value}
             onChange={(e) => handleInputChange(fieldKey, e.target.value)}
             placeholder={field.placeholder || field.label}
-            className="w-full"
+            className={`w-full ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+            readOnly={isReadOnly}
+            disabled={isReadOnly}
           />
         );
     }

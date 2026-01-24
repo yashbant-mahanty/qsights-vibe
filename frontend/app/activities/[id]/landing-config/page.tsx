@@ -149,6 +149,7 @@ interface LandingPageConfig {
   thankYouSubMessage: string;
   thankYouIconColor: string;
   thankYouShowConfirmation: boolean;
+  enableTakeEventAgainButton: boolean; // NEW: Kiosk mode - allow new participants on same device
   
   // Post Session Registration Page
   postSessionRegTitle: string;
@@ -301,6 +302,7 @@ const defaultConfig: LandingPageConfig = {
   thankYouSubMessage: "We appreciate your participation",
   thankYouIconColor: "#10B981",
   thankYouShowConfirmation: true,
+  enableTakeEventAgainButton: false, // Disabled by default
   // Post Session Registration defaults
   postSessionRegTitle: "Complete Your Registration",
   postSessionRegSubtitle: "One more step to finish!",
@@ -560,6 +562,7 @@ export default function LandingPageConfigPage() {
     toast({ 
       title: "Template Applied", 
       description: "Template has been applied successfully! Click Save Configuration to keep changes.",
+      variant: "success",
       duration: 4000
     });
   };
@@ -576,7 +579,7 @@ export default function LandingPageConfigPage() {
         iframe.src = `/activities/take/${activityId}?preview=true&t=${Date.now()}`; // Force reload with timestamp
       }
       
-      toast({ title: "Success", description: "Landing page configuration saved successfully! Preview updated.", duration: 3000 });
+      toast({ title: "Success", description: "Landing page configuration saved successfully! Preview updated.", variant: "success", duration: 3000 });
     } catch (err) {
       console.error("Failed to save config:", err);
       toast({ title: "Error", description: "Failed to save configuration. Please try again.", variant: "error", duration: 4000 });
@@ -3437,6 +3440,21 @@ export default function LandingPageConfigPage() {
                           <p className="text-xs text-gray-600 mt-0.5">Display "A confirmation has been sent to your email"</p>
                         </div>
                       </label>
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.enableTakeEventAgainButton === true}
+                          onChange={(e) => updateConfig("enableTakeEventAgainButton", e.target.checked)}
+                          className="w-4 h-4 text-green-600"
+                        />
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">Enable "Take Event Again" Button (Kiosk Mode)</span>
+                          <p className="text-xs text-gray-600 mt-0.5">Allow multiple participants to use same device (iPad/tablet). Button restarts event for new participant.</p>
+                          <p className="text-xs text-orange-600 mt-1">⚠️ Only works for Registration/Anonymous/Preview links. Hidden for email invitations.</p>
+                        </div>
+                      </label>
+                    </div>
                     </div>
                   </CardContent>
                 </Card>
