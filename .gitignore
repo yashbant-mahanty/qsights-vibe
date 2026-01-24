@@ -1,42 +1,61 @@
-# Backups - ALWAYS exclude
-backups/
-BACKUP_*/
-*.backup
-*.bak
+# Dependencies
+node_modules/
+vendor/
 
-# Secrets and sensitive files
+# Environment variables and credentials
+.env
+.env.local
+.env.production
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# SendGrid credentials (CRITICAL - DO NOT COMMIT)
+**/SENDGRID_API_KEY*
+**/sendgrid*.key
+**/email_credentials*
+
+# PEM files and keys
 *.pem
 *.key
-.env
-.env.*
-!.env.example
+*.p12
+*.pfx
+
+# Build outputs
+.next/
+dist/
+build/
+*.log
 
 # OS files
 .DS_Store
 Thumbs.db
-._*
 
-# Editor files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Dependencies
-node_modules/
-vendor/
+# Backup files
+*.backup
+*.bak
+*~
 
-# Build outputs
-.next/
-.nuxt/
-dist/
-build/
+# Database
+*.sqlite
+*.db
 
-# Logs
-*.log
-npm-debug.log*
+# Uploads
+storage/
+public/uploads/
+public/storage/
 
 # Cache
+bootstrap/cache/
 .cache/
-*.cache
-backend/update_sendgrid_settings.php
+
+# Temporary files
+tmp/
+temp/
+*.tmp
