@@ -13,8 +13,14 @@ class EvaluationHierarchyController extends Controller
     {
         try {
             $user = $request->user();
-            $organizationId = $request->query('organization_id', $user->organization_id);
-            $programId = $request->query('program_id');
+            
+            // Super-admin can view any program or all, others locked to their program
+            if ($user->role === 'super-admin') {
+                $programId = $request->query('program_id');
+            } else {
+                $programId = $user->program_id;
+            }
+            
             $staffId = $request->query('staff_id');
             
             $query = DB::table('evaluation_hierarchy as eh')
@@ -22,7 +28,6 @@ class EvaluationHierarchyController extends Controller
                 ->join('evaluation_staff as manager', 'eh.reports_to_id', '=', 'manager.id')
                 ->join('evaluation_roles as staff_role', 'staff.role_id', '=', 'staff_role.id')
                 ->join('evaluation_roles as manager_role', 'manager.role_id', '=', 'manager_role.id')
-                ->where('eh.organization_id', $organizationId)
                 ->whereNull('eh.deleted_at')
                 ->select(
                     'eh.*',
@@ -37,10 +42,7 @@ class EvaluationHierarchyController extends Controller
                 );
             
             if ($programId) {
-                $query->where(function($q) use ($programId) {
-                    $q->where('eh.program_id', $programId)
-                      ->orWhereNull('eh.program_id');
-                });
+                $query->where('eh.program_id', $programId);
             }
             
             if ($staffId) {
@@ -72,7 +74,6 @@ class EvaluationHierarchyController extends Controller
             $validated = $request->validate([
                 'staff_id' => 'required|uuid|exists:evaluation_staff,id',
                 'reports_to_id' => 'required|uuid|exists:evaluation_staff,id|different:staff_id',
-                'organization_id' => 'required|uuid|exists:organizations,id',
                 'program_id' => 'nullable|uuid|exists:programs,id',
                 'relationship_type' => 'nullable|in:direct,indirect,dotted_line,matrix',
                 'relationship_title' => 'nullable|string|max:255',
@@ -83,6 +84,20 @@ class EvaluationHierarchyController extends Controller
                 'is_primary' => 'boolean',
                 'evaluation_weight' => 'nullable|integer|min:0|max:100'
             ]);
+            
+            // Determine program_id based on user role
+            if ($user->role === 'super-admin') {
+                $programId = $validated['program_id'] ?? null;
+            } else {
+                $programId = $user->program_id;
+                
+                if (!$programId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You must be assigned to a program to create hierarchy relationships'
+                    ], 403);
+                }
+            }
             
             // Check for circular reference
             if ($this->wouldCreateCircularReference($validated['staff_id'], $validated['reports_to_id'])) {
@@ -107,8 +122,7 @@ class EvaluationHierarchyController extends Controller
                 'id' => $hierarchyId,
                 'staff_id' => $validated['staff_id'],
                 'reports_to_id' => $validated['reports_to_id'],
-                'organization_id' => $validated['organization_id'],
-                'program_id' => $validated['program_id'] ?? null,
+                'program_id' => $programId,
                 'relationship_type' => $validated['relationship_type'] ?? 'direct',
                 'relationship_title' => $validated['relationship_title'] ?? null,
                 'notes' => $validated['notes'] ?? null,
@@ -118,11 +132,12 @@ class EvaluationHierarchyController extends Controller
                 'is_primary' => $validated['is_primary'] ?? true,
                 'evaluation_weight' => $validated['evaluation_weight'] ?? 100,
                 'created_by' => $user->id,
+                'updated_by' => $user->id,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
             
-            $this->logAudit('evaluation_hierarchy', $hierarchyId, 'created', 'Hierarchy relationship created', $user, $validated['organization_id']);
+            $this->logAudit('evaluation_hierarchy', $hierarchyId, 'created', 'Hierarchy relationship created', $user, $programId);
             
             $hierarchy = DB::table('evaluation_hierarchy as eh')
                 ->join('evaluation_staff as staff', 'eh.staff_id', '=', 'staff.id')
@@ -191,7 +206,7 @@ class EvaluationHierarchyController extends Controller
             
             DB::table('evaluation_hierarchy')->where('id', $id)->update($updateData);
             
-            $this->logAudit('evaluation_hierarchy', $id, 'updated', 'Hierarchy relationship updated', $user, $hierarchy->organization_id, $oldValues, $validated);
+            $this->logAudit('evaluation_hierarchy', $id, 'updated', 'Hierarchy relationship updated', $user, $hierarchy->program_id, $oldValues, $validated);
             
             $updatedHierarchy = DB::table('evaluation_hierarchy')->where('id', $id)->first();
             
@@ -225,7 +240,7 @@ class EvaluationHierarchyController extends Controller
             // Soft delete
             DB::table('evaluation_hierarchy')->where('id', $id)->update(['deleted_at' => now()]);
             
-            $this->logAudit('evaluation_hierarchy', $id, 'deleted', 'Hierarchy relationship deleted', $user, $hierarchy->organization_id);
+            $this->logAudit('evaluation_hierarchy', $id, 'deleted', 'Hierarchy relationship deleted', $user, $hierarchy->program_id);
             
             return response()->json([
                 'success' => true,
@@ -362,14 +377,14 @@ class EvaluationHierarchyController extends Controller
         return false;
     }
     
-    private function logAudit($entityType, $entityId, $action, $description, $user, $organizationId, $oldValues = null, $newValues = null)
+    private function logAudit($entityType, $entityId, $action, $description, $user, $programId = null, $oldValues = null, $newValues = null)
     {
         try {
             DB::table('evaluation_audit_log')->insert([
                 'id' => Str::uuid()->toString(),
                 'entity_type' => $entityType,
                 'entity_id' => $entityId,
-                'organization_id' => $organizationId,
+                'program_id' => $programId,
                 'action' => $action,
                 'action_description' => $description,
                 'user_id' => $user->id,

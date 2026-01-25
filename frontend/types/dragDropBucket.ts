@@ -11,6 +11,7 @@ export interface DragDropBucket {
   id: string;
   label: string;
   color?: string; // Optional color for bucket styling
+  imageUrl?: string; // Optional image for bucket header/background
   acceptedItems?: string[]; // For assessment mode: IDs of correct items
 }
 

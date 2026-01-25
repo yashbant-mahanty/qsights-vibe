@@ -747,6 +747,28 @@ Route::middleware(['auth:sanctum', 'log.manager.actions', 'validate.data.scope']
 
 Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     
+    // Trigger Evaluations (Admin-only)
+    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+        Route::post('/trigger', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'trigger']);
+        Route::get('/triggered', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'index']);
+        Route::put('/triggered/{id}', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'update']);
+        Route::delete('/triggered/{id}', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'destroy']);
+        Route::patch('/triggered/{id}/toggle-active', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'toggleActive']);
+        Route::post('/triggered/{id}/resend', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'resend']);
+        
+        // Evaluation Reports (Admin only)
+        Route::get('/reports', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'reports']);
+        Route::get('/reports/summary', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'reportsSummary']);
+        Route::get('/reports/evaluators', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'evaluatorsList']);
+        Route::get('/reports/staff', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'evaluatedStaff']);
+        Route::get('/reports/staff/{staffId}', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'staffDetail']);
+        Route::get('/reports/export', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'exportReports']);
+    });
+    
+    // Public evaluation access (token-based)
+    Route::get('/triggered/{id}', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'show']);
+    Route::post('/triggered/{id}/submit', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'submit']);
+    
     // Evaluation Departments (Admin-only for create/update/delete)
     Route::get('/departments', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'index']);
     Route::get('/departments/{id}', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'show']);

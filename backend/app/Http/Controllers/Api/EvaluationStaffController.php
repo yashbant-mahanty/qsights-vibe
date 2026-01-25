@@ -13,8 +13,14 @@ class EvaluationStaffController extends Controller
     {
         try {
             $user = $request->user();
-            $organizationId = $request->query('organization_id', $user->organization_id);
-            $programId = $request->query('program_id');
+            
+            // Super-admin can view any program or all, others locked to their program
+            if ($user->role === 'super-admin') {
+                $programId = $request->query('program_id');
+            } else {
+                $programId = $user->program_id;
+            }
+            
             $roleId = $request->query('role_id');
             $status = $request->query('status');
             $search = $request->query('search');
@@ -22,7 +28,6 @@ class EvaluationStaffController extends Controller
             $query = DB::table('evaluation_staff as es')
                 ->leftJoin('evaluation_roles as er', 'es.role_id', '=', 'er.id')
                 ->leftJoin('users as u', 'es.user_id', '=', 'u.id')
-                ->where('es.organization_id', $organizationId)
                 ->whereNull('es.deleted_at')
                 ->select(
                     'es.*',
@@ -32,10 +37,7 @@ class EvaluationStaffController extends Controller
                 );
             
             if ($programId) {
-                $query->where(function($q) use ($programId) {
-                    $q->where('es.program_id', $programId)
-                      ->orWhereNull('es.program_id');
-                });
+                $query->where('es.program_id', $programId);
             }
             
             if ($roleId) {
@@ -152,7 +154,6 @@ class EvaluationStaffController extends Controller
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|unique:evaluation_staff,email',
                 'role_id' => 'required|uuid|exists:evaluation_roles,id',
-                'organization_id' => 'required|uuid|exists:organizations,id',
                 'program_id' => 'nullable|uuid|exists:programs,id',
                 'user_id' => 'nullable|uuid|exists:users,id',
                 'department' => 'nullable|string|max:255',
@@ -167,6 +168,20 @@ class EvaluationStaffController extends Controller
                 'metadata' => 'nullable|array'
             ]);
             
+            // Determine program_id based on user role
+            if ($user->role === 'super-admin') {
+                $programId = $validated['program_id'] ?? null;
+            } else {
+                $programId = $user->program_id;
+                
+                if (!$programId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You must be assigned to a program to create staff'
+                    ], 403);
+                }
+            }
+            
             $staffId = Str::uuid()->toString();
             
             DB::table('evaluation_staff')->insert([
@@ -175,8 +190,7 @@ class EvaluationStaffController extends Controller
                 'name' => $validated['name'],
                 'email' => $validated['email'],
                 'role_id' => $validated['role_id'],
-                'organization_id' => $validated['organization_id'],
-                'program_id' => $validated['program_id'] ?? null,
+                'program_id' => $programId,
                 'user_id' => $validated['user_id'] ?? null,
                 'department' => $validated['department'] ?? null,
                 'team' => $validated['team'] ?? null,
@@ -194,7 +208,7 @@ class EvaluationStaffController extends Controller
                 'updated_at' => now()
             ]);
             
-            $this->logAudit('evaluation_staff', $staffId, 'created', 'Staff member created', $user, $validated['organization_id']);
+            $this->logAudit('evaluation_staff', $staffId, 'created', 'Staff member created', $user, $programId);
             
             $staff = DB::table('evaluation_staff')->where('id', $staffId)->first();
             
@@ -254,7 +268,7 @@ class EvaluationStaffController extends Controller
             
             DB::table('evaluation_staff')->where('id', $id)->update($updateData);
             
-            $this->logAudit('evaluation_staff', $id, 'updated', 'Staff member updated', $user, $staff->organization_id, $oldValues, $validated);
+            $this->logAudit('evaluation_staff', $id, 'updated', 'Staff member updated', $user, $staff->program_id, $oldValues, $validated);
             
             $updatedStaff = DB::table('evaluation_staff')->where('id', $id)->first();
             
@@ -275,6 +289,7 @@ class EvaluationStaffController extends Controller
     {
         try {
             $user = $request->user();
+            $cascade = $request->query('cascade') === 'true';
             
             $staff = DB::table('evaluation_staff')->where('id', $id)->whereNull('deleted_at')->first();
             
@@ -285,7 +300,7 @@ class EvaluationStaffController extends Controller
                 ], 404);
             }
             
-            // Check if staff has evaluation assignments
+            // Check if staff has evaluation assignments or hierarchy relationships
             $assignmentCount = DB::table('evaluation_assignments')
                 ->where(function($q) use ($id) {
                     $q->where('evaluatee_id', $id)
@@ -294,24 +309,74 @@ class EvaluationStaffController extends Controller
                 ->whereNull('deleted_at')
                 ->count();
             
-            if ($assignmentCount > 0) {
+            $hierarchyCount = DB::table('evaluation_hierarchy')
+                ->where(function($q) use ($id) {
+                    $q->where('staff_id', $id)
+                      ->orWhere('reports_to_id', $id);
+                })
+                ->whereNull('deleted_at')
+                ->count();
+            
+            if (($assignmentCount > 0 || $hierarchyCount > 0) && !$cascade) {
+                $message = "Cannot delete staff member. They have ";
+                $parts = [];
+                if ($assignmentCount > 0) {
+                    $parts[] = "{$assignmentCount} evaluation assignment(s)";
+                }
+                if ($hierarchyCount > 0) {
+                    $parts[] = "{$hierarchyCount} hierarchy relationship(s)";
+                }
+                $message .= implode(' and ', $parts) . '. Use cascade=true to delete all related data.';
+                
                 return response()->json([
                     'success' => false,
-                    'message' => "Cannot delete staff member. They have {$assignmentCount} evaluation assignment(s)."
+                    'message' => $message
                 ], 422);
             }
             
-            // Soft delete
+            // If cascade delete, delete all related data
+            if ($cascade && ($assignmentCount > 0 || $hierarchyCount > 0)) {
+                DB::beginTransaction();
+                
+                try {
+                    // Delete hierarchy relationships
+                    DB::table('evaluation_hierarchy')
+                        ->where(function($q) use ($id) {
+                            $q->where('staff_id', $id)
+                              ->orWhere('reports_to_id', $id);
+                        })
+                        ->update(['deleted_at' => now()]);
+                    
+                    // Delete evaluation assignments
+                    DB::table('evaluation_assignments')
+                        ->where(function($q) use ($id) {
+                            $q->where('evaluatee_id', $id)
+                              ->orWhere('evaluator_id', $id);
+                        })
+                        ->whereNull('deleted_at')
+                        ->update(['deleted_at' => now()]);
+                    
+                    // Delete staff
+                    DB::table('evaluation_staff')->where('id', $id)->update(['deleted_at' => now()]);
+                    
+                    $this->logAudit('evaluation_staff', $id, 'deleted_cascade', 'Staff member deleted with cascade (assignments: ' . $assignmentCount . ', hierarchy: ' . $hierarchyCount . ')', $user, $staff->program_id);
+                    
+                    DB::commit();
+                    
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Staff member and all related data deleted successfully'
+                    ]);
+                } catch (\Exception $e) {
+                    DB::rollBack();
+                    throw $e;
+                }
+            }
+            
+            // Simple delete (no dependencies)
             DB::table('evaluation_staff')->where('id', $id)->update(['deleted_at' => now()]);
             
-            // Also soft delete hierarchy relationships
-            DB::table('evaluation_hierarchy')
-                ->where(function($q) use ($id) {
-                    $q->where('staff_id', $id)->orWhere('reports_to_id', $id);
-                })
-                ->update(['deleted_at' => now()]);
-            
-            $this->logAudit('evaluation_staff', $id, 'deleted', 'Staff member deleted', $user, $staff->organization_id);
+            $this->logAudit('evaluation_staff', $id, 'deleted', 'Staff member deleted', $user, $staff->program_id);
             
             return response()->json([
                 'success' => true,
@@ -325,14 +390,14 @@ class EvaluationStaffController extends Controller
         }
     }
     
-    private function logAudit($entityType, $entityId, $action, $description, $user, $organizationId, $oldValues = null, $newValues = null)
+    private function logAudit($entityType, $entityId, $action, $description, $user, $programId = null, $oldValues = null, $newValues = null)
     {
         try {
             DB::table('evaluation_audit_log')->insert([
                 'id' => Str::uuid()->toString(),
                 'entity_type' => $entityType,
                 'entity_id' => $entityId,
-                'organization_id' => $organizationId,
+                'program_id' => $programId,
                 'action' => $action,
                 'action_description' => $description,
                 'user_id' => $user->id,

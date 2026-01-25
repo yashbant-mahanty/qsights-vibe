@@ -178,6 +178,36 @@ class Question extends Model
             }
         }
         
+        // Convert S3 URLs to presigned URLs for drag & drop items
+        if (isset($settings['items']) && is_array($settings['items'])) {
+            foreach ($settings['items'] as $index => $item) {
+                if (isset($item['imageUrl']) && is_string($item['imageUrl']) && $this->isS3Url($item['imageUrl'])) {
+                    $presignedUrl = $this->getPresignedUrl($item['imageUrl']);
+                    \Log::info('Converting drag-drop item image to presigned', [
+                        'index' => $index,
+                        'original' => $item['imageUrl'],
+                        'presigned' => substr($presignedUrl, 0, 100)
+                    ]);
+                    $settings['items'][$index]['imageUrl'] = $presignedUrl;
+                }
+            }
+        }
+        
+        // Convert S3 URLs to presigned URLs for drag & drop buckets
+        if (isset($settings['buckets']) && is_array($settings['buckets'])) {
+            foreach ($settings['buckets'] as $index => $bucket) {
+                if (isset($bucket['imageUrl']) && is_string($bucket['imageUrl']) && $this->isS3Url($bucket['imageUrl'])) {
+                    $presignedUrl = $this->getPresignedUrl($bucket['imageUrl']);
+                    \Log::info('Converting drag-drop bucket image to presigned', [
+                        'index' => $index,
+                        'original' => $bucket['imageUrl'],
+                        'presigned' => substr($presignedUrl, 0, 100)
+                    ]);
+                    $settings['buckets'][$index]['imageUrl'] = $presignedUrl;
+                }
+            }
+        }
+        
         return $settings;
     }
 

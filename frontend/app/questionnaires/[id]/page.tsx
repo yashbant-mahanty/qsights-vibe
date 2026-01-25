@@ -41,6 +41,7 @@ import {
   Smile,
   Heart,
   Image as ImageIcon,
+  MoveVertical,
 } from "lucide-react";
 import { questionnairesApi, programsApi, type Program } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -51,6 +52,7 @@ import {
   LikertVisual,
   NPSScale,
   StarRating,
+  DragDropBucket,
   DEFAULT_SETTINGS,
 } from "@/components/questions";
 import {
@@ -168,6 +170,7 @@ export default function ViewQuestionnairePage() {
     { id: "likert_visual", label: "Likert Visual", icon: Smile, color: "text-amber-600" },
     { id: "nps", label: "NPS Scale", icon: ThumbsUp, color: "text-cyan-600" },
     { id: "star_rating", label: "Star Rating", icon: Heart, color: "text-rose-600" },
+    { id: "drag_and_drop", label: "Drag & Drop Bucket", icon: MoveVertical, color: "text-purple-600" },
   ];
 
   useEffect(() => {
@@ -303,6 +306,7 @@ export default function ViewQuestionnairePage() {
             columns: q.settings?.columns?.length > 0 ? q.settings.columns : (mapBackendTypeToFrontend(q.type) === 'matrix' ? ["Column 1", "Column 2", "Column 3"] : []),
             translations: q.translations || {},
             conditionalLogic: q.settings?.conditionalLogic || null,
+            imageUrl: q.settings?.imageUrl || '', // Load question image
             // Preserve the entire settings object to include customImages, etc.
             settings: q.settings || {},
           })) || []
@@ -390,6 +394,7 @@ export default function ViewQuestionnairePage() {
         ...(type === "likert_visual" ? { settings: { ...DEFAULT_SETTINGS.likert_visual } } : {}),
         ...(type === "nps" ? { settings: { ...DEFAULT_SETTINGS.nps } } : {}),
         ...(type === "star_rating" ? { settings: { ...DEFAULT_SETTINGS.star_rating } } : {}),
+        ...(type === "drag_and_drop" ? { settings: { ...DEFAULT_SETTINGS.drag_and_drop } } : {}),
       };
 
       setSections(prevSections =>
@@ -550,6 +555,11 @@ export default function ViewQuestionnairePage() {
             // Save conditional logic
             if (question.conditionalLogic) {
               settings.conditionalLogic = question.conditionalLogic;
+            }
+            
+            // Save question image URL
+            if (question.imageUrl) {
+              settings.imageUrl = question.imageUrl;
             }
             
             const questionData: any = {
@@ -753,6 +763,37 @@ export default function ViewQuestionnairePage() {
                   )}
                   {question.required && <span className="text-red-500 text-sm">*</span>}
                 </div>
+                {/* Question Image Upload */}
+                {!showPreview && (
+                  <div className="mt-2">
+                    <Label className="text-xs text-gray-600 mb-1 block">Question Image (Optional)</Label>
+                    <div className="max-w-md">
+                      <S3ImageUpload
+                        value={question.imageUrl || ''}
+                        onChange={(url) => {
+                          setSections((prevSections: any) =>
+                            prevSections.map((section: any) =>
+                              section.id === sectionId
+                                ? {
+                                    ...section,
+                                    questions: section.questions.map((q: any) =>
+                                      q.id === question.id ? { ...q, imageUrl: url } : q
+                                    )
+                                  }
+                                : section
+                            )
+                          );
+                        }}
+                        folder="questionnaire-images/questions"
+                        questionId={question.id}
+                        placeholder="Upload question image"
+                        maxSize={5}
+                        showPreview={true}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -3093,6 +3134,447 @@ export default function ViewQuestionnairePage() {
                     <p className="text-xs text-gray-400 mt-2">💡 Upload or provide URLs for both states: one for selected (filled) and one for unselected (empty).</p>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        );
+      case "drag_and_drop":
+        const dndSettings = question.settings || DEFAULT_SETTINGS.drag_and_drop;
+        // Debug logging
+        console.log('🔍 [DRAG_DROP] Loading settings:', { 
+          questionId: question.id, 
+          hasSettings: !!question.settings,
+          items: dndSettings.items,
+          buckets: dndSettings.buckets,
+          itemsCount: dndSettings.items?.length || 0,
+          bucketsCount: dndSettings.buckets?.length || 0
+        });
+        return (
+          <div className="py-4 space-y-4">
+            {/* Settings Panel */}
+            {!showPreview && (
+              <div className="space-y-4">
+                {/* Items Configuration */}
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm font-medium text-gray-700">Draggable Items</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newItem = {
+                          id: `item-${Date.now()}`,
+                          text: `Item ${(dndSettings.items?.length || 0) + 1}`,
+                        };
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dndSettings, items: [...(dndSettings.items || []), newItem] } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="px-3 py-1.5 text-xs bg-qsights-blue text-white rounded hover:bg-qsights-dark transition-colors flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Item
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {dndSettings.items?.map((item: any, idx: number) => {
+                      console.log(`🖼️ [DRAG_DROP_ITEM_${idx}]`, { text: item.text, imageUrl: item.imageUrl, hasImage: !!item.imageUrl });
+                      return (
+                      <div key={item.id} className="bg-white p-3 rounded border space-y-2">
+                        <div className="flex items-center gap-2">
+                          <GripVertical className="w-4 h-4 text-gray-400" />
+                          <Input
+                            value={item.text}
+                            onChange={(e) => {
+                              const newItems = [...(dndSettings.items || [])];
+                              newItems[idx] = { ...item, text: e.target.value };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, items: newItems } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            placeholder="Item text"
+                            className="flex-1 h-8 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newItems = dndSettings.items.filter((_: any, i: number) => i !== idx);
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, items: newItems } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="ml-6">
+                          <label className="text-xs text-gray-600 mb-1 block">Item Image (Optional)</label>
+                          <div className="text-xs text-gray-500 mb-2">
+                            Recommended: 200 × 200 pixels (1:1 ratio) | Max: 5MB
+                          </div>
+                          <S3ImageUpload
+                            value={item.imageUrl || ''}
+                            onChange={(url) => {
+                              const newItems = [...(dndSettings.items || [])];
+                              newItems[idx] = { ...item, imageUrl: url };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, items: newItems } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            folder="questionnaire-images/drag-drop/items"
+                            questionId={`${question.id}-item-${idx}`}
+                            placeholder="Upload item image"
+                            maxSize={5}
+                            showPreview={true}
+                          />
+                        </div>
+                      </div>
+                    )})}
+                    {(!dndSettings.items || dndSettings.items.length === 0) && (
+                      <p className="text-sm text-gray-500 text-center py-4">No items added yet. Click "Add Item" to start.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Buckets Configuration */}
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm font-medium text-gray-700">Buckets</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+                        const newBucket = {
+                          id: `bucket-${Date.now()}`,
+                          label: `Bucket ${(dndSettings.buckets?.length || 0) + 1}`,
+                          color: colors[(dndSettings.buckets?.length || 0) % colors.length],
+                        };
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dndSettings, buckets: [...(dndSettings.buckets || []), newBucket] } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Bucket
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {dndSettings.buckets?.map((bucket: any, idx: number) => {
+                      console.log(`🪣 [DRAG_DROP_BUCKET_${idx}]`, { label: bucket.label, imageUrl: bucket.imageUrl, hasImage: !!bucket.imageUrl });
+                      return (
+                      <div key={bucket.id} className="bg-white p-3 rounded border space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-8 h-8 rounded flex-shrink-0"
+                            style={{ backgroundColor: bucket.color || '#gray' }}
+                          />
+                          <Input
+                            value={bucket.label}
+                            onChange={(e) => {
+                              const newBuckets = [...(dndSettings.buckets || [])];
+                              newBuckets[idx] = { ...bucket, label: e.target.value };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            placeholder="Bucket label"
+                            className="flex-1 h-8 text-sm"
+                          />
+                          <input
+                            type="color"
+                            value={bucket.color || '#3b82f6'}
+                            onChange={(e) => {
+                              const newBuckets = [...(dndSettings.buckets || [])];
+                              newBuckets[idx] = { ...bucket, color: e.target.value };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="w-10 h-8 rounded cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newBuckets = dndSettings.buckets.filter((_: any, i: number) => i !== idx);
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="ml-10">
+                          <label className="text-xs text-gray-600 mb-1 block">Bucket Image (Optional)</label>
+                          <div className="text-xs text-gray-500 mb-2">
+                            Recommended: 200 × 200 pixels (1:1 ratio) | Max: 5MB
+                          </div>
+                          <S3ImageUpload
+                            value={bucket.imageUrl || ''}
+                            onChange={(url) => {
+                              const newBuckets = [...(dndSettings.buckets || [])];
+                              newBuckets[idx] = { ...bucket, imageUrl: url };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            folder="questionnaire-images/drag-drop/buckets"
+                            questionId={`${question.id}-bucket-${idx}`}
+                            placeholder="Upload bucket image"
+                            maxSize={5}
+                            showPreview={true}
+                          />
+                        </div>
+                      </div>
+                    )})}
+                    {(!dndSettings.buckets || dndSettings.buckets.length === 0) && (
+                      <p className="text-sm text-gray-500 text-center py-4">No buckets added yet. Click "Add Bucket" to start.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Assessment Mode - Correct Answers */}
+                {questionnaireType === "Assessment" && dndSettings.items?.length > 0 && dndSettings.buckets?.length > 0 && (
+                  <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckSquare className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-900">Correct Answers (Assessment Mode)</span>
+                    </div>
+                    <p className="text-xs text-amber-700 mb-3">Assign items to their correct buckets for scoring:</p>
+                    {dndSettings.buckets.map((bucket: any) => (
+                      <div key={bucket.id} className="mb-3 p-3 bg-white rounded border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div 
+                            className="w-4 h-4 rounded"
+                            style={{ backgroundColor: bucket.color }}
+                          />
+                          <span className="font-medium text-sm">{bucket.label}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {dndSettings.items.map((item: any) => {
+                            const isCorrect = question.correctAnswers?.find((b: any) => b.id === bucket.id)?.acceptedItems?.includes(item.id);
+                            return (
+                              <label key={item.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={isCorrect || false}
+                                  onChange={(e) => {
+                                    let correctAnswers = question.correctAnswers || dndSettings.buckets.map((b: any) => ({ id: b.id, label: b.label, acceptedItems: [] }));
+                                    correctAnswers = correctAnswers.map((ca: any) => {
+                                      if (ca.id === bucket.id) {
+                                        const items = ca.acceptedItems || [];
+                                        if (e.target.checked) {
+                                          return { ...ca, acceptedItems: [...items, item.id] };
+                                        } else {
+                                          return { ...ca, acceptedItems: items.filter((id: string) => id !== item.id) };
+                                        }
+                                      }
+                                      // Remove from other buckets if checked here
+                                      if (e.target.checked) {
+                                        return { ...ca, acceptedItems: (ca.acceptedItems || []).filter((id: string) => id !== item.id) };
+                                      }
+                                      return ca;
+                                    });
+                                    setSections(prevSections =>
+                                      prevSections.map(section =>
+                                        section.id === sectionId
+                                          ? {
+                                              ...section,
+                                              questions: section.questions.map((q: any) =>
+                                                q.id === question.id
+                                                  ? { ...q, correctAnswers }
+                                                  : q
+                                              )
+                                            }
+                                          : section
+                                      )
+                                    );
+                                  }}
+                                  className="rounded"
+                                />
+                                <span>{item.text}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Layout & Behavior Options */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-gray-50 rounded border">
+                    <Label className="text-xs text-gray-600 mb-2 block">Layout</Label>
+                    <select
+                      value={dndSettings.layout || 'responsive'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dndSettings, layout: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="responsive">Responsive (Auto)</option>
+                      <option value="horizontal">Horizontal</option>
+                      <option value="vertical">Vertical</option>
+                    </select>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded border">
+                    <Label className="text-xs text-gray-600 mb-2 block">Required Mode</Label>
+                    <select
+                      value={dndSettings.requiredMode || 'all'}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...dndSettings, requiredMode: e.target.value } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    >
+                      <option value="all">All items must be placed</option>
+                      <option value="at-least-one">At least one item</option>
+                      <option value="custom">Custom count</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Preview Message */}
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-xs text-blue-700">
+                    📦 <strong>{dndSettings.items?.length || 0}</strong> draggable items, 
+                    <strong> {dndSettings.buckets?.length || 0}</strong> buckets
+                    {questionnaireType === "Assessment" && " (Assessment mode enabled)"}
+                  </p>
+                </div>
               </div>
             )}
           </div>

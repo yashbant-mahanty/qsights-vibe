@@ -12,6 +12,7 @@ import {
   useSensors,
   DragStartEvent,
   DragEndEvent,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -65,6 +66,9 @@ function SortableItem({
     transition,
   } = useSortable({ id: item.id, disabled });
 
+  // Debug logging
+  console.log('🎯 [DRAG_DROP_ITEM]', { id: item.id, text: item.text, imageUrl: item.imageUrl, hasImage: !!item.imageUrl });
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -93,6 +97,8 @@ function SortableItem({
           src={item.imageUrl} 
           alt={item.text}
           className="w-12 h-12 object-cover rounded"
+          onLoad={() => console.log('✅ [DRAG_DROP_ITEM] Image loaded:', item.id)}
+          onError={(e) => console.error('❌ [DRAG_DROP_ITEM] Image error:', item.id, item.imageUrl, e)}
         />
       )}
       
@@ -138,24 +144,41 @@ function DroppableBucket({
   onRemove 
 }: DroppableBucketProps) {
   const itemIds = items.map(item => item.id);
+  
+  // Debug logging
+  console.log('🪣 [DRAG_DROP_BUCKET]', { id: bucket.id, label: bucket.label, imageUrl: bucket.imageUrl, hasImage: !!bucket.imageUrl });
+  
+  const { setNodeRef, isOver } = useDroppable({
+    id: bucket.id,
+  });
 
   return (
     <div 
+      ref={setNodeRef}
       className={`
         flex-1 min-w-[250px] p-4 rounded-xl border-2 border-dashed transition-all
         ${disabled ? 'bg-gray-50' : 'bg-white hover:border-qsights-blue'}
+        ${isOver ? 'border-qsights-blue bg-blue-50 scale-105' : ''}
       `}
       style={{ 
-        borderColor: bucket.color || '#e5e7eb',
+        borderColor: isOver ? '#3b82f6' : (bucket.color || '#e5e7eb'),
         backgroundColor: items.length > 0 && !disabled ? `${bucket.color}10` : undefined 
       }}
     >
-      <h4 
-        className="font-semibold mb-3 pb-2 border-b-2 text-sm"
-        style={{ borderColor: bucket.color || '#d1d5db' }}
-      >
-        {bucket.label}
-      </h4>
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b-2" style={{ borderColor: bucket.color || '#d1d5db' }}>
+        {bucket.imageUrl && (
+          <img 
+            src={bucket.imageUrl} 
+            alt={bucket.label}
+            className="w-8 h-8 object-cover rounded"
+            onLoad={() => console.log('✅ [DRAG_DROP_BUCKET] Image loaded:', bucket.id)}
+            onError={(e) => console.error('❌ [DRAG_DROP_BUCKET] Image error:', bucket.id, bucket.imageUrl, e)}
+          />
+        )}
+        <h4 className="font-semibold text-sm flex-1">
+          {bucket.label}
+        </h4>
+      </div>
       
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
         <div className="space-y-2 min-h-[100px]">
@@ -180,6 +203,66 @@ function DroppableBucket({
                 />
               );
             })
+          )}
+        </div>
+      </SortableContext>
+    </div>
+  );
+}
+
+// Droppable Source Items Component
+interface SourceItemsProps {
+  items: DragDropItem[];
+  disabled?: boolean;
+  required?: boolean;
+  tapSelectedItem?: string | null;
+  onTapItem?: (itemId: string) => void;
+}
+
+function SourceItems({ 
+  items, 
+  disabled, 
+  required, 
+  tapSelectedItem,
+  onTapItem 
+}: SourceItemsProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'source-items',
+  });
+
+  return (
+    <div className="flex-1 min-w-[250px]">
+      <h4 className="font-semibold mb-3 text-sm text-gray-700">
+        Available Items {required && <span className="text-red-500">*</span>}
+      </h4>
+      
+      <SortableContext 
+        items={items.map(item => item.id)} 
+        strategy={verticalListSortingStrategy}
+      >
+        <div 
+          ref={setNodeRef}
+          className={`space-y-2 p-4 rounded-xl border-2 border-dashed min-h-[150px] transition-all
+            ${isOver ? 'border-qsights-blue bg-blue-50 scale-105' : 'border-gray-300 bg-gray-50'}
+          `}
+        >
+          {items.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+              All items placed
+            </div>
+          ) : (
+            items.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => onTapItem?.(item.id)}
+                className={tapSelectedItem === item.id ? 'ring-2 ring-blue-500 rounded-lg' : ''}
+              >
+                <SortableItem
+                  item={item}
+                  disabled={disabled}
+                />
+              </div>
+            ))
           )}
         </div>
       </SortableContext>
@@ -249,6 +332,24 @@ export default function DragDropBucket({
 
     const activeItemId = active.id as string;
     const overContainerId = over.id as string;
+
+    // Check if dropping back to source
+    if (overContainerId === 'source-items') {
+      // Remove from any bucket (return to source)
+      const newPlacements = placements.filter(p => p.itemId !== activeItemId);
+      setPlacements(newPlacements);
+      
+      if (onChange) {
+        onChange({
+          placements: newPlacements,
+          timestamp: new Date().toISOString(),
+          unplacedItems: settings.items
+            .filter(item => !newPlacements.find(p => p.itemId === item.id))
+            .map(item => item.id),
+        });
+      }
+      return;
+    }
 
     // Find if dropping over a bucket
     const targetBucket = settings.buckets.find(b => b.id === overContainerId);
@@ -379,37 +480,13 @@ export default function DragDropBucket({
       >
         <div className={`flex ${useVerticalLayout ? 'flex-col' : 'flex-row'} gap-4`}>
           {/* Source Items */}
-          <div className="flex-1 min-w-[250px]">
-            <h4 className="font-semibold mb-3 text-sm text-gray-700">
-              Available Items {question.required && <span className="text-red-500">*</span>}
-            </h4>
-            
-            <SortableContext 
-              items={unplacedItems.map(item => item.id)} 
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-2 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 min-h-[150px]">
-                {unplacedItems.length === 0 ? (
-                  <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
-                    All items placed
-                  </div>
-                ) : (
-                  unplacedItems.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => handleTapItem(item.id)}
-                      className={tapSelectedItem === item.id ? 'ring-2 ring-blue-500 rounded-lg' : ''}
-                    >
-                      <SortableItem
-                        item={item}
-                        disabled={disabled}
-                      />
-                    </div>
-                  ))
-                )}
-              </div>
-            </SortableContext>
-          </div>
+          <SourceItems
+            items={unplacedItems}
+            disabled={disabled}
+            required={question.required}
+            tapSelectedItem={tapSelectedItem}
+            onTapItem={handleTapItem}
+          />
 
           {/* Buckets */}
           <div className={`flex-[2] flex ${useVerticalLayout ? 'flex-col' : 'flex-row'} gap-4`}>

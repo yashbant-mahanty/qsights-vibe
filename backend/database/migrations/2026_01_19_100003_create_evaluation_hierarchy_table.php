@@ -83,13 +83,14 @@ return new class extends Migration
             $table->index(['reports_to_id', 'is_active']);
             $table->index(['organization_id', 'is_active']);
             $table->index(['program_id', 'is_active']);
-            
-            // Prevent duplicate active relationships
-            $table->unique(['staff_id', 'reports_to_id', 'is_primary', 'deleted_at'], 'unique_active_primary_relationship');
         });
         
         // Add check constraint to prevent self-referencing (staff cannot report to themselves)
         DB::statement('ALTER TABLE evaluation_hierarchy ADD CONSTRAINT check_no_self_reference CHECK (staff_id != reports_to_id)');
+        
+        // Create a partial unique index for active, non-deleted primary relationships only
+        // This prevents duplicate active primary relationships while allowing multiple soft-deleted ones
+        DB::statement('CREATE UNIQUE INDEX unique_active_primary_hierarchy ON evaluation_hierarchy (staff_id, reports_to_id) WHERE is_primary = true AND is_active = true AND deleted_at IS NULL');
     }
 
     /**
@@ -97,6 +98,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        DB::statement('DROP INDEX IF EXISTS unique_active_primary_hierarchy');
         DB::statement('ALTER TABLE evaluation_hierarchy DROP CONSTRAINT IF EXISTS check_no_self_reference');
         Schema::dropIfExists('evaluation_hierarchy');
     }

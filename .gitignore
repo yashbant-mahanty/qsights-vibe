@@ -2,60 +2,57 @@
 node_modules/
 vendor/
 
-# Environment variables and credentials
+# Build outputs
+.next/
+build/
+dist/
+
+# Environment files (contains secrets)
 .env
 .env.local
 .env.production
-.env.*.local
+.env.development
 backend/.env
-frontend/.env.local
 
-# SendGrid credentials (CRITICAL - DO NOT COMMIT)
-**/SENDGRID_API_KEY*
-**/sendgrid*.key
-**/email_credentials*
-
-# PEM files and keys
-*.pem
-*.key
-*.p12
-*.pfx
-
-# Build outputs
-.next/
-dist/
-build/
-*.log
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Backup files
-*.backup
-*.bak
-*~
-
-# Database
-*.sqlite
-*.db
-
-# Uploads
-storage/
-public/uploads/
-public/storage/
+# Backups folder
+backups/
 
 # Cache
-bootstrap/cache/
 .cache/
+*.cache
+
+# Testing
+coverage/
 
 # Temporary files
-tmp/
-temp/
 *.tmp
+*.temp
+/tmp/
+
+# Laravel specific
+backend/storage/logs/*
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/bootstrap/cache/*
+!backend/storage/logs/.gitkeep
+!backend/storage/framework/cache/.gitkeep
+!backend/storage/framework/sessions/.gitkeep
+!backend/storage/framework/views/.gitkeep
+!backend/bootstrap/cache/.gitkeep

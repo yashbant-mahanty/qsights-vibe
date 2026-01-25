@@ -8,6 +8,7 @@ interface DeleteConfirmationModalProps {
   onClose: () => void;
   onConfirm: () => void;
   title?: string;
+  message?: string;
   itemName?: string;
   itemType?: string;
 }
@@ -17,6 +18,7 @@ export default function DeleteConfirmationModal({
   onClose,
   onConfirm,
   title = "Are you sure?",
+  message,
   itemName,
   itemType = "item",
 }: DeleteConfirmationModalProps) {
@@ -52,10 +54,14 @@ export default function DeleteConfirmationModal({
 
         {/* Content */}
         <div className="p-6">
-          <p className="text-sm text-gray-700 leading-relaxed">
-            This action will permanently delete the {itemType} from frontend and
-            backend. This operation cannot be undone.
-          </p>
+          {message ? (
+            <p className="text-sm text-gray-700 leading-relaxed">{message}</p>
+          ) : (
+            <p className="text-sm text-gray-700 leading-relaxed">
+              This action will permanently delete the {itemType} from frontend and
+              backend. This operation cannot be undone.
+            </p>
+          )}
           <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-sm text-amber-800 font-medium">
               ⚠️ Warning: This is a permanent action

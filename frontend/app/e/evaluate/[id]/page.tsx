@@ -51,8 +51,13 @@ export default function TakeEvaluationPage() {
   const [currentSubIndex, setCurrentSubIndex] = useState(0);
   const [completed, setCompleted] = useState(false);
   
-  // API URL
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://qsights.co';
+  // API URL - handle both formats (with or without /api suffix)
+  const getApiUrl = () => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
+    // Remove trailing /api if present to avoid duplication
+    return baseUrl.replace(/\/api\/?$/, '');
+  };
+  const API_BASE = getApiUrl();
 
   useEffect(() => {
     const fetchEvaluation = async () => {
@@ -63,7 +68,7 @@ export default function TakeEvaluationPage() {
       }
       
       try {
-        const response = await fetch(`${API_URL}/api/evaluation/triggered/${evaluationId}?token=${token}`);
+        const response = await fetch(`${API_BASE}/api/evaluation/triggered/${evaluationId}?token=${token}`);
         const data = await response.json();
         
         if (data.success && data.evaluation) {
@@ -89,7 +94,7 @@ export default function TakeEvaluationPage() {
     };
     
     fetchEvaluation();
-  }, [evaluationId, token, API_URL]);
+  }, [evaluationId, token, API_BASE]);
 
   const handleResponseChange = (subId: string, questionIndex: number, value: string | number) => {
     setResponses(prev => ({
@@ -131,7 +136,7 @@ export default function TakeEvaluationPage() {
     try {
       setSubmitting(true);
       
-      const response = await fetch(`${API_URL}/api/evaluation/triggered/${evaluationId}/submit?token=${token}`, {
+      const response = await fetch(`${API_BASE}/api/evaluation/triggered/${evaluationId}/submit?token=${token}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

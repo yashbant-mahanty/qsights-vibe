@@ -897,6 +897,8 @@ export default function QuestionnaireBuilderPage() {
                 ...(questionnaireType === 'Assessment' && question.correctAnswers ? { correctAnswers: question.correctAnswers } : {}),
                 // Save conditional logic in settings
                 ...(question.conditionalLogic ? { conditionalLogic: question.conditionalLogic } : {}),
+                // Save question image URL
+                ...(question.imageUrl ? { imageUrl: question.imageUrl } : {}),
               },
               order: section.questions.indexOf(question) + 1,
             };
@@ -1098,6 +1100,24 @@ export default function QuestionnaireBuilderPage() {
                     </div>
                   )}
                   {question.required && <span className="text-red-500 text-sm">*</span>}
+                </div>
+                {/* Question Image Upload */}
+                <div className="mt-2">
+                  <Label className="text-xs text-gray-600 mb-1 block">Question Image (Optional)</Label>
+                  <div className="max-w-md">
+                    <S3ImageUpload
+                      value={question.imageUrl || ''}
+                      onChange={(url) => {
+                        updateQuestionProperty(sectionId, question.id, 'imageUrl', url);
+                      }}
+                      folder="questionnaire-images/questions"
+                      questionId={question.id}
+                      placeholder="Upload question image"
+                      maxSize={5}
+                      showPreview={true}
+                      className="w-full"
+                    />
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -3598,56 +3618,87 @@ export default function QuestionnaireBuilderPage() {
                       Add Item
                     </button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {dndSettings.items?.map((item: any, idx: number) => (
-                      <div key={item.id} className="flex items-center gap-2 bg-white p-2 rounded border">
-                        <GripVertical className="w-4 h-4 text-gray-400" />
-                        <Input
-                          value={item.text}
-                          onChange={(e) => {
-                            const newItems = [...(dndSettings.items || [])];
-                            newItems[idx] = { ...item, text: e.target.value };
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...dndSettings, items: newItems } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          placeholder="Item text"
-                          className="flex-1 h-8 text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newItems = dndSettings.items.filter((_: any, i: number) => i !== idx);
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...dndSettings, items: newItems } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                      <div key={item.id} className="bg-white p-3 rounded border space-y-2">
+                        <div className="flex items-center gap-2">
+                          <GripVertical className="w-4 h-4 text-gray-400" />
+                          <Input
+                            value={item.text}
+                            onChange={(e) => {
+                              const newItems = [...(dndSettings.items || [])];
+                              newItems[idx] = { ...item, text: e.target.value };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, items: newItems } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            placeholder="Item text"
+                            className="flex-1 h-8 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newItems = dndSettings.items.filter((_: any, i: number) => i !== idx);
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, items: newItems } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="ml-6">
+                          <label className="text-xs text-gray-600 mb-1 block">Item Image (Optional)</label>
+                          <S3ImageUpload
+                            value={item.imageUrl || ''}
+                            onChange={(url) => {
+                              const newItems = [...(dndSettings.items || [])];
+                              newItems[idx] = { ...item, imageUrl: url };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, items: newItems } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            folder="questionnaire-images/drag-drop/items"
+                            questionId={`${question.id}-item-${idx}`}
+                            placeholder="Upload item image"
+                            maxSize={5}
+                            showPreview={true}
+                          />
+                        </div>
                       </div>
                     ))}
                     {(!dndSettings.items || dndSettings.items.length === 0) && (
@@ -3693,82 +3744,113 @@ export default function QuestionnaireBuilderPage() {
                       Add Bucket
                     </button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {dndSettings.buckets?.map((bucket: any, idx: number) => (
-                      <div key={bucket.id} className="flex items-center gap-2 bg-white p-2 rounded border">
-                        <div 
-                          className="w-8 h-8 rounded flex-shrink-0"
-                          style={{ backgroundColor: bucket.color || '#gray' }}
-                        />
-                        <Input
-                          value={bucket.label}
-                          onChange={(e) => {
-                            const newBuckets = [...(dndSettings.buckets || [])];
-                            newBuckets[idx] = { ...bucket, label: e.target.value };
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          placeholder="Bucket label"
-                          className="flex-1 h-8 text-sm"
-                        />
-                        <input
-                          type="color"
-                          value={bucket.color || '#3b82f6'}
-                          onChange={(e) => {
-                            const newBuckets = [...(dndSettings.buckets || [])];
-                            newBuckets[idx] = { ...bucket, color: e.target.value };
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          className="w-10 h-8 rounded cursor-pointer"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newBuckets = dndSettings.buckets.filter((_: any, i: number) => i !== idx);
-                            setSections(prevSections =>
-                              prevSections.map(section =>
-                                section.id === sectionId
-                                  ? {
-                                      ...section,
-                                      questions: section.questions.map((q: any) =>
-                                        q.id === question.id
-                                          ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
-                                          : q
-                                      )
-                                    }
-                                  : section
-                              )
-                            );
-                          }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                      <div key={bucket.id} className="bg-white p-3 rounded border space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-8 h-8 rounded flex-shrink-0"
+                            style={{ backgroundColor: bucket.color || '#gray' }}
+                          />
+                          <Input
+                            value={bucket.label}
+                            onChange={(e) => {
+                              const newBuckets = [...(dndSettings.buckets || [])];
+                              newBuckets[idx] = { ...bucket, label: e.target.value };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            placeholder="Bucket label"
+                            className="flex-1 h-8 text-sm"
+                          />
+                          <input
+                            type="color"
+                            value={bucket.color || '#3b82f6'}
+                            onChange={(e) => {
+                              const newBuckets = [...(dndSettings.buckets || [])];
+                              newBuckets[idx] = { ...bucket, color: e.target.value };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="w-10 h-8 rounded cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newBuckets = dndSettings.buckets.filter((_: any, i: number) => i !== idx);
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="ml-10">
+                          <label className="text-xs text-gray-600 mb-1 block">Bucket Image (Optional)</label>
+                          <S3ImageUpload
+                            value={bucket.imageUrl || ''}
+                            onChange={(url) => {
+                              const newBuckets = [...(dndSettings.buckets || [])];
+                              newBuckets[idx] = { ...bucket, imageUrl: url };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, settings: { ...dndSettings, buckets: newBuckets } }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            folder="questionnaire-images/drag-drop/buckets"
+                            questionId={`${question.id}-bucket-${idx}`}
+                            placeholder="Upload bucket image"
+                            maxSize={5}
+                            showPreview={true}
+                          />
+                        </div>
                       </div>
                     ))}
                     {(!dndSettings.buckets || dndSettings.buckets.length === 0) && (

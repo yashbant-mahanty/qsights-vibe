@@ -441,6 +441,8 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
   }
 
   if (!response.ok) {
+    console.error('[API] Error response:', { status: response.status, data });
+    console.error('[API] Full error data:', JSON.stringify(data, null, 2));
     // For 422 validation errors, extract the actual field errors
     if (response.status === 422 && data.errors) {
       const errorMessages = Object.entries(data.errors)
@@ -452,6 +454,7 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
     throw new Error(data.message || `HTTP ${response.status}`);
   }
 
+  console.log('[API] Success response data:', JSON.stringify(data, null, 2));
   return data;
 }
 

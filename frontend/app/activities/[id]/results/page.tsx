@@ -70,6 +70,69 @@ function formatAnswerForDisplay(answer: any): string {
   return String(answer);
 }
 
+// Helper function to format drag & drop responses with item/bucket names
+function formatDragDropResponse(answer: any, questionSettings: any): React.ReactNode {
+  if (!answer || typeof answer !== 'object') return formatAnswerForDisplay(answer);
+  
+  // Handle both parsed object and string
+  const response = typeof answer === 'string' ? JSON.parse(answer) : answer;
+  
+  // Check if this is a drag_and_drop response
+  if (!response.placements && !response.unplacedItems) {
+    return formatAnswerForDisplay(answer);
+  }
+
+  const items = questionSettings?.items || [];
+  const buckets = questionSettings?.buckets || [];
+
+  // Create lookup maps
+  const itemMap = new Map(items.map((item: any) => [item.id, item.text || item.id]));
+  const bucketMap = new Map(buckets.map((bucket: any) => [bucket.id, bucket.label || bucket.id]));
+
+  return (
+    <div className="space-y-3">
+      {/* Placements */}
+      {response.placements && response.placements.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-gray-700 uppercase">Placed Items:</div>
+          {response.placements.map((placement: any, idx: number) => (
+            <div key={idx} className="flex items-center gap-2 text-sm">
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded font-medium">
+                {itemMap.get(placement.itemId) || placement.itemId}
+              </span>
+              <span className="text-gray-500">→</span>
+              <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-medium">
+                {bucketMap.get(placement.bucketId) || placement.bucketId}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Unplaced Items */}
+      {response.unplacedItems && response.unplacedItems.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-gray-700 uppercase">Unplaced Items:</div>
+          <div className="flex flex-wrap gap-2">
+            {response.unplacedItems.map((itemId: string, idx: number) => (
+              <span key={idx} className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-sm font-medium">
+                {itemMap.get(itemId) || itemId}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Timestamp */}
+      {response.timestamp && (
+        <div className="text-xs text-gray-500 italic">
+          Submitted: {new Date(response.timestamp).toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface NotificationReport {
   id: string;
   activity_id: string;
@@ -1498,7 +1561,7 @@ export default function ActivityResultsPage() {
                                     </div>
                                   )
                                 ) : (
-                                  // Text/Open-ended responses
+                                  // Text/Open-ended responses and drag_and_drop
                                   <div className="space-y-4">
                                     <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2">
                                       <List className="w-4 h-4" />
@@ -1511,9 +1574,12 @@ export default function ActivityResultsPage() {
                                             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm">
                                               {idx + 1}
                                             </div>
-                                            <p className="text-sm text-gray-800 flex-1 break-words">
-                                              {typeof answer === 'object' ? JSON.stringify(answer, null, 2) : String(answer)}
-                                            </p>
+                                            <div className="text-sm text-gray-800 flex-1 break-words">
+                                              {question.type === 'drag_and_drop' 
+                                                ? formatDragDropResponse(answer, question.settings)
+                                                : (typeof answer === 'object' ? JSON.stringify(answer, null, 2) : String(answer))
+                                              }
+                                            </div>
                                           </div>
                                         </div>
                                       ))}
@@ -1559,6 +1625,8 @@ export default function ActivityResultsPage() {
                                                           </span>
                                                         ))}
                                                       </div>
+                                                    ) : question.type === 'drag_and_drop' ? (
+                                                      formatDragDropResponse(pr.answer, question.settings)
                                                     ) : (
                                                       <span className="font-medium">{formatAnswerForDisplay(pr.answer)}</span>
                                                     )}

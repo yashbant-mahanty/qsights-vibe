@@ -1,16 +1,19 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Building2, Users, Network, Play, History, Plus, Edit2, Trash2, 
   Search, ChevronRight, ChevronDown, Send, CheckCircle, Clock,
   Star, TrendingUp, MessageSquare, UserCheck, Smile, List, X,
-  Mail, AlertCircle, Loader2
+  Mail, AlertCircle, Loader2, Power, RefreshCw, Calendar, BarChart3,
+  Download, Filter, Eye, FileText, ChevronUp, Award, Target, 
+  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart
 } from 'lucide-react';
 import AppLayout from '@/components/app-layout';
 import { fetchWithAuth } from '@/lib/api';
-import { toast } from 'react-hot-toast';
+import { toast } from '@/components/ui/toast';
+import DeleteConfirmationModal from '@/components/delete-confirmation-modal';
 
 // Types
 interface Department {
@@ -25,7 +28,7 @@ interface Role {
   code: string;
   description?: string;
   category?: string; // This acts as department
-  organization_id: string;
+  program_id: string;
   hierarchy_level: number;
   is_active: boolean;
   staff_count?: number;
@@ -39,7 +42,7 @@ interface Staff {
   role_id: string;
   role_name?: string;
   department?: string;
-  organization_id: string;
+  program_id: string;
   is_available_for_evaluation: boolean;
 }
 
@@ -83,7 +86,49 @@ interface TriggeredEvaluation {
   completed_at?: string;
 }
 
-type TabType = 'setup' | 'trigger' | 'history';
+interface ReportSummary {
+  total_triggered: number;
+  completed: number;
+  pending: number;
+  in_progress: number;
+  completion_rate: number;
+  total_subordinates_evaluated: number;
+  unique_evaluators: number;
+  template_breakdown: { template_id: string; template_name: string; count: number }[];
+  department_breakdown: { department: string; count: number }[];
+}
+
+interface StaffReport {
+  staff_id: string;
+  staff_name: string;
+  staff_email: string;
+  employee_id: string;
+  evaluations: {
+    evaluation_id: string;
+    template_id: string;
+    template_name: string;
+    evaluator_id: string;
+    evaluator_name: string;
+    evaluator_role: string;
+    department: string;
+    responses: Record<string, any> | null;
+    completed_at: string;
+  }[];
+}
+
+interface EvaluatorReport {
+  evaluator_id: string;
+  evaluator_name: string;
+  evaluator_email: string;
+  department: string;
+  role: string;
+  total_evaluations: number;
+  completed_evaluations: number;
+  pending_evaluations: number;
+  total_subordinates_evaluated: number;
+}
+
+type TabType = 'setup' | 'trigger' | 'history' | 'reports';
 
 // Predefined Evaluation Templates
 const evaluationTemplates: EvaluationTemplate[] = [
@@ -174,14 +219,27 @@ const evaluationTemplates: EvaluationTemplate[] = [
 
 export default function EvaluationNewPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('setup');
   const [loading, setLoading] = useState(false);
+  
+  // Toast helper functions for uniform styling
+  const showToast = {
+    success: (message: string) => toast({ title: 'Success', description: message, variant: 'success' }),
+    error: (message: string) => toast({ title: 'Error', description: message, variant: 'error' }),
+    warning: (message: string) => toast({ title: 'Warning', description: message, variant: 'warning' }),
+  };
   
   // Setup state
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [mappings, setMappings] = useState<Mapping[]>([]);
+  
+  // Prevent hydration errors
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Selected state for cascading
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
@@ -193,78 +251,191 @@ export default function EvaluationNewPage() {
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [showMappingModal, setShowMappingModal] = useState(false);
   
+  // Edit mode states
+  const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  
+  // Delete confirmation states
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    type: 'department' | 'role' | 'staff' | null;
+    id: string;
+    name: string;
+  }>({ isOpen: false, type: null, id: '', name: '' });
+  
   // Form states
-  const [deptForm, setDeptForm] = useState({ name: '', code: '', description: '' });
-  const [roleForm, setRoleForm] = useState({ name: '', code: '', description: '', hierarchy_level: 0 });
+  const [deptForm, setDeptForm] = useState({ name: '', code: '', description: '', program_id: '' });
+  const [roleForm, setRoleForm] = useState({ name: '', code: '', description: '', department_id: '' });
   const [staffForm, setStaffForm] = useState({ name: '', email: '', employee_id: '', role_id: '' });
   
   // Trigger state
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedEvaluators, setSelectedEvaluators] = useState<string[]>([]);
   const [triggering, setTriggering] = useState(false);
+  const [showTriggerModal, setShowTriggerModal] = useState(false);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
   
   // History state
   const [triggeredEvaluations, setTriggeredEvaluations] = useState<TriggeredEvaluation[]>([]);
+  const [editingTriggered, setEditingTriggered] = useState<TriggeredEvaluation | null>(null);
+  const [showEditTriggeredModal, setShowEditTriggeredModal] = useState(false);
   
-  // Organization ID (would come from auth context in real app)
-  const [organizationId, setOrganizationId] = useState<string>('');
+  // Reports state
+  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
+  const [staffReports, setStaffReports] = useState<StaffReport[]>([]);
+  const [evaluatorReports, setEvaluatorReports] = useState<EvaluatorReport[]>([]);
+  const [reportFilters, setReportFilters] = useState({
+    department_id: '',
+    evaluator_id: '',
+    template_id: '',
+    staff_id: '',
+    date_from: '',
+    date_to: ''
+  });
+  const [reportLoading, setReportLoading] = useState(false);
+  const [expandedStaff, setExpandedStaff] = useState<string[]>([]);
+  const [reportViewMode, setReportViewMode] = useState<'staff' | 'evaluator' | 'analysis'>('staff');
+  const [selectedStaffForAnalysis, setSelectedStaffForAnalysis] = useState<string | null>(null);
+  
+  // Helper function to analyze staff performance
+  const analyzeStaffPerformance = useMemo(() => {
+    return (staffReport: StaffReport) => {
+      const allScores: { question: string; score: number; count: number }[] = [];
+      const textFeedback: { question: string; answer: string; evaluator: string }[] = [];
+      
+      staffReport.evaluations.forEach(evaluation => {
+        if (evaluation.responses) {
+          Object.entries(evaluation.responses).forEach(([question, answer]) => {
+            if (typeof answer === 'number') {
+              const existing = allScores.find(s => s.question === question);
+              if (existing) {
+                existing.score = (existing.score * existing.count + answer) / (existing.count + 1);
+                existing.count++;
+              } else {
+                allScores.push({ question, score: answer, count: 1 });
+              }
+            } else if (typeof answer === 'string' && answer.trim()) {
+              textFeedback.push({ 
+                question, 
+                answer: String(answer), 
+                evaluator: evaluation.evaluator_name 
+              });
+            }
+          });
+        }
+      });
+      
+      // Sort scores to find strengths and improvements
+      const sortedScores = [...allScores].sort((a, b) => b.score - a.score);
+      const strengths = sortedScores.filter(s => s.score >= 4).slice(0, 3);
+      const improvements = sortedScores.filter(s => s.score < 4).sort((a, b) => a.score - b.score).slice(0, 3);
+      const overallAverage = allScores.length > 0 
+        ? allScores.reduce((sum, s) => sum + s.score, 0) / allScores.length 
+        : 0;
+      
+      return {
+        allScores,
+        textFeedback,
+        strengths,
+        improvements,
+        overallAverage: Math.round(overallAverage * 10) / 10,
+        totalEvaluations: staffReport.evaluations.length
+      };
+    };
+  }, []);
+  
+  // Program ID (for multi-tenancy)
+  const [programId, setProgramId] = useState<string>('');
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
 
-  // Fetch organization from user
+  // Fetch program from user
   useEffect(() => {
-    const fetchOrgId = async () => {
+    const fetchProgramId = async () => {
       try {
         const response = await fetchWithAuth('/auth/me');
-        if (response.success && response.user) {
-          setOrganizationId(response.user.organization_id);
+        console.log('[Evaluation Page] Full response:', JSON.stringify(response));
+        console.log('[Evaluation Page] Response has success?', 'success' in response);
+        console.log('[Evaluation Page] Response has user?', 'user' in response);
+        
+        // Handle both response formats
+        const userData = response.user || response;
+        console.log('[Evaluation Page] User data:', JSON.stringify(userData));
+        
+        if (userData) {
+          setUser(userData);
+          const userProgramId = userData.programId || userData.program_id || '';
+          console.log('[Evaluation Page] Extracted programId:', userProgramId);
+          setProgramId(userProgramId);
+          console.log('[Evaluation Page] State set to programId:', userProgramId);
+          
+          // If super-admin, fetch all programs
+          if (userData.role === 'super-admin') {
+            const programsRes = await fetchWithAuth('/programs');
+            if (programsRes.success || programsRes.programs) {
+              setPrograms(programsRes.programs || []);
+            }
+          }
         }
       } catch (error) {
-        console.error('Failed to fetch user:', error);
+        console.error('[Evaluation Page] Failed to fetch user:', error);
       }
     };
-    fetchOrgId();
+    fetchProgramId();
   }, []);
 
   // Fetch data - Derive departments from roles categories
   const fetchDepartments = useCallback(async () => {
-    if (!organizationId) return;
+    console.log('[Evaluation Page] fetchDepartments called, programId:', programId);
+    if (!programId) return;
     try {
-      const response = await fetchWithAuth(`/evaluation/departments?organization_id=${organizationId}`);
+      const response = await fetchWithAuth(`/evaluation/departments?program_id=${programId}`);
+      console.log('[Evaluation Page] Departments response:', response);
       if (response.success) {
         setDepartments(response.departments || []);
       }
     } catch (error) {
       console.error('Failed to fetch departments:', error);
     }
-  }, [organizationId]);
+  }, [programId]);
 
   const fetchRoles = useCallback(async () => {
-    if (!organizationId) return;
+    console.log('[Evaluation Page] fetchRoles called, programId:', programId);
+    if (!programId) return;
     try {
-      const response = await fetchWithAuth(`/evaluation/roles?organization_id=${organizationId}`);
+      const response = await fetchWithAuth(`/evaluation/roles?program_id=${programId}`);
+      console.log('[Evaluation Page] Roles response:', response);
       if (response.success) {
         setRoles(response.roles || []);
       }
     } catch (error) {
       console.error('Failed to fetch roles:', error);
     }
-  }, [organizationId]);
+  }, [programId]);
 
   const fetchStaff = useCallback(async () => {
-    if (!organizationId) return;
+    console.log('[Evaluation Page] fetchStaff called, programId:', programId);
+    if (!programId) return;
     try {
-      const response = await fetchWithAuth(`/evaluation/staff?organization_id=${organizationId}`);
+      const response = await fetchWithAuth(`/evaluation/staff?program_id=${programId}`);
+      console.log('[Evaluation Page] Staff response:', response);
       if (response.success) {
         setStaff(response.staff || []);
       }
     } catch (error) {
       console.error('Failed to fetch staff:', error);
     }
-  }, [organizationId]);
+  }, [programId]);
 
   const fetchMappings = useCallback(async () => {
-    if (!organizationId) return;
+    if (!programId) return;
     try {
-      const response = await fetchWithAuth(`/evaluation/hierarchy?organization_id=${organizationId}`);
+      const response = await fetchWithAuth(`/evaluation/hierarchy?program_id=${programId}`);
       if (response.success) {
         // Transform hierarchy data into mapping format
         const hierarchyData = response.hierarchies || response.hierarchy || [];
@@ -303,218 +474,401 @@ export default function EvaluationNewPage() {
     } catch (error) {
       console.error('Failed to fetch mappings:', error);
     }
-  }, [organizationId]);
+  }, [programId]);
 
   const fetchTriggeredEvaluations = useCallback(async () => {
-    if (!organizationId) return;
+    if (!programId) return;
     try {
-      const response = await fetchWithAuth(`/evaluation/triggered?organization_id=${organizationId}`);
+      const response = await fetchWithAuth(`/evaluation/triggered?program_id=${programId}`);
       if (response.success) {
         setTriggeredEvaluations(response.evaluations || []);
       }
     } catch (error) {
       console.error('Failed to fetch triggered evaluations:', error);
     }
-  }, [organizationId]);
+  }, [programId]);
+
+  // Fetch report data
+  const fetchReportSummary = useCallback(async () => {
+    if (!programId) return;
+    try {
+      const response = await fetchWithAuth(`/evaluation/reports/summary?program_id=${programId}`);
+      if (response.success) {
+        setReportSummary(response.summary);
+      }
+    } catch (error) {
+      console.error('Failed to fetch report summary:', error);
+    }
+  }, [programId]);
+
+  const fetchStaffReports = useCallback(async () => {
+    if (!programId) return;
+    try {
+      setReportLoading(true);
+      const params = new URLSearchParams({ program_id: programId });
+      
+      if (reportFilters.department_id) params.append('department_id', reportFilters.department_id);
+      if (reportFilters.evaluator_id) params.append('evaluator_id', reportFilters.evaluator_id);
+      if (reportFilters.template_id) params.append('template_id', reportFilters.template_id);
+      if (reportFilters.staff_id) params.append('staff_id', reportFilters.staff_id);
+      if (reportFilters.date_from) params.append('date_from', reportFilters.date_from);
+      if (reportFilters.date_to) params.append('date_to', reportFilters.date_to);
+      
+      const response = await fetchWithAuth(`/evaluation/reports?${params.toString()}`);
+      if (response.success) {
+        setStaffReports(response.reports || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch staff reports:', error);
+    } finally {
+      setReportLoading(false);
+    }
+  }, [programId, reportFilters]);
+
+  const fetchEvaluatorReports = useCallback(async () => {
+    if (!programId) return;
+    try {
+      const response = await fetchWithAuth(`/evaluation/reports/evaluators?program_id=${programId}`);
+      if (response.success) {
+        setEvaluatorReports(response.evaluators || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch evaluator reports:', error);
+    }
+  }, [programId]);
+
+  const handleExportReport = async (format: 'json' | 'csv') => {
+    try {
+      const params = new URLSearchParams({ program_id: programId, format });
+      
+      if (format === 'csv') {
+        window.open(`${process.env.NEXT_PUBLIC_API_URL}/evaluation/reports/export?${params.toString()}`, '_blank');
+      } else {
+        const response = await fetchWithAuth(`/evaluation/reports/export?${params.toString()}`);
+        if (response.success) {
+          const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `evaluation_report_${new Date().toISOString().split('T')[0]}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      }
+      showToast.success(`Report exported as ${format.toUpperCase()}`);
+    } catch (error) {
+      showToast.error('Failed to export report');
+      console.error('Export error:', error);
+    }
+  };
 
   useEffect(() => {
-    if (organizationId) {
+    if (programId) {
       fetchDepartments();
       fetchRoles();
       fetchStaff();
     }
-  }, [organizationId, fetchDepartments, fetchRoles, fetchStaff]);
+  }, [programId, fetchDepartments, fetchRoles, fetchStaff]);
 
   useEffect(() => {
-    if (organizationId) {
+    if (programId) {
       fetchMappings();
     }
-  }, [organizationId, fetchMappings]);
+  }, [programId, fetchMappings]);
 
   useEffect(() => {
-    if (organizationId && activeTab === 'history') {
+    if (programId && activeTab === 'history') {
       fetchTriggeredEvaluations();
     }
-  }, [organizationId, activeTab, fetchTriggeredEvaluations]);
+  }, [programId, activeTab, fetchTriggeredEvaluations]);
+
+  useEffect(() => {
+    if (programId && activeTab === 'reports') {
+      fetchReportSummary();
+      fetchStaffReports();
+      fetchEvaluatorReports();
+    }
+  }, [programId, activeTab, fetchReportSummary, fetchStaffReports, fetchEvaluatorReports]);
+
+  // Refetch staff reports when filters change
+  useEffect(() => {
+    if (programId && activeTab === 'reports') {
+      fetchStaffReports();
+    }
+  }, [reportFilters, programId, activeTab, fetchStaffReports]);
 
   // CRUD handlers for Department
   const handleAddDepartment = async () => {
     if (!deptForm.name.trim()) {
-      toast.error('Department name is required');
+      showToast.error('Department name is required');
+      return;
+    }
+    
+    // For super-admin, program selection is required
+    if (user?.role === 'super-admin' && !deptForm.program_id) {
+      showToast.error('Please select a program');
       return;
     }
     
     try {
       setLoading(true);
+      // Use form program_id for super-admin, or user's program_id for others
+      const selectedProgramId = user?.role === 'super-admin' ? deptForm.program_id : programId;
+      
+      const requestBody = {
+        name: deptForm.name,
+        code: deptForm.code || deptForm.name.substring(0, 3).toUpperCase(),
+        description: deptForm.description,
+        program_id: selectedProgramId || null
+      };
+      console.log('[Department Add] Request body:', requestBody);
+      
       const response = await fetchWithAuth('/evaluation/departments', {
         method: 'POST',
-        body: JSON.stringify({
-          name: deptForm.name,
-          code: deptForm.code || deptForm.name.substring(0, 3).toUpperCase(),
-          description: deptForm.description,
-          organization_id: organizationId
-        })
+        body: JSON.stringify(requestBody)
       });
       
       if (response.success) {
-        toast.success('Department added successfully');
+        showToast.success('Department added successfully');
         setShowDeptModal(false);
-        setDeptForm({ name: '', code: '', description: '' });
+        setDeptForm({ name: '', code: '', description: '', program_id: '' });
         fetchDepartments();
       } else {
-        toast.error(response.message || 'Failed to add department');
+        showToast.error(response.message || 'Failed to add department');
       }
-    } catch (error) {
-      toast.error('Failed to add department');
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to add department';
+      console.error('[Department Add Error]:', errorMessage);
+      showToast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteDepartment = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this department?')) return;
-    
+  const handleEditDepartment = (dept: Department) => {
+    setEditingDept(dept);
+    setDeptForm({
+      name: dept.name,
+      code: dept.code,
+      description: dept.description || '',
+      program_id: dept.program_id
+    });
+    setShowDeptModal(true);
+  };
+
+  const openDeleteDepartmentModal = (dept: Department) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'department',
+      id: dept.id,
+      name: dept.name
+    });
+  };
+
+  const handleDeleteDepartment = async () => {
+    const id = deleteModal.id;
     try {
-      const response = await fetchWithAuth(`/evaluation/departments/${id}`, {
+      const response = await fetchWithAuth(`/evaluation/departments/${id}?cascade=true`, {
         method: 'DELETE'
       });
       
       if (response.success) {
-        toast.success('Department deleted');
+        showToast.success('Department deleted');
+        setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
         fetchDepartments();
+        fetchRoles(); // Refresh roles as they may have been cascade deleted
+        fetchStaff(); // Refresh staff as they may have been cascade deleted
         if (selectedDepartment === id) {
           setSelectedDepartment(null);
           setSelectedRole(null);
         }
       } else {
-        toast.error(response.message || 'Failed to delete');
+        showToast.error(response.message || 'Failed to delete');
+        setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
       }
-    } catch (error) {
-      toast.error('Failed to delete department');
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to delete department');
+      setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
     }
   };
 
   // CRUD handlers for Role
   const handleAddRole = async () => {
     if (!roleForm.name.trim()) {
-      toast.error('Role name is required');
+      showToast.error('Role name is required');
       return;
     }
     
-    if (!selectedDepartment) {
-      toast.error('Please select a department first');
+    if (!roleForm.department_id) {
+      showToast.error('Please select a department');
       return;
     }
     
-    const selectedDept = departments.find(d => d.id === selectedDepartment);
+    const selectedDept = departments.find(d => d.id === roleForm.department_id);
     
     try {
       setLoading(true);
-      const response = await fetchWithAuth('/evaluation/roles', {
-        method: 'POST',
+      
+      const url = editingRole ? `/evaluation/roles/${editingRole.id}` : '/evaluation/roles';
+      const method = editingRole ? 'PUT' : 'POST';
+      
+      const response = await fetchWithAuth(url, {
+        method,
         body: JSON.stringify({
           name: roleForm.name,
           code: roleForm.code || roleForm.name.substring(0, 3).toUpperCase(),
           description: roleForm.description,
-          hierarchy_level: roleForm.hierarchy_level,
+          hierarchy_level: 1,
           category: selectedDept?.name || '', // Use department name as category
-          organization_id: organizationId
+          program_id: programId
         })
       });
       
       if (response.success) {
-        toast.success('Role added successfully');
+        showToast.success(editingRole ? 'Role updated successfully' : 'Role added successfully');
         setShowRoleModal(false);
-        setRoleForm({ name: '', code: '', description: '', hierarchy_level: 0 });
+        setRoleForm({ name: '', code: '', description: '', department_id: '' });
+        setEditingRole(null);
         fetchRoles();
       } else {
-        toast.error(response.message || 'Failed to add role');
+        showToast.error(response.message || `Failed to ${editingRole ? 'update' : 'add'} role`);
       }
     } catch (error) {
-      toast.error('Failed to add role');
+      showToast.error(`Failed to ${editingRole ? 'update' : 'add'} role`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteRole = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this role?')) return;
-    
+  const handleEditRole = (role: Role) => {
+    setEditingRole(role);
+    // Find department by matching category name
+    const dept = departments.find(d => d.name === role.category);
+    setRoleForm({
+      name: role.name,
+      code: role.code || '',
+      description: role.description || '',
+      department_id: dept?.id || ''
+    });
+    setShowRoleModal(true);
+  };
+
+  const openDeleteRoleModal = (role: Role) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'role',
+      id: role.id,
+      name: role.name
+    });
+  };
+
+  const handleDeleteRole = async () => {
+    const id = deleteModal.id;
     try {
-      const response = await fetchWithAuth(`/evaluation/roles/${id}`, {
+      const response = await fetchWithAuth(`/evaluation/roles/${id}?cascade=true`, {
         method: 'DELETE'
       });
       
       if (response.success) {
-        toast.success('Role deleted');
+        showToast.success('Role deleted');
+        setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
         fetchRoles();
+        fetchStaff(); // Refresh staff as they may have been cascade deleted
       } else {
-        toast.error(response.message || 'Failed to delete');
+        showToast.error(response.message || 'Failed to delete');
+        setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
       }
-    } catch (error) {
-      toast.error('Failed to delete role');
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to delete role');
+      setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
     }
   };
 
   // CRUD handlers for Staff
   const handleAddStaff = async () => {
     if (!staffForm.name.trim() || !staffForm.email.trim()) {
-      toast.error('Name and email are required');
+      showToast.error('Name and email are required');
       return;
     }
     
-    const roleId = staffForm.role_id || selectedRole;
-    if (!roleId) {
-      toast.error('Please select a role first');
+    if (!staffForm.role_id) {
+      showToast.error('Please select a role');
       return;
     }
     
     try {
       setLoading(true);
-      const response = await fetchWithAuth('/evaluation/staff', {
-        method: 'POST',
+      
+      const url = editingStaff ? `/evaluation/staff/${editingStaff.id}` : '/evaluation/staff';
+      const method = editingStaff ? 'PUT' : 'POST';
+      
+      const response = await fetchWithAuth(url, {
+        method,
         body: JSON.stringify({
           name: staffForm.name,
           email: staffForm.email,
           employee_id: staffForm.employee_id,
-          role_id: roleId,
+          role_id: staffForm.role_id,
           department: selectedDepartment || '',
-          organization_id: organizationId,
+          program_id: programId,
           is_available_for_evaluation: true
         })
       });
       
       if (response.success) {
-        toast.success('Staff added successfully');
+        showToast.success(editingStaff ? 'Staff updated successfully' : 'Staff added successfully');
         setShowStaffModal(false);
         setStaffForm({ name: '', email: '', employee_id: '', role_id: '' });
+        setEditingStaff(null);
         fetchStaff();
       } else {
-        toast.error(response.message || 'Failed to add staff');
+        showToast.error(response.message || `Failed to ${editingStaff ? 'update' : 'add'} staff`);
       }
     } catch (error) {
-      toast.error('Failed to add staff');
+      showToast.error(`Failed to ${editingStaff ? 'update' : 'add'} staff`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteStaff = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this staff member?')) return;
-    
+  const handleEditStaff = (member: Staff) => {
+    setEditingStaff(member);
+    setStaffForm({
+      name: member.name,
+      email: member.email,
+      employee_id: member.employee_id || '',
+      role_id: member.role_id
+    });
+    setShowStaffModal(true);
+  };
+
+  const openDeleteStaffModal = (member: Staff) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'staff',
+      id: member.id,
+      name: member.name
+    });
+  };
+
+  const handleDeleteStaff = async () => {
+    const id = deleteModal.id;
     try {
-      const response = await fetchWithAuth(`/evaluation/staff/${id}`, {
+      const response = await fetchWithAuth(`/evaluation/staff/${id}?cascade=true`, {
         method: 'DELETE'
       });
       
       if (response.success) {
-        toast.success('Staff deleted');
+        showToast.success('Staff deleted');
+        setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
         fetchStaff();
       } else {
-        toast.error(response.message || 'Failed to delete');
+        showToast.error(response.message || 'Failed to delete');
+        setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
       }
-    } catch (error) {
-      toast.error('Failed to delete staff');
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to delete staff');
+      setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
     }
   };
 
@@ -524,12 +878,29 @@ export default function EvaluationNewPage() {
 
   const handleAddMapping = async () => {
     if (!mappingEvaluator || mappingSubordinates.length === 0) {
-      toast.error('Select evaluator and at least one subordinate');
+      showToast.error('Select evaluator and at least one subordinate');
       return;
     }
     
     try {
       setLoading(true);
+      
+      // If editing, delete old mappings for this evaluator first
+      if (editingMappingId) {
+        // Find all existing hierarchy entries for this evaluator
+        const existingMapping = mappings.find(m => m.evaluator_id === mappingEvaluator);
+        if (existingMapping) {
+          for (const sub of existingMapping.subordinates) {
+            try {
+              await fetchWithAuth(`/evaluation/hierarchy/${sub.id}`, {
+                method: 'DELETE'
+              });
+            } catch (e) {
+              // Continue even if one fails
+            }
+          }
+        }
+      }
       
       // Create hierarchy entries for each subordinate
       for (const subId of mappingSubordinates) {
@@ -538,7 +909,7 @@ export default function EvaluationNewPage() {
           body: JSON.stringify({
             staff_id: subId,
             reports_to_id: mappingEvaluator,
-            organization_id: organizationId,
+            program_id: programId,
             relationship_type: 'direct',
             is_active: true,
             is_primary: true
@@ -546,13 +917,43 @@ export default function EvaluationNewPage() {
         });
       }
       
-      toast.success('Mapping created successfully');
+      showToast.success(editingMappingId ? 'Mapping updated successfully' : 'Mapping created successfully');
       setShowMappingModal(false);
       setMappingEvaluator('');
       setMappingSubordinates([]);
+      setEditingMappingId(null);
       fetchMappings();
     } catch (error) {
-      toast.error('Failed to create mapping');
+      showToast.error('Failed to save mapping');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [editingMappingId, setEditingMappingId] = useState<string | null>(null);
+  
+  const handleEditMapping = (mapping: Mapping) => {
+    setMappingEvaluator(mapping.evaluator_id);
+    // Use staff_id not id for subordinates selection
+    setMappingSubordinates(mapping.subordinates.map(s => s.staff_id));
+    setEditingMappingId(mapping.id);
+    setShowMappingModal(true);
+  };
+
+  const handleDeleteMapping = async (mappingId: string) => {
+    if (!confirm('Delete this hierarchy mapping? This will remove all subordinate relationships for this evaluator.')) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      await fetchWithAuth(`/evaluation/hierarchy/${mappingId}?cascade=true`, {
+        method: 'DELETE'
+      });
+      showToast.success('Mapping deleted successfully');
+      fetchMappings();
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to delete mapping');
     } finally {
       setLoading(false);
     }
@@ -561,15 +962,28 @@ export default function EvaluationNewPage() {
   // Trigger evaluation
   const handleTriggerEvaluation = async () => {
     if (!selectedTemplate) {
-      toast.error('Please select an evaluation form');
+      showToast.error('Please select an evaluation form');
       return;
     }
     
     if (selectedEvaluators.length === 0) {
-      toast.error('Please select at least one evaluator');
+      showToast.error('Please select at least one evaluator');
       return;
     }
     
+    // Prepare email preview
+    const template = evaluationTemplates.find(t => t.id === selectedTemplate);
+    const evaluatorsList = mappings
+      .filter(m => selectedEvaluators.includes(m.evaluator_id))
+      .map(m => m.evaluator_name)
+      .join(', ');
+    
+    setEmailSubject(`Evaluation Request: ${template?.name || 'Staff Evaluation'}`);
+    setEmailBody(`Hello {evaluator_name},\n\nYou have been requested to complete a ${template?.name} evaluation for your team members.\n\nEvaluation Period: {start_date} to {end_date}\n\nYour subordinates to evaluate:\n{subordinates_list}\n\nPlease complete the evaluation by clicking the button in your email.\n\nBest regards,\nQSights Team`);
+    setShowTriggerModal(true);
+  };
+
+  const handleConfirmTrigger = async () => {
     try {
       setTriggering(true);
       
@@ -582,23 +996,146 @@ export default function EvaluationNewPage() {
           template_name: template?.name,
           template_questions: template?.questions,
           evaluator_ids: selectedEvaluators,
-          organization_id: organizationId
+          program_id: programId,
+          email_subject: emailSubject,
+          email_body: emailBody,
+          start_date: startDate || null,
+          end_date: endDate || null,
+          scheduled_trigger_at: scheduledDate || null,
         })
       });
       
       if (response.success) {
-        toast.success(`Evaluation triggered! Emails sent to ${selectedEvaluators.length} evaluator(s)`);
+        if (response.skipped_count > 0 && response.triggered_count === 0) {
+          // All were skipped
+          showToast.warning(
+            `All evaluators skipped - they already have active evaluations. Delete existing or wait until end date passes. Skipped: ${response.skipped_evaluators.join(', ')}`
+          );
+        } else if (response.skipped_count > 0) {
+          showToast.warning(
+            `Triggered ${response.triggered_count} evaluation(s). Skipped ${response.skipped_count} (active evaluation exists): ${response.skipped_evaluators.join(', ')}`
+          );
+        } else {
+          showToast.success(`Successfully triggered ${response.triggered_count} evaluation(s) and sent ${response.emails_sent} email(s)`);
+        }
         setSelectedTemplate(null);
         setSelectedEvaluators([]);
+        setShowTriggerModal(false);
         setActiveTab('history');
         fetchTriggeredEvaluations();
       } else {
-        toast.error(response.message || 'Failed to trigger evaluation');
+        showToast.error(response.message || 'Failed to trigger evaluation');
       }
-    } catch (error) {
-      toast.error('Failed to trigger evaluation');
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to trigger evaluation');
     } finally {
       setTriggering(false);
+    }
+  };
+
+  // History management handlers
+  const handleEditTriggered = (evaluation: TriggeredEvaluation) => {
+    setEditingTriggered(evaluation);
+    setEmailSubject(evaluation.email_subject || 'Evaluation Request: ' + evaluation.template_name);
+    setEmailBody(evaluation.email_body || '');
+    setStartDate(evaluation.start_date || '');
+    setEndDate(evaluation.end_date || '');
+    setShowEditTriggeredModal(true);
+  };
+
+  const handleUpdateTriggered = async () => {
+    if (!editingTriggered) return;
+    
+    try {
+      const response = await fetchWithAuth(`/evaluation/triggered/${editingTriggered.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          email_subject: emailSubject,
+          email_body: emailBody,
+          start_date: startDate,
+          end_date: endDate
+        })
+      });
+      
+      if (response.success) {
+        showToast.success('Evaluation updated successfully');
+        setShowEditTriggeredModal(false);
+        setEditingTriggered(null);
+        fetchTriggeredEvaluations();
+      } else {
+        showToast.error(response.message || 'Failed to update evaluation');
+      }
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to update evaluation');
+      console.error('Failed to update evaluation:', error);
+    }
+  };
+
+  const handleDeleteTriggered = (id: string) => {
+    const evaluation = triggeredEvaluations.find(e => e.id === id);
+    setDeleteModal({
+      isOpen: true,
+      type: 'triggered',
+      id: id,
+      name: `${evaluation?.evaluator_name}'s evaluation for ${evaluation?.template_name}`
+    });
+  };
+
+  const confirmDeleteTriggered = async () => {
+    const id = deleteModal.id;
+    try {
+      const response = await fetchWithAuth(`/evaluation/triggered/${id}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.success) {
+        showToast.success('Evaluation deleted successfully');
+        fetchTriggeredEvaluations();
+      } else {
+        showToast.error(response.message || 'Failed to delete evaluation');
+      }
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to delete evaluation');
+      console.error('Failed to delete evaluation:', error);
+    } finally {
+      setDeleteModal({ isOpen: false, type: '', id: '', name: '' });
+    }
+  };
+
+  const handleToggleActive = async (id: string, isActive: boolean) => {
+    try {
+      const response = await fetchWithAuth(`/evaluation/triggered/${id}/toggle-active`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: isActive })
+      });
+      
+      if (response.success) {
+        showToast.success(`Evaluation ${isActive ? 'activated' : 'deactivated'} successfully`);
+        fetchTriggeredEvaluations();
+      } else {
+        showToast.error(response.message || 'Failed to update status');
+      }
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to toggle active status');
+      console.error('Failed to toggle active status:', error);
+    }
+  };
+
+  const handleResendEmail = async (id: string) => {
+    try {
+      const response = await fetchWithAuth(`/evaluation/triggered/${id}/resend`, {
+        method: 'POST'
+      });
+      
+      if (response.success) {
+        showToast.success('Email resent successfully!');
+        fetchTriggeredEvaluations();
+      } else {
+        showToast.error(response.message || 'Failed to resend email');
+      }
+    } catch (error: any) {
+      showToast.error(error.message || 'Failed to resend email');
+      console.error('Failed to resend email:', error);
     }
   };
 
@@ -620,18 +1157,25 @@ export default function EvaluationNewPage() {
     { id: 'setup' as TabType, label: 'Setup', icon: Building2, description: 'Departments, Roles, Staff & Mapping' },
     { id: 'trigger' as TabType, label: 'Trigger', icon: Play, description: 'Send evaluation forms' },
     { id: 'history' as TabType, label: 'History', icon: History, description: 'View status & results' },
+    { id: 'reports' as TabType, label: 'Reports', icon: BarChart3, description: 'View evaluation reports' },
   ];
 
   return (
     <AppLayout>
-      <div className="bg-gray-50 min-h-screen">
-        {/* Header with Tabs */}
-        <div className="bg-white border-b shadow-sm">
-          <div className="px-6 py-4">
-            <h1 className="text-2xl font-bold text-gray-900">Evaluation System</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Setup, trigger, and manage staff performance evaluations
-            </p>
+      {!mounted ? (
+        <div className="flex items-center justify-center min-h-screen">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
+      ) : null}
+      {mounted && (
+        <div className="bg-gray-50 min-h-screen">
+          {/* Header with Tabs */}
+          <div className="bg-white border-b shadow-sm">
+            <div className="px-6 py-4">
+              <h1 className="text-2xl font-bold text-gray-900">Evaluation System</h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Setup, trigger, and manage staff performance evaluations
+              </p>
           </div>
 
           {/* Tabs */}
@@ -661,213 +1205,341 @@ export default function EvaluationNewPage() {
           {/* SETUP TAB */}
           {activeTab === 'setup' && (
             <div className="space-y-6">
-              {/* Four Column Layout */}
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                
-                {/* Column 1: Departments */}
-                <div className="bg-white rounded-xl shadow-sm border">
-                  <div className="p-4 border-b bg-gray-50 rounded-t-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-5 w-5 text-purple-600" />
-                        <h3 className="font-semibold text-gray-900">Departments</h3>
-                      </div>
-                      <button
-                        onClick={() => setShowDeptModal(true)}
-                        className="p-1.5 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-purple-600 font-medium">Departments</p>
+                      <p className="text-3xl font-bold text-purple-900 mt-2">{departments.length}</p>
+                    </div>
+                    <div className="bg-purple-200 rounded-full p-3">
+                      <Building2 className="h-6 w-6 text-purple-700" />
                     </div>
                   </div>
-                  <div className="p-2 max-h-80 overflow-y-auto">
-                    {departments.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-4">No departments yet</p>
-                    ) : (
-                      departments.map((dept) => (
-                        <div
-                          key={dept.id}
-                          onClick={() => {
-                            setSelectedDepartment(dept.id === selectedDepartment ? null : dept.id);
-                            setSelectedRole(null);
-                          }}
-                          className={`p-3 rounded-lg cursor-pointer transition flex items-center justify-between group ${
-                            selectedDepartment === dept.id
-                              ? 'bg-purple-100 border-2 border-purple-400'
-                              : 'hover:bg-gray-50 border-2 border-transparent'
-                          }`}
-                        >
-                          <div>
-                            <p className="font-medium text-gray-900">{dept.name}</p>
-                            <p className="text-xs text-gray-500">{dept.code}</p>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDeleteDepartment(dept.id); }}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
+                  <button
+                    onClick={() => {
+                      setEditingDept(null);
+                      setDeptForm({ name: '', code: '', description: '', program_id: '' });
+                      setShowDeptModal(true);
+                    }}
+                    className="mt-4 w-full py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium"
+                  >
+                    + Add Department
+                  </button>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-600 font-medium">Roles</p>
+                      <p className="text-3xl font-bold text-blue-900 mt-2">{roles.length}</p>
+                    </div>
+                    <div className="bg-blue-200 rounded-full p-3">
+                      <Network className="h-6 w-6 text-blue-700" />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingRole(null);
+                      setRoleForm({ name: '', code: '', description: '', department_id: '' });
+                      setShowRoleModal(true);
+                    }}
+                    className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                  >
+                    + Add Role
+                  </button>
+                </div>
+
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-green-600 font-medium">Staff</p>
+                      <p className="text-3xl font-bold text-green-900 mt-2">{staff.length}</p>
+                    </div>
+                    <div className="bg-green-200 rounded-full p-3">
+                      <Users className="h-6 w-6 text-green-700" />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingStaff(null);
+                      setStaffForm({ name: '', email: '', employee_id: '', role_id: '' });
+                      setShowStaffModal(true);
+                    }}
+                    className="mt-4 w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium"
+                  >
+                    + Add Staff
+                  </button>
+                </div>
+
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-orange-600 font-medium">Hierarchies</p>
+                      <p className="text-3xl font-bold text-orange-900 mt-2">{mappings.length}</p>
+                    </div>
+                    <div className="bg-orange-200 rounded-full p-3">
+                      <Network className="h-6 w-6 text-orange-700" />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowMappingModal(true)}
+                    className="mt-4 w-full py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm font-medium"
+                  >
+                    + Add Mapping
+                  </button>
+                </div>
+              </div>
+
+              {/* Data Tables */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Departments Table */}
+                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                  <div className="p-4 bg-gray-50 border-b">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-purple-600" />
+                      Departments List
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {departments.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-4 py-8 text-center text-gray-500 text-sm">
+                              No departments yet
+                            </td>
+                          </tr>
+                        ) : (
+                          departments.map((dept) => (
+                            <tr key={dept.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{dept.name}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{dept.code}</td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleEditDepartment(dept)}
+                                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded transition"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openDeleteDepartmentModal(dept)}
+                                    className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded transition"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
-                {/* Column 2: Roles */}
-                <div className="bg-white rounded-xl shadow-sm border">
-                  <div className="p-4 border-b bg-gray-50 rounded-t-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Network className="h-5 w-5 text-blue-600" />
-                        <h3 className="font-semibold text-gray-900">Roles</h3>
-                      </div>
-                      <button
-                        onClick={() => setShowRoleModal(true)}
-                        className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"
-                        disabled={!selectedDepartment}
-                        title={!selectedDepartment ? 'Select a department first' : 'Add role'}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    </div>
-                    {selectedDepartment && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Under: {departments.find(d => d.id === selectedDepartment)?.name}
-                      </p>
-                    )}
+                {/* Roles Table */}
+                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                  <div className="p-4 bg-gray-50 border-b">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Network className="h-5 w-5 text-blue-600" />
+                      Roles List
+                    </h3>
                   </div>
-                  <div className="p-2 max-h-80 overflow-y-auto">
-                    {!selectedDepartment ? (
-                      <p className="text-sm text-gray-500 text-center py-4">Select a department</p>
-                    ) : filteredRoles.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-4">No roles yet</p>
-                    ) : (
-                      filteredRoles.map((role) => (
-                        <div
-                          key={role.id}
-                          onClick={() => setSelectedRole(role.id === selectedRole ? null : role.id)}
-                          className={`p-3 rounded-lg cursor-pointer transition flex items-center justify-between group ${
-                            selectedRole === role.id
-                              ? 'bg-blue-100 border-2 border-blue-400'
-                              : 'hover:bg-gray-50 border-2 border-transparent'
-                          }`}
-                        >
-                          <div>
-                            <p className="font-medium text-gray-900">{role.name}</p>
-                            <p className="text-xs text-gray-500">Level: {role.hierarchy_level}</p>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDeleteRole(role.id); }}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Column 3: Staff */}
-                <div className="bg-white rounded-xl shadow-sm border">
-                  <div className="p-4 border-b bg-gray-50 rounded-t-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-5 w-5 text-green-600" />
-                        <h3 className="font-semibold text-gray-900">Staff</h3>
-                      </div>
-                      <button
-                        onClick={() => setShowStaffModal(true)}
-                        className="p-1.5 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition"
-                        disabled={!selectedRole}
-                        title={!selectedRole ? 'Select a role first' : 'Add staff'}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    </div>
-                    {selectedRole && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Role: {roles.find(r => r.id === selectedRole)?.name}
-                      </p>
-                    )}
-                  </div>
-                  <div className="p-2 max-h-80 overflow-y-auto">
-                    {!selectedRole ? (
-                      <p className="text-sm text-gray-500 text-center py-4">Select a role</p>
-                    ) : filteredStaff.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-4">No staff yet</p>
-                    ) : (
-                      filteredStaff.map((member) => (
-                        <div
-                          key={member.id}
-                          className="p-3 rounded-lg hover:bg-gray-50 transition flex items-center justify-between group"
-                        >
-                          <div>
-                            <p className="font-medium text-gray-900">{member.name}</p>
-                            <p className="text-xs text-gray-500">{member.email}</p>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                            <button
-                              onClick={() => handleDeleteStaff(member.id)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Level</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {roles.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="px-4 py-8 text-center text-gray-500 text-sm">
+                              No roles yet
+                            </td>
+                          </tr>
+                        ) : (
+                          roles.map((role) => (
+                            <tr key={role.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{role.name}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{role.category || '-'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600 text-center">{role.hierarchy_level}</td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleEditRole(role)}
+                                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded transition"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openDeleteRoleModal(role)}
+                                    className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded transition"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
-                {/* Column 4: Mapping */}
-                <div className="bg-white rounded-xl shadow-sm border">
-                  <div className="p-4 border-b bg-gray-50 rounded-t-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Network className="h-5 w-5 text-orange-600" />
-                        <h3 className="font-semibold text-gray-900">Mapping</h3>
-                      </div>
-                      <button
-                        onClick={() => setShowMappingModal(true)}
-                        className="p-1.5 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200 transition"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">Who evaluates whom</p>
+                {/* Staff Table */}
+                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                  <div className="p-4 bg-gray-50 border-b">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Users className="h-5 w-5 text-green-600" />
+                      Staff List
+                    </h3>
                   </div>
-                  <div className="p-2 max-h-80 overflow-y-auto">
-                    {mappings.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-4">No mappings yet</p>
-                    ) : (
-                      mappings.map((mapping) => (
-                        <div key={mapping.id} className="p-3 rounded-lg bg-orange-50 mb-2">
-                          <div className="flex items-center gap-2 mb-2">
-                            <UserCheck className="h-4 w-4 text-orange-600" />
-                            <span className="font-medium text-gray-900">{mapping.evaluator_name}</span>
-                          </div>
-                          <div className="pl-6 space-y-1">
-                            {mapping.subordinates.map((sub) => (
-                              <div key={sub.id} className="flex items-center gap-2 text-sm text-gray-600">
-                                <ChevronRight className="h-3 w-3" />
-                                {sub.name}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))
-                    )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {staff.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-4 py-8 text-center text-gray-500 text-sm">
+                              No staff yet
+                            </td>
+                          </tr>
+                        ) : (
+                          staff.map((member) => (
+                            <tr key={member.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">{member.name}</p>
+                                  <p className="text-xs text-gray-500">{member.email}</p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{member.role_name || '-'}</td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleEditStaff(member)}
+                                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded transition"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openDeleteStaffModal(member)}
+                                    className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded transition"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
 
-              {/* Summary Stats */}
-              <div className="grid grid-cols-4 gap-4">
+              {/* Hierarchy Mappings Table - Full Width */}
+              <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                <div className="p-4 bg-gray-50 border-b">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Network className="h-5 w-5 text-orange-600" />
+                    Hierarchy Mappings
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Manager/Evaluator</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subordinates</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {mappings.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500 text-sm">
+                            No hierarchy mappings yet
+                          </td>
+                        </tr>
+                      ) : (
+                        mappings.map((mapping) => (
+                          <tr key={mapping.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{mapping.evaluator_name}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{mapping.evaluator_role}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-wrap gap-1">
+                                {mapping.subordinates.map((sub) => (
+                                  <span key={sub.id} className="inline-flex items-center px-2 py-1 bg-orange-50 text-orange-700 text-xs rounded-full">
+                                    {sub.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
+                                Direct
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => handleEditMapping(mapping)}
+                                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded transition"
+                                  title="Edit"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteMapping(mapping.id)}
+                                  className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded transition"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Summary Stats - Removed old card layout */}
+              <div className="grid grid-cols-4 gap-4" style={{display: 'none'}}>
                 <div className="bg-purple-50 rounded-lg p-4 text-center">
                   <p className="text-2xl font-bold text-purple-700">{departments.length}</p>
                   <p className="text-sm text-purple-600">Departments</p>
@@ -1045,6 +1717,7 @@ export default function EvaluationNewPage() {
                             <th className="pb-3 font-medium">Subordinates</th>
                             <th className="pb-3 font-medium">Status</th>
                             <th className="pb-3 font-medium">Triggered</th>
+                            <th className="pb-3 font-medium text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
@@ -1071,6 +1744,48 @@ export default function EvaluationNewPage() {
                               <td className="py-4 text-gray-500">
                                 {new Date(evaluation.triggered_at).toLocaleDateString()}
                               </td>
+                              <td className="py-4">
+                                <div className="flex items-center justify-end gap-2">
+                                  {evaluation.is_active ? (
+                                    <button
+                                      onClick={() => handleToggleActive(evaluation.id, false)}
+                                      className="p-1.5 text-orange-600 hover:bg-orange-50 rounded transition"
+                                      title="Deactivate"
+                                    >
+                                      <Power className="h-4 w-4" />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleToggleActive(evaluation.id, true)}
+                                      className="p-1.5 text-green-600 hover:bg-green-50 rounded transition"
+                                      title="Activate"
+                                    >
+                                      <Power className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleResendEmail(evaluation.id)}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition"
+                                    title="Resend Email"
+                                  >
+                                    <RefreshCw className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEditTriggered(evaluation)}
+                                    className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTriggered(evaluation.id)}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded transition"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1079,6 +1794,737 @@ export default function EvaluationNewPage() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* REPORTS TAB */}
+          {activeTab === 'reports' && (
+            <div className="space-y-6">
+              {/* Summary Cards */}
+              {reportSummary && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-blue-600 font-medium">Total Triggered</p>
+                        <p className="text-3xl font-bold text-blue-900 mt-2">{reportSummary.total_triggered}</p>
+                      </div>
+                      <div className="bg-blue-200 rounded-full p-3">
+                        <Send className="h-6 w-6 text-blue-700" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-green-600 font-medium">Completed</p>
+                        <p className="text-3xl font-bold text-green-900 mt-2">{reportSummary.completed}</p>
+                      </div>
+                      <div className="bg-green-200 rounded-full p-3">
+                        <CheckCircle className="h-6 w-6 text-green-700" />
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm text-green-600">{reportSummary.completion_rate}% completion rate</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-orange-600 font-medium">Staff Evaluated</p>
+                        <p className="text-3xl font-bold text-orange-900 mt-2">{reportSummary.total_subordinates_evaluated}</p>
+                      </div>
+                      <div className="bg-orange-200 rounded-full p-3">
+                        <Users className="h-6 w-6 text-orange-700" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-purple-600 font-medium">Unique Evaluators</p>
+                        <p className="text-3xl font-bold text-purple-900 mt-2">{reportSummary.unique_evaluators}</p>
+                      </div>
+                      <div className="bg-purple-200 rounded-full p-3">
+                        <UserCheck className="h-6 w-6 text-purple-700" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Filters & Export */}
+              <div className="bg-white rounded-xl shadow-sm border p-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-5 w-5 text-gray-400" />
+                    <span className="font-medium text-gray-700">Filters:</span>
+                  </div>
+                  
+                  <select
+                    value={reportFilters.department_id}
+                    onChange={(e) => setReportFilters({ ...reportFilters, department_id: e.target.value })}
+                    className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Departments</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.name}>{dept.name}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={reportFilters.evaluator_id}
+                    onChange={(e) => setReportFilters({ ...reportFilters, evaluator_id: e.target.value })}
+                    className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Evaluators</option>
+                    {evaluatorReports.map((ev) => (
+                      <option key={ev.evaluator_id} value={ev.evaluator_id}>{ev.evaluator_name}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={reportFilters.template_id}
+                    onChange={(e) => setReportFilters({ ...reportFilters, template_id: e.target.value })}
+                    className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Forms</option>
+                    {evaluationTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="date"
+                    value={reportFilters.date_from}
+                    onChange={(e) => setReportFilters({ ...reportFilters, date_from: e.target.value })}
+                    className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder="From"
+                  />
+                  
+                  <input
+                    type="date"
+                    value={reportFilters.date_to}
+                    onChange={(e) => setReportFilters({ ...reportFilters, date_to: e.target.value })}
+                    className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder="To"
+                  />
+
+                  <button
+                    onClick={() => setReportFilters({
+                      department_id: '',
+                      evaluator_id: '',
+                      template_id: '',
+                      staff_id: '',
+                      date_from: '',
+                      date_to: ''
+                    })}
+                    className="px-3 py-2 text-gray-600 hover:text-gray-800 text-sm"
+                  >
+                    Clear
+                  </button>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    <button
+                      onClick={() => handleExportReport('csv')}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export CSV
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setReportViewMode('staff')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    reportViewMode === 'staff'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Users className="h-4 w-4 inline mr-2" />
+                  Staff-wise Report
+                </button>
+                <button
+                  onClick={() => setReportViewMode('evaluator')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    reportViewMode === 'evaluator'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <UserCheck className="h-4 w-4 inline mr-2" />
+                  Evaluator-wise Report
+                </button>
+                <button
+                  onClick={() => setReportViewMode('analysis')}
+                  className={`px-4 py-2 rounded-lg font-medium transition ${
+                    reportViewMode === 'analysis'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <BarChart3 className="h-4 w-4 inline mr-2" />
+                  Performance Analysis
+                </button>
+              </div>
+
+              {/* Staff-wise Report */}
+              {reportViewMode === 'staff' && (
+                <div className="bg-white rounded-xl shadow-sm border">
+                  <div className="p-4 border-b">
+                    <h3 className="font-semibold text-gray-900">Staff Evaluation Reports</h3>
+                    <p className="text-sm text-gray-500">All evaluations received by each staff member from their managers</p>
+                  </div>
+                  <div className="p-4">
+                    {reportLoading ? (
+                      <div className="flex items-center justify-center py-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                      </div>
+                    ) : staffReports.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500">
+                        <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                        <p>No completed evaluations found</p>
+                        <p className="text-sm">Evaluations will appear here once managers submit their reviews</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {staffReports.map((staffReport) => (
+                          <div key={staffReport.staff_id} className="border rounded-lg overflow-hidden">
+                            <button
+                              onClick={() => {
+                                if (expandedStaff.includes(staffReport.staff_id)) {
+                                  setExpandedStaff(expandedStaff.filter(id => id !== staffReport.staff_id));
+                                } else {
+                                  setExpandedStaff([...expandedStaff, staffReport.staff_id]);
+                                }
+                              }}
+                              className="w-full p-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <Users className="h-5 w-5 text-blue-600" />
+                                </div>
+                                <div className="text-left">
+                                  <p className="font-medium text-gray-900">{staffReport.staff_name}</p>
+                                  <p className="text-sm text-gray-500">{staffReport.staff_email}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-blue-600">{staffReport.evaluations.length}</p>
+                                  <p className="text-xs text-gray-500">evaluation(s)</p>
+                                </div>
+                                {expandedStaff.includes(staffReport.staff_id) ? (
+                                  <ChevronUp className="h-5 w-5 text-gray-400" />
+                                ) : (
+                                  <ChevronDown className="h-5 w-5 text-gray-400" />
+                                )}
+                              </div>
+                            </button>
+                            
+                            {expandedStaff.includes(staffReport.staff_id) && (
+                              <div className="p-4 bg-white border-t space-y-4">
+                                {staffReport.evaluations.map((evaluation, idx) => (
+                                  <div key={idx} className="border rounded-lg p-4 bg-gray-50">
+                                    <div className="flex justify-between items-start mb-3">
+                                      <div>
+                                        <p className="font-medium text-gray-900">{evaluation.template_name}</p>
+                                        <p className="text-sm text-gray-500">
+                                          Evaluated by: {evaluation.evaluator_name} ({evaluation.evaluator_role || 'N/A'})
+                                        </p>
+                                        {evaluation.department && (
+                                          <p className="text-xs text-gray-400">Department: {evaluation.department}</p>
+                                        )}
+                                      </div>
+                                      <span className="text-xs text-gray-500">
+                                        {evaluation.completed_at ? new Date(evaluation.completed_at).toLocaleDateString() : 'N/A'}
+                                      </span>
+                                    </div>
+                                    
+                                    {evaluation.responses && (
+                                      <div className="space-y-2 mt-3 pt-3 border-t">
+                                        <p className="text-sm font-medium text-gray-700">Responses:</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                          {Object.entries(evaluation.responses).map(([question, answer], qIdx) => (
+                                            <div key={qIdx} className="bg-white p-3 rounded border">
+                                              <p className="text-xs text-gray-500 mb-1">{question}</p>
+                                              <p className="font-medium text-gray-900">
+                                                {typeof answer === 'number' ? (
+                                                  <span className="flex items-center gap-1">
+                                                    <span className="text-yellow-500">{'★'.repeat(answer)}</span>
+                                                    <span className="text-gray-300">{'★'.repeat(5 - answer)}</span>
+                                                    <span className="text-sm text-gray-600 ml-2">({answer}/5)</span>
+                                                  </span>
+                                                ) : (
+                                                  String(answer)
+                                                )}
+                                              </p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Evaluator-wise Report */}
+              {reportViewMode === 'evaluator' && (
+                <div className="bg-white rounded-xl shadow-sm border">
+                  <div className="p-4 border-b">
+                    <h3 className="font-semibold text-gray-900">Evaluator Performance Report</h3>
+                    <p className="text-sm text-gray-500">Summary of evaluations conducted by each manager</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Evaluator</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Completed</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pending</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Staff Evaluated</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {evaluatorReports.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                              <UserCheck className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                              <p>No evaluator data available</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          evaluatorReports.map((evaluator) => (
+                            <tr key={evaluator.evaluator_id} className="hover:bg-gray-50">
+                              <td className="px-4 py-4">
+                                <div>
+                                  <p className="font-medium text-gray-900">{evaluator.evaluator_name}</p>
+                                  <p className="text-sm text-gray-500">{evaluator.evaluator_email}</p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 text-sm text-gray-600">{evaluator.role || '-'}</td>
+                              <td className="px-4 py-4 text-sm text-gray-600">{evaluator.department || '-'}</td>
+                              <td className="px-4 py-4 text-center">
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                                  {evaluator.total_evaluations}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 text-center">
+                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                                  {evaluator.completed_evaluations}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 text-center">
+                                <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
+                                  {evaluator.pending_evaluations}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 text-center">
+                                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                                  {evaluator.total_subordinates_evaluated || 0}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Performance Analysis View */}
+              {reportViewMode === 'analysis' && (
+                <div className="space-y-6">
+                  {reportLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+                    </div>
+                  ) : staffReports.length === 0 ? (
+                    <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
+                      <BarChart3 className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                      <p className="text-gray-500 text-lg">No evaluation data available for analysis</p>
+                      <p className="text-sm text-gray-400 mt-2">Complete some evaluations to see performance insights</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Staff Selection for Detailed Analysis */}
+                      <div className="bg-white rounded-xl shadow-sm border p-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                            <Target className="h-5 w-5 text-purple-600" />
+                            Select Staff for Detailed Analysis
+                          </h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                          {staffReports.map((staff) => {
+                            const analysis = analyzeStaffPerformance(staff);
+                            return (
+                              <button
+                                key={staff.staff_id}
+                                onClick={() => setSelectedStaffForAnalysis(
+                                  selectedStaffForAnalysis === staff.staff_id ? null : staff.staff_id
+                                )}
+                                className={`p-3 rounded-lg border-2 transition text-left ${
+                                  selectedStaffForAnalysis === staff.staff_id
+                                    ? 'border-purple-500 bg-purple-50'
+                                    : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+                                }`}
+                              >
+                                <p className="font-medium text-gray-900 truncate text-sm">{staff.staff_name}</p>
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Star className="h-3 w-3 text-yellow-500" />
+                                  <span className="text-xs font-bold text-gray-700">{analysis.overallAverage}</span>
+                                  <span className="text-xs text-gray-400">/ 5</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Detailed Analysis for Selected Staff */}
+                      {selectedStaffForAnalysis && (() => {
+                        const selectedStaff = staffReports.find(s => s.staff_id === selectedStaffForAnalysis);
+                        if (!selectedStaff) return null;
+                        const analysis = analyzeStaffPerformance(selectedStaff);
+                        
+                        return (
+                          <div className="space-y-6">
+                            {/* Staff Header Card */}
+                            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+                                    <Users className="h-8 w-8 text-white" />
+                                  </div>
+                                  <div>
+                                    <h2 className="text-2xl font-bold">{selectedStaff.staff_name}</h2>
+                                    <p className="text-purple-200">{selectedStaff.staff_email}</p>
+                                    {selectedStaff.employee_id && (
+                                      <p className="text-purple-300 text-sm">ID: {selectedStaff.employee_id}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-5xl font-bold">{analysis.overallAverage}</div>
+                                  <div className="text-purple-200">Overall Score</div>
+                                  <div className="text-sm text-purple-300 mt-1">{analysis.totalEvaluations} evaluation(s)</div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Quick Stats */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl p-5 border border-green-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm text-green-600 font-medium">Strengths</p>
+                                    <p className="text-3xl font-bold text-green-800 mt-2">{analysis.strengths.length}</p>
+                                  </div>
+                                  <div className="bg-white/80 rounded-xl p-3">
+                                    <ThumbsUp className="h-6 w-6 text-green-500" />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="bg-gradient-to-br from-orange-50 to-amber-100 rounded-xl p-5 border border-orange-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm text-orange-600 font-medium">Areas to Improve</p>
+                                    <p className="text-3xl font-bold text-orange-800 mt-2">{analysis.improvements.length}</p>
+                                  </div>
+                                  <div className="bg-white/80 rounded-xl p-3">
+                                    <Target className="h-6 w-6 text-orange-500" />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="bg-gradient-to-br from-blue-50 to-sky-100 rounded-xl p-5 border border-blue-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm text-blue-600 font-medium">Skills Rated</p>
+                                    <p className="text-3xl font-bold text-blue-800 mt-2">{analysis.allScores.length}</p>
+                                  </div>
+                                  <div className="bg-white/80 rounded-xl p-3">
+                                    <Activity className="h-6 w-6 text-blue-500" />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="bg-gradient-to-br from-purple-50 to-violet-100 rounded-xl p-5 border border-purple-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm text-purple-600 font-medium">Feedback Received</p>
+                                    <p className="text-3xl font-bold text-purple-800 mt-2">{analysis.textFeedback.length}</p>
+                                  </div>
+                                  <div className="bg-white/80 rounded-xl p-3">
+                                    <MessageSquare className="h-6 w-6 text-purple-500" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Strengths & Improvements */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Strengths */}
+                              <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                <div className="p-4 bg-green-50 border-b border-green-100">
+                                  <h3 className="font-semibold text-green-800 flex items-center gap-2">
+                                    <Award className="h-5 w-5 text-green-600" />
+                                    Areas of Strength
+                                  </h3>
+                                  <p className="text-sm text-green-600 mt-1">Top performing competencies</p>
+                                </div>
+                                <div className="p-4 space-y-4">
+                                  {analysis.strengths.length === 0 ? (
+                                    <p className="text-gray-500 text-center py-4">No high-scoring areas yet</p>
+                                  ) : (
+                                    analysis.strengths.map((item, idx) => (
+                                      <div key={idx} className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-medium text-gray-900">{item.question}</span>
+                                          <span className="text-sm font-bold text-green-600 flex items-center gap-1">
+                                            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                                            {Math.round(item.score * 10) / 10}
+                                          </span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 rounded-full h-3">
+                                          <div 
+                                            className="bg-gradient-to-r from-green-400 to-emerald-500 h-3 rounded-full transition-all duration-500"
+                                            style={{ width: `${(item.score / 5) * 100}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Areas of Improvement */}
+                              <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                <div className="p-4 bg-orange-50 border-b border-orange-100">
+                                  <h3 className="font-semibold text-orange-800 flex items-center gap-2">
+                                    <TrendingUp className="h-5 w-5 text-orange-600" />
+                                    Areas for Improvement
+                                  </h3>
+                                  <p className="text-sm text-orange-600 mt-1">Competencies to develop</p>
+                                </div>
+                                <div className="p-4 space-y-4">
+                                  {analysis.improvements.length === 0 ? (
+                                    <p className="text-gray-500 text-center py-4">No areas needing improvement</p>
+                                  ) : (
+                                    analysis.improvements.map((item, idx) => (
+                                      <div key={idx} className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-medium text-gray-900">{item.question}</span>
+                                          <span className="text-sm font-bold text-orange-600 flex items-center gap-1">
+                                            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                                            {Math.round(item.score * 10) / 10}
+                                          </span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 rounded-full h-3">
+                                          <div 
+                                            className="bg-gradient-to-r from-orange-400 to-amber-500 h-3 rounded-full transition-all duration-500"
+                                            style={{ width: `${(item.score / 5) * 100}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* All Skills Radar/Chart */}
+                            {analysis.allScores.length > 0 && (
+                              <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                <div className="p-4 border-b bg-gray-50">
+                                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                    <BarChart3 className="h-5 w-5 text-blue-600" />
+                                    Competency Scores Overview
+                                  </h3>
+                                  <p className="text-sm text-gray-500 mt-1">All rated skills and competencies</p>
+                                </div>
+                                <div className="p-6">
+                                  <div className="space-y-4">
+                                    {analysis.allScores.map((item, idx) => {
+                                      const percentage = (item.score / 5) * 100;
+                                      const getColor = (score: number) => {
+                                        if (score >= 4) return 'from-green-400 to-emerald-500';
+                                        if (score >= 3) return 'from-blue-400 to-cyan-500';
+                                        if (score >= 2) return 'from-yellow-400 to-amber-500';
+                                        return 'from-orange-400 to-red-500';
+                                      };
+                                      return (
+                                        <div key={idx} className="group">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-3">
+                                              <span className="font-medium text-gray-900">{item.question}</span>
+                                              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                                                {item.count} rating(s)
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-yellow-500 text-sm">
+                                                {'★'.repeat(Math.round(item.score))}
+                                                {'☆'.repeat(5 - Math.round(item.score))}
+                                              </span>
+                                              <span className="font-bold text-gray-700 w-12 text-right">
+                                                {Math.round(item.score * 10) / 10}/5
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+                                            <div 
+                                              className={`bg-gradient-to-r ${getColor(item.score)} h-4 rounded-full transition-all duration-700 group-hover:opacity-80`}
+                                              style={{ width: `${percentage}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Qualitative Feedback */}
+                            {analysis.textFeedback.length > 0 && (
+                              <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                <div className="p-4 border-b bg-gray-50">
+                                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                    <MessageSquare className="h-5 w-5 text-purple-600" />
+                                    Qualitative Feedback
+                                  </h3>
+                                  <p className="text-sm text-gray-500 mt-1">Written feedback from evaluators</p>
+                                </div>
+                                <div className="p-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {analysis.textFeedback.map((feedback, idx) => (
+                                      <div key={idx} className="bg-gray-50 rounded-lg p-4 border">
+                                        <div className="flex items-start gap-3">
+                                          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                                            <MessageSquare className="h-4 w-4 text-purple-600" />
+                                          </div>
+                                          <div className="flex-1">
+                                            <p className="text-xs text-purple-600 font-medium mb-1">{feedback.question}</p>
+                                            <p className="text-gray-800">{feedback.answer}</p>
+                                            <p className="text-xs text-gray-400 mt-2">— {feedback.evaluator}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Overall Team Performance Overview */}
+                      {!selectedStaffForAnalysis && (
+                        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                          <div className="p-4 border-b bg-gray-50">
+                            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                              <PieChart className="h-5 w-5 text-purple-600" />
+                              Team Performance Overview
+                            </h3>
+                            <p className="text-sm text-gray-500 mt-1">Quick comparison of all evaluated staff</p>
+                          </div>
+                          <div className="p-4">
+                            <div className="space-y-3">
+                              {staffReports.map((staff) => {
+                                const analysis = analyzeStaffPerformance(staff);
+                                const percentage = (analysis.overallAverage / 5) * 100;
+                                return (
+                                  <div 
+                                    key={staff.staff_id} 
+                                    className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition"
+                                    onClick={() => setSelectedStaffForAnalysis(staff.staff_id)}
+                                  >
+                                    <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                      <Users className="h-5 w-5 text-purple-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-gray-900 truncate">{staff.staff_name}</p>
+                                      <div className="w-full bg-gray-100 rounded-full h-2 mt-2">
+                                        <div 
+                                          className={`h-2 rounded-full transition-all duration-500 ${
+                                            analysis.overallAverage >= 4 ? 'bg-green-500' :
+                                            analysis.overallAverage >= 3 ? 'bg-blue-500' :
+                                            analysis.overallAverage >= 2 ? 'bg-yellow-500' : 'bg-orange-500'
+                                          }`}
+                                          style={{ width: `${percentage}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                      <p className="text-lg font-bold text-gray-900">{analysis.overallAverage}</p>
+                                      <p className="text-xs text-gray-500">{analysis.totalEvaluations} eval(s)</p>
+                                    </div>
+                                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Template Breakdown */}
+              {reportSummary && reportSummary.template_breakdown.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-xl shadow-sm border p-4">
+                    <h3 className="font-semibold text-gray-900 mb-4">By Form Type</h3>
+                    <div className="space-y-3">
+                      {reportSummary.template_breakdown.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between">
+                          <span className="text-gray-700">{item.template_name}</span>
+                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                            {item.count}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {reportSummary.department_breakdown.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm border p-4">
+                      <h3 className="font-semibold text-gray-900 mb-4">By Department</h3>
+                      <div className="space-y-3">
+                        {reportSummary.department_breakdown.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between">
+                            <span className="text-gray-700">{item.department || 'Unassigned'}</span>
+                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                              {item.count}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1090,12 +2536,33 @@ export default function EvaluationNewPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-md">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Add Department</h3>
-                <button onClick={() => setShowDeptModal(false)} className="text-gray-400 hover:text-gray-600">
+                <h3 className="text-lg font-semibold">{editingDept ? 'Edit Department' : 'Add Department'}</h3>
+                <button onClick={() => {
+                  setShowDeptModal(false);
+                  setEditingDept(null);
+                  setDeptForm({ name: '', code: '', description: '', program_id: '' });
+                }} className="text-gray-400 hover:text-gray-600">
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <div className="space-y-4">
+                {/* Program Selector - Only for super-admin */}
+                {user?.role === 'super-admin' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Program *</label>
+                    <select
+                      value={deptForm.program_id}
+                      onChange={(e) => setDeptForm({ ...deptForm, program_id: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select Program</option>
+                      {programs.map((prog) => (
+                        <option key={prog.id} value={prog.id}>{prog.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
                   <input
@@ -1130,7 +2597,11 @@ export default function EvaluationNewPage() {
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
-                  onClick={() => setShowDeptModal(false)}
+                  onClick={() => {
+                    setShowDeptModal(false);
+                    setEditingDept(null);
+                    setDeptForm({ name: '', code: '', description: '', program_id: '' });
+                  }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                 >
                   Cancel
@@ -1140,7 +2611,7 @@ export default function EvaluationNewPage() {
                   disabled={loading}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                 >
-                  {loading ? 'Adding...' : 'Add Department'}
+                  {loading ? 'Saving...' : (editingDept ? 'Update Department' : 'Add Department')}
                 </button>
               </div>
             </div>
@@ -1152,15 +2623,29 @@ export default function EvaluationNewPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-md">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Add Role</h3>
-                <button onClick={() => setShowRoleModal(false)} className="text-gray-400 hover:text-gray-600">
+                <h3 className="text-lg font-semibold">{editingRole ? 'Edit Role' : 'Add Role'}</h3>
+                <button onClick={() => {
+                  setShowRoleModal(false);
+                  setEditingRole(null);
+                  setRoleForm({ name: '', code: '', description: '', department_id: '' });
+                }} className="text-gray-400 hover:text-gray-600">
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <p className="text-sm text-gray-500 mb-4">
-                Adding to: <span className="font-medium">{departments.find(d => d.id === selectedDepartment)?.name}</span>
-              </p>
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
+                  <select
+                    value={roleForm.department_id}
+                    onChange={(e) => setRoleForm({ ...roleForm, department_id: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>{dept.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
                   <input
@@ -1170,20 +2655,6 @@ export default function EvaluationNewPage() {
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="e.g., Manager"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hierarchy Level</label>
-                  <select
-                    value={roleForm.hierarchy_level}
-                    onChange={(e) => setRoleForm({ ...roleForm, hierarchy_level: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value={1}>1 - Group Head (Top)</option>
-                    <option value={2}>2 - Manager</option>
-                    <option value={3}>3 - Lead</option>
-                    <option value={4}>4 - Employee</option>
-                    <option value={5}>5 - Junior</option>
-                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
@@ -1198,7 +2669,11 @@ export default function EvaluationNewPage() {
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
-                  onClick={() => setShowRoleModal(false)}
+                  onClick={() => {
+                    setShowRoleModal(false);
+                    setEditingRole(null);
+                    setRoleForm({ name: '', code: '', description: '', department_id: '' });
+                  }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                 >
                   Cancel
@@ -1208,7 +2683,7 @@ export default function EvaluationNewPage() {
                   disabled={loading}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {loading ? 'Adding...' : 'Add Role'}
+                  {loading ? 'Saving...' : (editingRole ? 'Update Role' : 'Add Role')}
                 </button>
               </div>
             </div>
@@ -1220,15 +2695,29 @@ export default function EvaluationNewPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-md">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Add Staff</h3>
-                <button onClick={() => setShowStaffModal(false)} className="text-gray-400 hover:text-gray-600">
+                <h3 className="text-lg font-semibold">{editingStaff ? 'Edit Staff' : 'Add Staff'}</h3>
+                <button onClick={() => {
+                  setShowStaffModal(false);
+                  setEditingStaff(null);
+                  setStaffForm({ name: '', email: '', employee_id: '', role_id: '' });
+                }} className="text-gray-400 hover:text-gray-600">
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <p className="text-sm text-gray-500 mb-4">
-                Role: <span className="font-medium">{roles.find(r => r.id === selectedRole)?.name}</span>
-              </p>
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                  <select
+                    value={staffForm.role_id}
+                    onChange={(e) => setStaffForm({ ...staffForm, role_id: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="">Select Role</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>{role.name} - {role.category}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
                   <input
@@ -1262,7 +2751,11 @@ export default function EvaluationNewPage() {
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
-                  onClick={() => setShowStaffModal(false)}
+                  onClick={() => {
+                    setShowStaffModal(false);
+                    setEditingStaff(null);
+                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '' });
+                  }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                 >
                   Cancel
@@ -1272,7 +2765,7 @@ export default function EvaluationNewPage() {
                   disabled={loading}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                 >
-                  {loading ? 'Adding...' : 'Add Staff'}
+                  {loading ? 'Saving...' : (editingStaff ? 'Update Staff' : 'Add Staff')}
                 </button>
               </div>
             </div>
@@ -1284,8 +2777,8 @@ export default function EvaluationNewPage() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-6 w-full max-w-lg">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Create Mapping</h3>
-                <button onClick={() => setShowMappingModal(false)} className="text-gray-400 hover:text-gray-600">
+                <h3 className="text-lg font-semibold">{editingMappingId ? 'Edit Mapping' : 'Create Mapping'}</h3>
+                <button onClick={() => { setShowMappingModal(false); setEditingMappingId(null); setMappingEvaluator(''); setMappingSubordinates([]); }} className="text-gray-400 hover:text-gray-600">
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -1309,7 +2802,15 @@ export default function EvaluationNewPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Subordinates (Select multiple)</label>
                   <div className="border rounded-lg max-h-48 overflow-y-auto">
                     {staff
-                      .filter(s => s.id !== mappingEvaluator)
+                      .filter(s => {
+                        if (s.id === mappingEvaluator) return false;
+                        if (!mappingEvaluator) return true;
+                        const selectedEvaluator = staff.find(st => st.id === mappingEvaluator);
+                        if (!selectedEvaluator) return false;
+                        const evaluatorRole = roles.find(r => r.id === selectedEvaluator.role_id);
+                        const subordinateRole = roles.find(r => r.id === s.role_id);
+                        return evaluatorRole && subordinateRole && subordinateRole.category === evaluatorRole.category;
+                      })
                       .map((s) => (
                         <label
                           key={s.id}
@@ -1342,6 +2843,7 @@ export default function EvaluationNewPage() {
                     setShowMappingModal(false);
                     setMappingEvaluator('');
                     setMappingSubordinates([]);
+                    setEditingMappingId(null);
                   }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                 >
@@ -1352,13 +2854,330 @@ export default function EvaluationNewPage() {
                   disabled={loading || !mappingEvaluator || mappingSubordinates.length === 0}
                   className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
                 >
-                  {loading ? 'Creating...' : 'Create Mapping'}
+                  {loading ? 'Saving...' : (editingMappingId ? 'Update Mapping' : 'Create Mapping')}
                 </button>
               </div>
             </div>
           </div>
         )}
-      </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, type: null, id: '', name: '' })}
+        onConfirm={async () => {
+          if (deleteModal.type === 'department') {
+            await handleDeleteDepartment();
+          } else if (deleteModal.type === 'role') {
+            await handleDeleteRole();
+          } else if (deleteModal.type === 'staff') {
+            await handleDeleteStaff();
+          } else if (deleteModal.type === 'triggered') {
+            await confirmDeleteTriggered();
+          }
+          setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
+        }}
+        title={`Delete ${deleteModal.type ? deleteModal.type.charAt(0).toUpperCase() + deleteModal.type.slice(1) : ''}`}
+        message={`Are you sure you want to delete "${deleteModal.name}"? This action cannot be undone.`}
+      />
+
+      {/* Trigger Evaluation Modal with Email Preview */}
+      {showTriggerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <Mail className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Review & Send Evaluation</h2>
+                    <p className="text-sm text-gray-500">Preview email and set evaluation period</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowTriggerModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Evaluation Period */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-3">Evaluation Period</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      End Date (Deadline)
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Schedule Option */}
+              <div className="mb-6 p-4 bg-yellow-50 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Schedule Send (Optional)
+                </h3>
+                <p className="text-sm text-gray-600 mb-3">Leave empty to send immediately</p>
+                <input
+                  type="datetime-local"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                />
+              </div>
+
+              {/* Email Preview */}
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-900 mb-3">Email Content</h3>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Subject
+                  </label>
+                  <input
+                    type="text"
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Message Body
+                  </label>
+                  <textarea
+                    value={emailBody}
+                    onChange={(e) => setEmailBody(e.target.value)}
+                    rows={6}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                  />
+                  <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs font-medium text-blue-800 mb-2">Available Placeholders:</p>
+                    <div className="flex flex-wrap gap-2">
+                      <code className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{'{evaluator_name}'}</code>
+                      <code className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{'{start_date}'}</code>
+                      <code className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{'{end_date}'}</code>
+                      <code className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{'{subordinates_list}'}</code>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email Preview Box */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-100 px-4 py-2 border-b border-gray-200">
+                    <p className="text-xs font-medium text-gray-600">Email Preview</p>
+                  </div>
+                  <div className="p-4 bg-white">
+                    <div className="text-sm text-gray-700 whitespace-pre-wrap mb-4">
+                      {emailBody.replace('{evaluator_name}', 'John Doe')
+                        .replace('{start_date}', startDate || 'Start Date')
+                        .replace('{end_date}', endDate || 'End Date')
+                        .replace('{subordinates_list}', '- Team Member 1\n- Team Member 2')}
+                    </div>
+                    <div className="text-center">
+                      <span className="inline-block px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg shadow-md">
+                        Start Evaluation →
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 text-center mt-3">
+                      Button will link to the evaluation form
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recipients Summary */}
+              <div className="mb-6 p-4 bg-green-50 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-2">Recipients</h3>
+                <p className="text-sm text-gray-600">
+                  {selectedEvaluators.length} evaluator(s) selected
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {mappings
+                    .filter(m => selectedEvaluators.includes(m.evaluator_id))
+                    .map(m => (
+                      <span key={m.evaluator_id} className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
+                        {m.evaluator_name} ({m.subordinates.length} subordinates)
+                      </span>
+                    ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowTriggerModal(false)}
+                  className="px-6 py-2 text-gray-600 hover:text-gray-800 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmTrigger}
+                  disabled={triggering || !emailSubject || !emailBody}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {triggering ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      {scheduledDate ? 'Schedule' : 'Send Now'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Triggered Modal */}
+      {showEditTriggeredModal && editingTriggered && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b p-6 z-10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Edit2 className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Edit Triggered Evaluation</h2>
+                    <p className="text-sm text-gray-500">{editingTriggered.evaluator_name} • {editingTriggered.template_name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowEditTriggeredModal(false);
+                    setEditingTriggered(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Evaluation Period */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-3">Evaluation Period</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Email Content */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Subject
+                </label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Email subject..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Body
+                </label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  rows={6}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Email message..."
+                />
+                <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                  <p className="text-xs font-medium text-blue-800 mb-2">Available Placeholders:</p>
+                  <div className="flex flex-wrap gap-2">
+                    <code className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{'{evaluator_name}'}</code>
+                    <code className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{'{start_date}'}</code>
+                    <code className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{'{end_date}'}</code>
+                    <code className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{'{subordinates_list}'}</code>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Note: "Start Evaluation" button is automatically added to the email
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  onClick={() => {
+                    setShowEditTriggeredModal(false);
+                    setEditingTriggered(null);
+                  }}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateTriggered}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Update
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

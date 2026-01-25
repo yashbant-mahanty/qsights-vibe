@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -54,8 +55,11 @@ return new class extends Migration
             // Indexes
             $table->index(['organization_id', 'is_active']);
             $table->index(['program_id', 'is_active']);
-            $table->unique(['organization_id', 'code']); // Unique code per organization
         });
+        
+        // Create a partial unique index for non-deleted roles only
+        // This allows reusing codes after soft deletion
+        DB::statement('CREATE UNIQUE INDEX unique_org_role_code ON evaluation_roles (organization_id, code) WHERE deleted_at IS NULL');
     }
 
     /**
@@ -63,6 +67,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        DB::statement('DROP INDEX IF EXISTS unique_org_role_code');
         Schema::dropIfExists('evaluation_roles');
     }
 };
