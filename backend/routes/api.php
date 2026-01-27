@@ -793,6 +793,10 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     Route::get('/staff', [App\Http\Controllers\Api\EvaluationStaffController::class, 'index']);
     Route::get('/staff/{id}', [App\Http\Controllers\Api\EvaluationStaffController::class, 'show']);
     
+    // Staff Dashboard - My Performance & Team Performance
+    Route::get('/my-performance', [App\Http\Controllers\Api\EvaluationStaffController::class, 'myPerformance']);
+    Route::get('/team-performance', [App\Http\Controllers\Api\EvaluationStaffController::class, 'teamPerformance']);
+    
     Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
         Route::post('/staff', [App\Http\Controllers\Api\EvaluationStaffController::class, 'store']);
         Route::put('/staff/{id}', [App\Http\Controllers\Api\EvaluationStaffController::class, 'update']);

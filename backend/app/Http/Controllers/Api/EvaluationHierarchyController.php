@@ -34,11 +34,15 @@ class EvaluationHierarchyController extends Controller
                     'staff.name as staff_name',
                     'staff.email as staff_email',
                     'staff.employee_id as staff_employee_id',
+                    'staff.department as staff_department',
                     'staff_role.name as staff_role_name',
+                    'staff_role.category as staff_role_category',
                     'manager.name as manager_name',
                     'manager.email as manager_email',
                     'manager.employee_id as manager_employee_id',
-                    'manager_role.name as manager_role_name'
+                    'manager.department as manager_department',
+                    'manager_role.name as manager_role_name',
+                    'manager_role.category as manager_role_category'
                 );
             
             if ($programId) {

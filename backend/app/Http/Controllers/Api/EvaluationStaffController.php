@@ -5,7 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use App\Models\User;
+use App\Models\SystemSetting;
 
 class EvaluationStaffController extends Controller
 {
@@ -165,7 +169,8 @@ class EvaluationStaffController extends Controller
                 'phone' => 'nullable|string|max:50',
                 'mobile' => 'nullable|string|max:50',
                 'status' => 'nullable|in:active,inactive,on_leave,terminated',
-                'metadata' => 'nullable|array'
+                'metadata' => 'nullable|array',
+                'create_account' => 'nullable|boolean'
             ]);
             
             // Determine program_id based on user role
@@ -183,6 +188,33 @@ class EvaluationStaffController extends Controller
             }
             
             $staffId = Str::uuid()->toString();
+            $createdUserId = null;
+            $generatedPassword = null;
+            
+            // If create_account is true, create a user account
+            if (!empty($validated['create_account'])) {
+                // Check if user with this email already exists
+                $existingUser = User::where('email', $validated['email'])->first();
+                
+                if ($existingUser) {
+                    $createdUserId = $existingUser->id;
+                } else {
+                    // Generate random password
+                    $generatedPassword = Str::random(10);
+                    
+                    // Create user
+                    $newUser = User::create([
+                        'name' => $validated['name'],
+                        'email' => $validated['email'],
+                        'password' => Hash::make($generatedPassword),
+                        'role' => 'evaluation_staff',
+                        'program_id' => $programId,
+                        'is_active' => true
+                    ]);
+                    
+                    $createdUserId = $newUser->id;
+                }
+            }
             
             DB::table('evaluation_staff')->insert([
                 'id' => $staffId,
@@ -191,7 +223,7 @@ class EvaluationStaffController extends Controller
                 'email' => $validated['email'],
                 'role_id' => $validated['role_id'],
                 'program_id' => $programId,
-                'user_id' => $validated['user_id'] ?? null,
+                'user_id' => $createdUserId ?? ($validated['user_id'] ?? null),
                 'department' => $validated['department'] ?? null,
                 'team' => $validated['team'] ?? null,
                 'location' => $validated['location'] ?? null,
@@ -207,6 +239,11 @@ class EvaluationStaffController extends Controller
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
+            
+            // Send welcome email if account was created
+            if ($generatedPassword && $createdUserId) {
+                $this->sendWelcomeEmail($validated['name'], $validated['email'], $generatedPassword, $programId);
+            }
             
             $this->logAudit('evaluation_staff', $staffId, 'created', 'Staff member created', $user, $programId);
             
@@ -413,6 +450,338 @@ class EvaluationStaffController extends Controller
             ]);
         } catch (\Exception $e) {
             \Log::error('Failed to log audit: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Send welcome email to staff with login credentials
+     */
+    private function sendWelcomeEmail($name, $email, $password, $programId = null)
+    {
+        try {
+            $sendGridApiKey = SystemSetting::getValue('email_sendgrid_api_key') ?: env('SENDGRID_API_KEY');
+            $from = SystemSetting::getValue('email_sender_email') ?: config('mail.from.address', 'info@qsights.com');
+            $fromName = SystemSetting::getValue('email_sender_name') ?: config('mail.from.name', 'QSights');
+            
+            if (!$sendGridApiKey) {
+                \Log::warning('SendGrid API key not configured for welcome email');
+                return;
+            }
+            
+            $loginUrl = config('app.frontend_url', 'https://prod.qsights.com') . '/login';
+            
+            $htmlContent = "
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;'>
+                        <h1 style='color: white; margin: 0;'>Welcome to QSights</h1>
+                        <p style='color: #e0e0e0; margin-top: 10px;'>Performance Evaluation System</p>
+                    </div>
+                    <div style='padding: 30px; background: #f9fafb;'>
+                        <h2 style='color: #1f2937;'>Hello {$name}!</h2>
+                        <p style='color: #4b5563; line-height: 1.6;'>Your account has been created for the QSights Performance Evaluation System. You can now log in to view your performance reports and evaluations.</p>
+                        
+                        <div style='background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;'>
+                            <h3 style='color: #374151; margin-top: 0;'>Your Login Credentials</h3>
+                            <p style='margin: 10px 0;'><strong>Username (Email):</strong> {$email}</p>
+                            <p style='margin: 10px 0;'><strong>Password:</strong> {$password}</p>
+                        </div>
+                        
+                        <p style='color: #6b7280; font-size: 14px;'>⚠️ Please change your password after your first login for security.</p>
+                        
+                        <div style='text-align: center; margin-top: 30px;'>
+                            <a href='{$loginUrl}' style='background: #7c3aed; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;'>Login to QSights</a>
+                        </div>
+                    </div>
+                    <div style='padding: 20px; text-align: center; color: #9ca3af; font-size: 12px;'>
+                        <p>This is an automated message from QSights Performance Evaluation System.</p>
+                    </div>
+                </div>
+            ";
+            
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $sendGridApiKey,
+                'Content-Type' => 'application/json'
+            ])->post('https://api.sendgrid.com/v3/mail/send', [
+                'personalizations' => [[
+                    'to' => [['email' => $email, 'name' => $name]]
+                ]],
+                'from' => ['email' => $from, 'name' => $fromName],
+                'subject' => 'Welcome to QSights - Your Account Details',
+                'content' => [
+                    ['type' => 'text/html', 'value' => $htmlContent]
+                ]
+            ]);
+            
+            if ($response->successful()) {
+                \Log::info("Welcome email sent to {$email}");
+            } else {
+                \Log::error('Failed to send welcome email: ' . $response->body());
+            }
+        } catch (\Exception $e) {
+            \Log::error('Exception sending welcome email: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Get logged-in staff's own performance data (My Performance)
+     */
+    public function myPerformance(Request $request)
+    {
+        try {
+            $user = $request->user();
+            
+            // Find this user's evaluation_staff record
+            $staffMember = DB::table('evaluation_staff')
+                ->where('email', $user->email)
+                ->orWhere('user_id', $user->id)
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if (!$staffMember) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Staff profile not found'
+                ], 404);
+            }
+            
+            // Get all evaluations where this staff member was evaluated
+            $evaluations = DB::table('evaluation_results as er')
+                ->join('evaluation_triggered as et', 'er.triggered_id', '=', 'et.id')
+                ->join('evaluation_staff as evaluator', 'et.evaluator_id', '=', 'evaluator.id')
+                ->where('er.staff_id', $staffMember->id)
+                ->whereNull('er.deleted_at')
+                ->select(
+                    'er.*',
+                    'et.template_name',
+                    'et.evaluator_id',
+                    'evaluator.name as evaluator_name',
+                    'evaluator.email as evaluator_email'
+                )
+                ->orderBy('er.evaluated_at', 'desc')
+                ->get();
+            
+            // Process evaluations to extract scores
+            $processedEvaluations = [];
+            $allScores = [];
+            $strengths = [];
+            $improvements = [];
+            
+            foreach ($evaluations as $eval) {
+                $responses = json_decode($eval->responses, true) ?? [];
+                $evalScores = [];
+                
+                foreach ($responses as $questionId => $response) {
+                    if (isset($response['score']) && is_numeric($response['score'])) {
+                        $evalScores[] = [
+                            'question' => $response['question'] ?? $questionId,
+                            'score' => (float) $response['score']
+                        ];
+                        $allScores[] = [
+                            'question' => $response['question'] ?? $questionId,
+                            'score' => (float) $response['score']
+                        ];
+                    }
+                }
+                
+                $avgScore = count($evalScores) > 0 
+                    ? round(array_sum(array_column($evalScores, 'score')) / count($evalScores), 2) 
+                    : 0;
+                
+                $processedEvaluations[] = [
+                    'id' => $eval->id,
+                    'template_name' => $eval->template_name,
+                    'evaluator_name' => $eval->evaluator_name,
+                    'evaluated_at' => $eval->evaluated_at,
+                    'scores' => $evalScores,
+                    'average_score' => $avgScore,
+                    'feedback' => $eval->feedback ?? null
+                ];
+            }
+            
+            // Calculate aggregated scores by question
+            $aggregatedScores = [];
+            foreach ($allScores as $score) {
+                $key = $score['question'];
+                if (!isset($aggregatedScores[$key])) {
+                    $aggregatedScores[$key] = ['question' => $key, 'scores' => [], 'total' => 0, 'count' => 0];
+                }
+                $aggregatedScores[$key]['scores'][] = $score['score'];
+                $aggregatedScores[$key]['total'] += $score['score'];
+                $aggregatedScores[$key]['count']++;
+            }
+            
+            // Calculate averages and identify strengths/improvements
+            $skillScores = [];
+            foreach ($aggregatedScores as $key => $data) {
+                $avg = round($data['total'] / $data['count'], 2);
+                $skillScores[] = [
+                    'question' => $data['question'],
+                    'average' => $avg,
+                    'count' => $data['count']
+                ];
+            }
+            
+            // Sort to find top and bottom
+            usort($skillScores, fn($a, $b) => $b['average'] <=> $a['average']);
+            $strengths = array_slice(array_filter($skillScores, fn($s) => $s['average'] >= 4), 0, 3);
+            $improvements = array_slice(array_filter($skillScores, fn($s) => $s['average'] < 4), 0, 3);
+            
+            $overallAverage = count($skillScores) > 0 
+                ? round(array_sum(array_column($skillScores, 'average')) / count($skillScores), 2) 
+                : 0;
+            
+            return response()->json([
+                'success' => true,
+                'staff' => [
+                    'id' => $staffMember->id,
+                    'name' => $staffMember->name,
+                    'email' => $staffMember->email,
+                    'employee_id' => $staffMember->employee_id,
+                    'department' => $staffMember->department
+                ],
+                'summary' => [
+                    'total_evaluations' => count($processedEvaluations),
+                    'overall_average' => $overallAverage,
+                    'strengths' => $strengths,
+                    'improvements' => $improvements
+                ],
+                'skill_scores' => $skillScores,
+                'evaluations' => $processedEvaluations
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch performance data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get team performance for logged-in staff's subordinates
+     */
+    public function teamPerformance(Request $request)
+    {
+        try {
+            $user = $request->user();
+            
+            // Find this user's evaluation_staff record
+            $staffMember = DB::table('evaluation_staff')
+                ->where('email', $user->email)
+                ->orWhere('user_id', $user->id)
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if (!$staffMember) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Staff profile not found'
+                ], 404);
+            }
+            
+            // Get all subordinates of this staff member
+            $subordinates = DB::table('evaluation_hierarchy as eh')
+                ->join('evaluation_staff as es', 'eh.staff_id', '=', 'es.id')
+                ->leftJoin('evaluation_roles as er', 'es.role_id', '=', 'er.id')
+                ->where('eh.reports_to_id', $staffMember->id)
+                ->where('eh.is_active', true)
+                ->whereNull('eh.deleted_at')
+                ->whereNull('es.deleted_at')
+                ->select(
+                    'es.id as staff_id',
+                    'es.name as staff_name',
+                    'es.email as staff_email',
+                    'es.employee_id',
+                    'es.department',
+                    'er.name as role_name'
+                )
+                ->get();
+            
+            if ($subordinates->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No subordinates found',
+                    'subordinates' => [],
+                    'staff_reports' => []
+                ]);
+            }
+            
+            // Get performance data for each subordinate
+            $staffReports = [];
+            foreach ($subordinates as $sub) {
+                $evaluations = DB::table('evaluation_results as er')
+                    ->join('evaluation_triggered as et', 'er.triggered_id', '=', 'et.id')
+                    ->join('evaluation_staff as evaluator', 'et.evaluator_id', '=', 'evaluator.id')
+                    ->where('er.staff_id', $sub->staff_id)
+                    ->whereNull('er.deleted_at')
+                    ->select('er.*', 'et.template_name', 'evaluator.name as evaluator_name')
+                    ->orderBy('er.evaluated_at', 'desc')
+                    ->get();
+                
+                $allScores = [];
+                $processedEvals = [];
+                
+                foreach ($evaluations as $eval) {
+                    $responses = json_decode($eval->responses, true) ?? [];
+                    $evalScores = [];
+                    
+                    foreach ($responses as $questionId => $response) {
+                        if (isset($response['score']) && is_numeric($response['score'])) {
+                            $evalScores[] = [
+                                'question' => $response['question'] ?? $questionId,
+                                'score' => (float) $response['score']
+                            ];
+                            $allScores[] = [
+                                'question' => $response['question'] ?? $questionId,
+                                'score' => (float) $response['score']
+                            ];
+                        }
+                    }
+                    
+                    $avgScore = count($evalScores) > 0 
+                        ? round(array_sum(array_column($evalScores, 'score')) / count($evalScores), 2) 
+                        : 0;
+                    
+                    $processedEvals[] = [
+                        'id' => $eval->id,
+                        'template_name' => $eval->template_name,
+                        'evaluator_name' => $eval->evaluator_name,
+                        'evaluated_at' => $eval->evaluated_at,
+                        'average_score' => $avgScore
+                    ];
+                }
+                
+                // Calculate overall average for this subordinate
+                $overallAvg = count($allScores) > 0
+                    ? round(array_sum(array_column($allScores, 'score')) / count($allScores), 2)
+                    : 0;
+                
+                $staffReports[] = [
+                    'staff_id' => $sub->staff_id,
+                    'staff_name' => $sub->staff_name,
+                    'staff_email' => $sub->staff_email,
+                    'employee_id' => $sub->employee_id,
+                    'department' => $sub->department,
+                    'role_name' => $sub->role_name,
+                    'total_evaluations' => count($processedEvals),
+                    'overall_average' => $overallAvg,
+                    'evaluations' => $processedEvals
+                ];
+            }
+            
+            return response()->json([
+                'success' => true,
+                'manager' => [
+                    'id' => $staffMember->id,
+                    'name' => $staffMember->name
+                ],
+                'subordinates_count' => count($subordinates),
+                'staff_reports' => $staffReports
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch team performance: ' . $e->getMessage()
+            ], 500);
         }
     }
 }

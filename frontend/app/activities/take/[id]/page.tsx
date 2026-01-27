@@ -2506,7 +2506,7 @@ export default function TakeActivityPage() {
           points: question.points
         };
         return (
-          <div className="py-4">
+          <div className="py-4 w-full">
             <DragDropBucket
               question={dndQuestion}
               value={responses[questionId]}
