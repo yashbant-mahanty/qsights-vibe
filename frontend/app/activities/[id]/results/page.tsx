@@ -328,12 +328,26 @@ export default function ActivityResultsPage() {
             'Response ID': response.id,
             'Participant': response.participant?.name || response.participant?.email || 'Anonymous',
             'Email': response.participant?.email || response.guest_email || 'N/A',
-            'Status': response.status || 'N/A',
-            'Submitted At': response.submitted_at 
-              ? new Date(response.submitted_at).toLocaleString()
-              : 'N/A',
-            'Is Orphaned': orphanedResponses.includes(response.id) ? 'YES' : 'NO',
           };
+
+          // Add custom registration fields
+          if (activity?.registration_form_fields && Array.isArray(activity.registration_form_fields)) {
+            activity.registration_form_fields
+              .filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
+              .forEach((field: any) => {
+                row[field.label || field.name] = response.participant?.additional_data?.[field.name] || 'N/A';
+              });
+          }
+
+          // Add standard fields
+          row['Registration Date'] = response.participant?.created_at 
+            ? new Date(response.participant.created_at).toLocaleString()
+            : 'N/A';
+          row['Status'] = response.status || 'N/A';
+          row['Submitted At'] = response.submitted_at 
+            ? new Date(response.submitted_at).toLocaleString()
+            : 'N/A';
+          row['Is Orphaned'] = orphanedResponses.includes(response.id) ? 'YES' : 'NO';
 
           // Add ALL answers regardless of whether question exists in current questionnaire
           if (Array.isArray(response.answers) && response.answers.length > 0) {
@@ -376,11 +390,25 @@ export default function ActivityResultsPage() {
           '#': index + 1,
           'Participant': response.participant?.name || response.participant?.email || 'Anonymous',
           'Email': response.participant?.email || response.guest_email || 'N/A',
-          'Status': response.status || 'N/A',
-          'Submitted At': response.submitted_at 
-            ? new Date(response.submitted_at).toLocaleString()
-            : 'N/A',
         };
+
+        // Add custom registration fields
+        if (activity?.registration_form_fields && Array.isArray(activity.registration_form_fields)) {
+          activity.registration_form_fields
+            .filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
+            .forEach((field: any) => {
+              row[field.label || field.name] = response.participant?.additional_data?.[field.name] || 'N/A';
+            });
+        }
+
+        // Add standard fields
+        row['Registration Date'] = response.participant?.created_at 
+          ? new Date(response.participant.created_at).toLocaleString()
+          : 'N/A';
+        row['Status'] = response.status || 'N/A';
+        row['Submitted At'] = response.submitted_at 
+            ? new Date(response.submitted_at).toLocaleString()
+            : 'N/A';
 
         // Add question responses
         // answers is an array of {question_id, value, value_array}
@@ -489,25 +517,66 @@ export default function ActivityResultsPage() {
       doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
       doc.text(`Total Responses: ${responses.length}`, 14, 27);
 
-      // Prepare table data
+      // Build dynamic headers for custom registration fields
+      const customFieldHeaders: string[] = [];
+      if (activity?.registration_form_fields && Array.isArray(activity.registration_form_fields)) {
+        activity.registration_form_fields
+          .filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
+          .forEach((field: any) => {
+            customFieldHeaders.push(field.label || field.name);
+          });
+      }
+
+      // Prepare table data with custom registration fields
       const tableData = responses.map((response, index) => {
-        const answers = response.metadata?.answers || response.answers || {};
         const row = [
-          index + 1,
+          String(index + 1),
           response.participant?.name || response.participant?.email || 'Anonymous',
           response.participant?.email || response.guest_email || 'N/A',
-          response.status || 'N/A',
-          response.submitted_at 
-            ? new Date(response.submitted_at).toLocaleDateString()
-            : 'N/A',
         ];
+
+        // Add custom registration field values
+        if (activity?.registration_form_fields && Array.isArray(activity.registration_form_fields)) {
+          activity.registration_form_fields
+            .filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
+            .forEach((field: any) => {
+              row.push(response.participant?.additional_data?.[field.name] || 'N/A');
+            });
+        }
+
+        // Add registration date
+        row.push(
+          response.participant?.created_at
+            ? new Date(response.participant.created_at).toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric'
+              })
+            : 'N/A'
+        );
+
+        // Add status and submitted date
+        row.push(response.status || 'N/A');
+        row.push(
+          response.submitted_at 
+            ? new Date(response.submitted_at).toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric'
+              })
+            : 'N/A'
+        );
+
         return row;
       });
+
+      // Build dynamic table headers
+      const tableHeaders = ['#', 'Participant', 'Email', ...customFieldHeaders, 'Registration Date', 'Status', 'Submitted'];
 
       // Add responses table
       // @ts-ignore - autoTable extends jsPDF prototype
       doc.autoTable({
-        head: [['#', 'Participant', 'Email', 'Status', 'Submitted']],
+        head: [tableHeaders],
         body: tableData,
         startY: 32,
         theme: 'grid',
@@ -1035,6 +1104,19 @@ export default function ActivityResultsPage() {
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                           Participant
                         </th>
+                        {/* Dynamic custom registration fields */}
+                        {activity?.registration_form_fields && Array.isArray(activity.registration_form_fields) && 
+                          activity.registration_form_fields
+                            .filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
+                            .map((field: any) => (
+                              <th key={field.name} className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                {field.label || field.name}
+                              </th>
+                            ))
+                        }
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                          Registration Date
+                        </th>
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                           Type
                         </th>
@@ -1078,6 +1160,25 @@ export default function ActivityResultsPage() {
                                 </div>
                               </div>
                             </div>
+                          </td>
+                          {/* Dynamic custom registration fields */}
+                          {activity?.registration_form_fields && Array.isArray(activity.registration_form_fields) && 
+                            activity.registration_form_fields
+                              .filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
+                              .map((field: any) => (
+                                <td key={field.name} className="px-6 py-4 text-sm text-gray-600">
+                                  {response.participant?.additional_data?.[field.name] || '-'}
+                                </td>
+                              ))
+                          }
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {response.participant?.created_at
+                              ? new Date(response.participant.created_at).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                })
+                              : '-'}
                           </td>
                           <td className="px-6 py-4 text-sm">
                             <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold ${

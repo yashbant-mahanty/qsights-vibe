@@ -156,7 +156,7 @@ function DroppableBucket({
     <div 
       ref={setNodeRef}
       className={`
-        flex-1 min-w-[250px] p-4 rounded-xl border-2 border-dashed transition-all
+        flex-1 min-w-0 p-4 rounded-xl border-2 border-dashed transition-all
         ${disabled ? 'bg-gray-50' : 'bg-white hover:border-qsights-blue'}
         ${isOver ? 'border-qsights-blue bg-blue-50 scale-105' : ''}
       `}
@@ -231,7 +231,7 @@ function SourceItems({
   });
 
   return (
-    <div className="flex-1 min-w-[250px]">
+    <div className="flex-1 min-w-0">
       <h4 className="font-semibold mb-3 text-sm text-gray-700">
         Available Items {required && <span className="text-red-500">*</span>}
       </h4>
@@ -271,7 +271,7 @@ function SourceItems({
 }
 
 // Main DragDropBucket Component
-export default function DragDropBucket({
+export function DragDropBucket({
   question,
   value,
   onChange,
@@ -478,7 +478,7 @@ export default function DragDropBucket({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className={`flex ${useVerticalLayout ? 'flex-col' : 'flex-row'} gap-4`}>
+        <div className={`flex ${useVerticalLayout ? 'flex-col' : 'flex-row flex-wrap'} gap-4 w-full`}>
           {/* Source Items */}
           <SourceItems
             items={unplacedItems}

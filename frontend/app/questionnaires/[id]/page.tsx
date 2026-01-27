@@ -3150,7 +3150,7 @@ export default function ViewQuestionnairePage() {
           bucketsCount: dndSettings.buckets?.length || 0
         });
         return (
-          <div className="py-4 space-y-4">
+          <div className="py-4 space-y-4 max-w-full overflow-x-auto">
             {/* Settings Panel */}
             {!showPreview && (
               <div className="space-y-4">
@@ -3243,7 +3243,7 @@ export default function ViewQuestionnairePage() {
                             <X className="w-4 h-4" />
                           </button>
                         </div>
-                        <div className="ml-6">
+                        <div className="ml-6 max-w-xs">
                           <label className="text-xs text-gray-600 mb-1 block">Item Image (Optional)</label>
                           <div className="text-xs text-gray-500 mb-2">
                             Recommended: 200 × 200 pixels (1:1 ratio) | Max: 5MB
@@ -3400,7 +3400,7 @@ export default function ViewQuestionnairePage() {
                             <X className="w-4 h-4" />
                           </button>
                         </div>
-                        <div className="ml-10">
+                        <div className="ml-10 max-w-xs">
                           <label className="text-xs text-gray-600 mb-1 block">Bucket Image (Optional)</label>
                           <div className="text-xs text-gray-500 mb-2">
                             Recommended: 200 × 200 pixels (1:1 ratio) | Max: 5MB

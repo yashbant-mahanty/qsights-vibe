@@ -267,7 +267,7 @@ export default function EvaluationNewPage() {
   // Form states
   const [deptForm, setDeptForm] = useState({ name: '', code: '', description: '', program_id: '' });
   const [roleForm, setRoleForm] = useState({ name: '', code: '', description: '', department_id: '' });
-  const [staffForm, setStaffForm] = useState({ name: '', email: '', employee_id: '', role_id: '' });
+  const [staffForm, setStaffForm] = useState({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
   
   // Trigger state
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -278,6 +278,7 @@ export default function EvaluationNewPage() {
   const [emailBody, setEmailBody] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [evaluatorDeptFilter, setEvaluatorDeptFilter] = useState<string>('');
   const [scheduledDate, setScheduledDate] = useState('');
   
   // History state
@@ -459,7 +460,7 @@ export default function EvaluationNewPage() {
             evaluator_id: managerId,
             evaluator_name: firstItem.manager_name || 'Unknown',
             evaluator_role: firstItem.manager_role_name || '',
-            evaluator_dept: '',
+            evaluator_dept: firstItem.manager_role_category || firstItem.manager_department || '',
             subordinates: grouped[managerId].map((h: any) => ({
               id: h.id,
               staff_id: h.staff_id,
@@ -811,14 +812,20 @@ export default function EvaluationNewPage() {
           role_id: staffForm.role_id,
           department: selectedDepartment || '',
           program_id: programId,
-          is_available_for_evaluation: true
+          is_available_for_evaluation: true,
+          create_account: !editingStaff ? staffForm.create_account : undefined
         })
       });
       
       if (response.success) {
-        showToast.success(editingStaff ? 'Staff updated successfully' : 'Staff added successfully');
+        const successMsg = editingStaff 
+          ? 'Staff updated successfully' 
+          : staffForm.create_account 
+            ? 'Staff added and account created. Login credentials sent via email.' 
+            : 'Staff added successfully';
+        showToast.success(successMsg);
         setShowStaffModal(false);
-        setStaffForm({ name: '', email: '', employee_id: '', role_id: '' });
+        setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
         setEditingStaff(null);
         fetchStaff();
       } else {
@@ -1264,7 +1271,7 @@ export default function EvaluationNewPage() {
                   <button
                     onClick={() => {
                       setEditingStaff(null);
-                      setStaffForm({ name: '', email: '', employee_id: '', role_id: '' });
+                      setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
                       setShowStaffModal(true);
                     }}
                     className="mt-4 w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium"
@@ -1609,53 +1616,94 @@ export default function EvaluationNewPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <label className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                      <input
-                        type="checkbox"
-                        checked={selectedEvaluators.length === evaluatorsWithSubordinates.length}
+                    {/* Department Filter */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Department</label>
+                      <select
+                        value={evaluatorDeptFilter}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedEvaluators(evaluatorsWithSubordinates.map(m => m.evaluator_id));
-                          } else {
-                            setSelectedEvaluators([]);
-                          }
+                          setEvaluatorDeptFilter(e.target.value);
+                          setSelectedEvaluators([]); // Reset selection when filter changes
                         }}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="font-medium">Select All Evaluators</span>
-                    </label>
-                    
-                    {evaluatorsWithSubordinates.map((mapping) => (
-                      <label
-                        key={mapping.evaluator_id}
-                        className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition ${
-                          selectedEvaluators.includes(mapping.evaluator_id)
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedEvaluators.includes(mapping.evaluator_id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedEvaluators([...selectedEvaluators, mapping.evaluator_id]);
-                            } else {
-                              setSelectedEvaluators(selectedEvaluators.filter(id => id !== mapping.evaluator_id));
-                            }
-                          }}
-                          className="w-4 h-4 text-blue-600 rounded"
-                        />
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{mapping.evaluator_name}</p>
-                          <p className="text-sm text-gray-500">{mapping.evaluator_dept} • {mapping.evaluator_role}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold text-blue-600">{mapping.subordinates.length}</p>
-                          <p className="text-xs text-gray-500">subordinates</p>
-                        </div>
-                      </label>
-                    ))}
+                        <option value="">All Departments</option>
+                        {departments.map((dept) => (
+                          <option key={dept.id} value={dept.name}>{dept.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {/* Select All (filtered) */}
+                    {(() => {
+                      // Helper function to get evaluator's department (from role category)
+                      const getEvaluatorDepartment = (evaluatorId: string): string => {
+                        const staffMember = staff.find(s => s.id === evaluatorId);
+                        if (staffMember?.role_id) {
+                          const role = roles.find(r => r.id === staffMember.role_id);
+                          return role?.category || '';
+                        }
+                        return '';
+                      };
+
+                      const filteredEvaluators = evaluatorDeptFilter 
+                        ? evaluatorsWithSubordinates.filter(e => getEvaluatorDepartment(e.evaluator_id) === evaluatorDeptFilter)
+                        : evaluatorsWithSubordinates;
+                      
+                      return (
+                        <>
+                          <label className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                            <input
+                              type="checkbox"
+                              checked={filteredEvaluators.length > 0 && filteredEvaluators.every(e => selectedEvaluators.includes(e.evaluator_id))}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedEvaluators([...new Set([...selectedEvaluators, ...filteredEvaluators.map(m => m.evaluator_id)])]);
+                                } else {
+                                  setSelectedEvaluators(selectedEvaluators.filter(id => !filteredEvaluators.some(e => e.evaluator_id === id)));
+                                }
+                              }}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <span className="font-medium">
+                              Select All {evaluatorDeptFilter ? `(${filteredEvaluators.length} in ${evaluatorDeptFilter})` : `Evaluators (${filteredEvaluators.length})`}
+                            </span>
+                          </label>
+                    
+                          {filteredEvaluators.map((mapping) => (
+                            <label
+                              key={mapping.evaluator_id}
+                              className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition ${
+                                selectedEvaluators.includes(mapping.evaluator_id)
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedEvaluators.includes(mapping.evaluator_id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedEvaluators([...selectedEvaluators, mapping.evaluator_id]);
+                                  } else {
+                                    setSelectedEvaluators(selectedEvaluators.filter(id => id !== mapping.evaluator_id));
+                                  }
+                                }}
+                                className="w-4 h-4 text-blue-600 rounded"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">{mapping.evaluator_name}</p>
+                                <p className="text-sm text-gray-500">{mapping.evaluator_dept} • {mapping.evaluator_role}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-blue-600">{mapping.subordinates.length}</p>
+                                <p className="text-xs text-gray-500">subordinates</p>
+                              </div>
+                            </label>
+                          ))}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -2699,7 +2747,7 @@ export default function EvaluationNewPage() {
                 <button onClick={() => {
                   setShowStaffModal(false);
                   setEditingStaff(null);
-                  setStaffForm({ name: '', email: '', employee_id: '', role_id: '' });
+                  setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
                 }} className="text-gray-400 hover:text-gray-600">
                   <X className="h-5 w-5" />
                 </button>
@@ -2748,13 +2796,33 @@ export default function EvaluationNewPage() {
                     placeholder="Optional"
                   />
                 </div>
+                
+                {/* Create Account Option - Only show when adding new staff */}
+                {!editingStaff && (
+                  <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={staffForm.create_account}
+                        onChange={(e) => setStaffForm({ ...staffForm, create_account: e.target.checked })}
+                        className="w-5 h-5 text-purple-600 rounded mt-0.5"
+                      />
+                      <div>
+                        <span className="font-medium text-purple-900">Create Login Account</span>
+                        <p className="text-xs text-purple-600 mt-1">
+                          Send welcome email with login credentials. Staff can view their performance reports.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   onClick={() => {
                     setShowStaffModal(false);
                     setEditingStaff(null);
-                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '' });
+                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
                   }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                 >

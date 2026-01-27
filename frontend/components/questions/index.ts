@@ -6,7 +6,7 @@ import { DialGauge } from './DialGauge';
 import { LikertVisual } from './LikertVisual';
 import { NPSScale } from './NPSScale';
 import { StarRating } from './StarRating';
-import DragDropBucket from './DragDropBucket';
+import { DragDropBucket } from './DragDropBucket';
 
 export { SliderScale, DialGauge, LikertVisual, NPSScale, StarRating, DragDropBucket };
 
