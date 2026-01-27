@@ -57,3 +57,14 @@ backend/bootstrap/cache/*
 !backend/storage/framework/views/.gitkeep
 !backend/bootstrap/cache/.gitkeep
 backend/update_sendgrid_settings.php
+
+# Sensitive files - credentials
+*.pem
+QSights-Mumbai-12Aug2019.pem
+backend/.env.production.backup
+backend/test_sendgrid.php
+backend/update_sendgrid_settings.php
+backend/check_sendgrid_sender.php
+backend/diagnose_sendgrid.php
+backend/test_sendgrid_email.php
+
