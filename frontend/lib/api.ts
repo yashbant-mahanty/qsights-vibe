@@ -209,6 +209,9 @@ export interface Activity {
   time_limit_minutes?: number;
   pass_percentage?: number;
   max_retakes?: number | null;
+  contact_us_enabled?: boolean;
+  enable_generated_links?: boolean; // NEW: Enable unique generated links feature
+  registration_flow?: 'pre_submission' | 'post_submission';
   // Program relationship
   program?: {
     id: string;
@@ -1976,4 +1979,188 @@ export const myEvaluationsApi = {
     return await fetchWithAuth('/my-evaluations/completed');
   },
 };
+
+// =====================================================
+// GENERATED EVENT LINKS API (Unique One-Time-Use Links)
+// =====================================================
+
+export interface GeneratedLinkGroup {
+  id: string;
+  activity_id: string;
+  name: string;
+  description?: string;
+  total_links: number;
+  used_links: number;
+  usage_percentage?: number;
+  remaining_links?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GeneratedEventLink {
+  id: string;
+  activity_id: string;
+  group_id?: string;
+  tag: string;
+  token: string;
+  link_type: 'registration' | 'anonymous';
+  status: 'unused' | 'used' | 'expired' | 'disabled';
+  created_by: string;
+  created_at: string;
+  used_at?: string;
+  used_by_participant_id?: string;
+  response_id?: string;
+  expires_at?: string;
+  full_url?: string;
+  // Relations
+  group?: GeneratedLinkGroup;
+  creator?: User;
+  participant?: Participant;
+  response?: Response;
+}
+
+export interface GeneratedLinksStatistics {
+  total: number;
+  unused: number;
+  used: number;
+  expired: number;
+  disabled: number;
+  usage_percentage: number;
+}
+
+export interface GeneratedLinksBatchResult {
+  generated: GeneratedEventLink[];
+  errors: string[];
+  success_count: number;
+  error_count: number;
+}
+
+export const generatedLinksApi = {
+  // Generate batch of links
+  async generate(activityId: string, data: {
+    prefix: string;
+    start_number: number;
+    count: number;
+    group_id?: string;
+    group_name?: string;
+    group_description?: string;
+    link_type?: 'registration' | 'anonymous';
+  }): Promise<{ message: string; data: GeneratedLinksBatchResult }> {
+    return await fetchWithAuth(`/activities/${activityId}/generated-links`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Get all links for activity
+  async getAll(activityId: string, params?: {
+    status?: string;
+    group_id?: string;
+    search?: string;
+    page?: number;
+  }): Promise<{ data: any; statistics: GeneratedLinksStatistics }> {
+    const queryString = params ? '?' + new URLSearchParams(params as any).toString() : '';
+    return await fetchWithAuth(`/activities/${activityId}/generated-links${queryString}`);
+  },
+
+  // Get statistics
+  async getStatistics(activityId: string): Promise<{
+    overall: GeneratedLinksStatistics;
+    by_group: Array<{
+      group_id: string;
+      group_name: string;
+      total: number;
+      used: number;
+      unused: number;
+      usage_percentage: number;
+    }>;
+  }> {
+    return await fetchWithAuth(`/activities/${activityId}/generated-links/statistics`);
+  },
+
+  // Get groups
+  async getGroups(activityId: string): Promise<{ data: GeneratedLinkGroup[] }> {
+    return await fetchWithAuth(`/activities/${activityId}/generated-links/groups`);
+  },
+
+  // Create group
+  async createGroup(activityId: string, data: {
+    name: string;
+    description?: string;
+  }): Promise<{ message: string; data: GeneratedLinkGroup }> {
+    return await fetchWithAuth(`/activities/${activityId}/generated-links/groups`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Update link status
+  async updateStatus(activityId: string, linkId: string, status: 'expired' | 'disabled' | 'unused'): Promise<{ message: string; data: GeneratedEventLink }> {
+    return await fetchWithAuth(`/activities/${activityId}/generated-links/${linkId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  // Delete link
+  async delete(activityId: string, linkId: string): Promise<{ message: string }> {
+    return await fetchWithAuth(`/activities/${activityId}/generated-links/${linkId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Export links
+  async export(activityId: string, params?: {
+    status?: string;
+    group_id?: string;
+  }): Promise<{ data: any[]; filename: string }> {
+    const queryString = params ? '?' + new URLSearchParams(params as any).toString() : '';
+    return await fetchWithAuth(`/activities/${activityId}/generated-links/export${queryString}`);
+  },
+
+  // Validate generated link token (public, no auth)
+  async validateToken(token: string): Promise<{
+    valid: boolean;
+    data?: {
+      activity_id: string;
+      tag: string;
+      link_type: string;
+      status: string;
+    };
+    message?: string;
+  }> {
+    const response = await fetch(`${API_URL}/public/generated-link/validate/${token}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok && response.status !== 404) {
+      throw new Error('Failed to validate link');
+    }
+
+    return await response.json();
+  },
+
+  // Mark link as used (public, called after response submission)
+  async markAsUsed(token: string, participantId: string, responseId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/public/generated-link/mark-used`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ token, participant_id: participantId, response_id: responseId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to mark link as used');
+    }
+
+    return await response.json();
+  },
+};
+
 

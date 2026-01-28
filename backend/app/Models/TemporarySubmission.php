@@ -18,6 +18,7 @@ class TemporarySubmission extends Model
         'linked_to_participant_id',
         'status',
         'expires_at',
+        'generated_link_tag', // NEW: Tag from generated event link
     ];
 
     protected $casts = [

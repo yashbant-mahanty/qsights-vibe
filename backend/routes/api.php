@@ -28,6 +28,10 @@ Route::post('/auth/reset-password', [App\Http\Controllers\Api\PasswordResetContr
 // Email-Embedded Response Submission (Public - No Auth Required)
 Route::get('/public/email-response', [App\Http\Controllers\Api\Public\EmailResponseController::class, 'submit']);
 
+// Generated Link Validation (Public - No Auth Required for participants)
+Route::get('/public/generated-link/validate/{token}', [App\Http\Controllers\Api\Public\GeneratedLinkValidationController::class, 'validate']);
+Route::post('/public/generated-link/mark-used', [App\Http\Controllers\Api\Public\GeneratedLinkValidationController::class, 'markAsUsed']);
+
 // SendGrid Webhook (Public - No Auth Required, SendGrid will POST to this)
 Route::post('/webhooks/sendgrid', [SendGridWebhookController::class, 'handle']);
 
@@ -297,6 +301,21 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/activities/{id}/participants', [ActivityController::class, 'getParticipants']);
     Route::get('/activities/{id}', [ActivityController::class, 'show']);
     Route::get('/activities/{id}/links', [ActivityController::class, 'getActivityLinks']);
+    
+    // Generated Event Links (Unique one-time-use links)
+    Route::prefix('activities/{id}/generated-links')->group(function ($id) {
+        Route::get('/', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'index']);
+        Route::get('/groups', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'getGroups']);
+        Route::get('/statistics', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'statistics']);
+        Route::get('/export', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'export']);
+        
+        Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+            Route::post('/', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'generate']);
+            Route::post('/groups', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'createGroup']);
+            Route::patch('/{linkId}', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'updateStatus']);
+            Route::delete('/{linkId}', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'destroy']);
+        });
+    });
     
     // Admin and Program roles can manage activities
     Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
