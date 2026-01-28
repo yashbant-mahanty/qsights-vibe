@@ -34,6 +34,7 @@ class Response extends Model
         'time_expired_at',
         'auto_submitted',
         'is_preview',
+        'generated_link_tag', // NEW: Tag from generated event link
     ];
 
     protected $casts = [

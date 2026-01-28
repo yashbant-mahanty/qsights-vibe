@@ -81,6 +81,7 @@ class Activity extends Model
         'pass_percentage',
         'max_retakes',
         'contact_us_enabled',
+        'enable_generated_links', // NEW: Enable unique generated links feature
         // Additional fields
         'sender_email',
         'manager_name',
