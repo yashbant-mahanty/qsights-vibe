@@ -25,12 +25,234 @@ import {
   Eye,
   MousePointer,
   X,
+  Trash2,
   Calendar,
   Activity as ActivityIcon,
 } from "lucide-react";
 import { activitiesApi, responsesApi, notificationsApi, type Activity } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
+
+// Participant Details Modal Component
+interface ParticipantDetailsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  participant: any;
+  registrationFields: any[];
+}
+
+function ParticipantDetailsModal({ isOpen, onClose, participant, registrationFields }: ParticipantDetailsModalProps) {
+  if (!isOpen || !participant) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-bold text-xl">
+              {(participant.participant?.name || participant.participant?.email || 'A')[0].toUpperCase()}
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Participant Details</h2>
+              <p className="text-sm text-blue-100">Complete registration information</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-100px)]">
+          {/* Basic Information Section */}
+          <div className="mb-6">
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Basic Information
+            </h3>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Name</label>
+                  <p className="text-sm font-medium text-gray-900 mt-1">
+                    {participant.participant?.name || 
+                     participant.metadata?.participant_name || 
+                     (participant.guest_identifier ? 'Anonymous User' : 'Anonymous User')}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Email</label>
+                  <p className="text-sm font-medium text-gray-900 mt-1 break-all">
+                    {participant.participant?.email || 
+                     participant.metadata?.participant_email ||
+                     (participant.guest_identifier ? String(participant.guest_identifier).substring(0, 20) : 'No email')}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Registration Date</label>
+                  <p className="text-sm font-medium text-gray-900 mt-1">
+                    {participant.participant?.created_at
+                      ? new Date(participant.participant.created_at).toLocaleString('en-US', { 
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : '-'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Participant Type</label>
+                  <p className="text-sm font-medium mt-1">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                      participant.guest_identifier || 
+                      participant.participant?.additional_data?.participant_type === 'anonymous' ||
+                      (participant.participant?.email && participant.participant.email.includes('@anonymous.local'))
+                        ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                        : 'bg-blue-100 text-blue-700 border border-blue-200'
+                    }`}>
+                      {participant.guest_identifier || 
+                       participant.participant?.additional_data?.participant_type === 'anonymous' ||
+                       (participant.participant?.email && participant.participant.email.includes('@anonymous.local'))
+                        ? '🕶️ Anonymous' 
+                        : '👥 Registered'}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Activity Status Section */}
+          <div className="mb-6">
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <ActivityIcon className="w-4 h-4" />
+              Activity Status
+            </h3>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Status</label>
+                  <p className="text-sm font-medium mt-1">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                      participant.status === 'submitted'
+                        ? 'bg-green-100 text-green-700 border border-green-200'
+                        : 'bg-amber-100 text-amber-700 border border-amber-200'
+                    }`}>
+                      {participant.status === 'submitted' ? (
+                        <>
+                          <CheckCircle className="w-3 h-3" />
+                          Completed
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-3 h-3" />
+                          In Progress
+                        </>
+                      )}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Completion</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all ${
+                          participant.status === 'submitted' 
+                            ? 'bg-gradient-to-r from-green-500 to-green-600' 
+                            : 'bg-gradient-to-r from-blue-500 to-blue-600'
+                        }`}
+                        style={{ 
+                          width: `${participant.status === 'submitted' 
+                            ? 100 
+                            : (participant.completion_percentage || 0)}%` 
+                        }}
+                      ></div>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {participant.status === 'submitted' 
+                        ? '100%' 
+                        : participant.completion_percentage 
+                          ? `${Math.round(participant.completion_percentage)}%` 
+                          : '0%'}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Submitted At</label>
+                  <p className="text-sm font-medium text-gray-900 mt-1">
+                    {participant.submitted_at
+                      ? new Date(participant.submitted_at).toLocaleString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : participant.status === 'submitted' && participant.updated_at
+                        ? new Date(participant.updated_at).toLocaleString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        : '-'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Custom Registration Fields Section */}
+          {registrationFields.length > 0 && (
+            <div>
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Custom Registration Fields
+              </h3>
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {registrationFields.map((field: any) => (
+                    <div key={field.name}>
+                      <label className="text-xs font-semibold text-gray-500 uppercase">{field.label || field.name}</label>
+                      <p className="text-sm font-medium text-gray-900 mt-1 break-words">
+                        {participant.participant?.additional_data?.[field.name] || '-'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {registrationFields.length === 0 && (
+            <div className="text-center py-8">
+              <p className="text-sm text-gray-500">No custom registration fields for this event</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="bg-gray-50 px-6 py-4 flex justify-end border-t border-gray-200">
+          <button
+            onClick={onClose}
+            className="px-6 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Helper function to format answer values for display
 // Handles JSON objects from dial_gauge and slider_scale (e.g., {"value_type":"range","raw_value":2,"display_value":"40-60%"})
@@ -165,6 +387,10 @@ export default function ActivityResultsPage() {
   const [deletingResponses, setDeletingResponses] = useState<Set<string>>(new Set());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [responseToDelete, setResponseToDelete] = useState<{ id: string; name: string } | null>(null);
+  
+  // Modal state for participant details
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedParticipant, setSelectedParticipant] = useState<any>(null);
 
   useEffect(() => {
     loadData();
@@ -1104,16 +1330,6 @@ export default function ActivityResultsPage() {
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                           Participant
                         </th>
-                        {/* Dynamic custom registration fields */}
-                        {activity?.registration_form_fields && Array.isArray(activity.registration_form_fields) && 
-                          activity.registration_form_fields
-                            .filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
-                            .map((field: any) => (
-                              <th key={field.name} className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                                {field.label || field.name}
-                              </th>
-                            ))
-                        }
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                           Registration Date
                         </th>
@@ -1161,16 +1377,6 @@ export default function ActivityResultsPage() {
                               </div>
                             </div>
                           </td>
-                          {/* Dynamic custom registration fields */}
-                          {activity?.registration_form_fields && Array.isArray(activity.registration_form_fields) && 
-                            activity.registration_form_fields
-                              .filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
-                              .map((field: any) => (
-                                <td key={field.name} className="px-6 py-4 text-sm text-gray-600">
-                                  {response.participant?.additional_data?.[field.name] || '-'}
-                                </td>
-                              ))
-                          }
                           <td className="px-6 py-4 text-sm text-gray-600">
                             {response.participant?.created_at
                               ? new Date(response.participant.created_at).toLocaleDateString('en-US', { 
@@ -1279,23 +1485,28 @@ export default function ActivityResultsPage() {
                                 </span>
                               )}
                               <button
+                                onClick={() => {
+                                  setSelectedParticipant(response);
+                                  setDetailsModalOpen(true);
+                                }}
+                                title="View Details"
+                                className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
                                 onClick={() => deleteResponse(
                                   response.id,
                                   response.participant?.name || response.participant?.email || 'Anonymous User'
                                 )}
                                 disabled={isDeleting}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                title="Delete Response"
+                                className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                               >
                                 {isDeleting ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    Deleting...
-                                  </>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
                                 ) : (
-                                  <>
-                                    <X className="w-3 h-3" />
-                                    Delete
-                                  </>
+                                  <Trash2 className="w-4 h-4" />
                                 )}
                               </button>
                             </div>
@@ -1962,6 +2173,21 @@ export default function ActivityResultsPage() {
         title="Delete Orphaned Response?"
         itemName={responseToDelete?.name}
         itemType="response with old question IDs"
+      />
+
+      {/* Participant Details Modal */}
+      <ParticipantDetailsModal
+        isOpen={detailsModalOpen}
+        onClose={() => {
+          setDetailsModalOpen(false);
+          setSelectedParticipant(null);
+        }}
+        participant={selectedParticipant}
+        registrationFields={
+          activity?.registration_form_fields
+            ? activity.registration_form_fields.filter((field: any) => !field.isMandatory && field.name !== 'name' && field.name !== 'email')
+            : []
+        }
       />
     </RoleBasedLayout>
   );
