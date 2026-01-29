@@ -129,15 +129,6 @@ export default function ActivitiesPage() {
       
       // Load activities
       const data = await activitiesApi.getAll(programId ? { program_id: programId } : {});
-      console.log('[ACTIVITIES] Raw API response:', data);
-      console.log('[ACTIVITIES] First activity counts:', data[0] ? {
-        id: data[0].id,
-        name: data[0].name,
-        responses_count: data[0].responses_count,
-        authenticated_responses_count: data[0].authenticated_responses_count,
-        guest_responses_count: data[0].guest_responses_count,
-        participants_count: data[0].participants_count
-      } : 'No activities');
       
       // Load pending approval requests for program roles OR super-admin/admin
       if (isProgramRole || isSuperAdminOrAdmin) {
@@ -145,7 +136,6 @@ export default function ActivitiesPage() {
           const approvalsResponse = await activityApprovalsApi.getAll({ status: 'pending' });
           const approvals = approvalsResponse?.data || approvalsResponse || [];
           setPendingApprovals(Array.isArray(approvals) ? approvals : []);
-          console.log('[ACTIVITIES] Pending approvals:', approvals);
         } catch (err) {
           console.error('Failed to load pending approvals:', err);
           setPendingApprovals([]);
@@ -316,26 +306,14 @@ export default function ActivitiesPage() {
 
   const toggleParticipantReminders = async (activityId: string, currentValue: boolean) => {
     try {
-      console.log('[TOGGLE] START - activityId:', activityId, 'currentValue:', currentValue);
-      
       // Optimistically update the local state immediately
       setActivities(prevActivities => {
-        console.log('[TOGGLE] Before map - activities count:', prevActivities.length);
-        const updated = prevActivities.map(activity => {
-          const isMatch = activity.id.toString() === activityId;
-          if (isMatch) {
-            console.log('[TOGGLE] FOUND MATCH!');
-            console.log('[TOGGLE] - activity.id:', activity.id);
-            console.log('[TOGGLE] - current allow_participant_reminders:', activity.allow_participant_reminders);
-            console.log('[TOGGLE] - will change to:', !currentValue);
+        return prevActivities.map(activity => {
+          if (activity.id.toString() === activityId) {
             return { ...activity, allow_participant_reminders: !currentValue };
           }
           return activity;
         });
-        console.log('[TOGGLE] After map - checking updated activity...');
-        const updatedActivity = updated.find(a => a.id.toString() === activityId);
-        console.log('[TOGGLE] Updated activity allow_participant_reminders:', updatedActivity?.allow_participant_reminders);
-        return updated;
       });
 
       // Update on server
@@ -343,8 +321,6 @@ export default function ActivitiesPage() {
         method: 'PATCH',
         body: JSON.stringify({ allow_participant_reminders: !currentValue })
       });
-
-      console.log('[TOGGLE] Server update successful');
 
       toast({ 
         title: "Success!", 
@@ -398,6 +374,7 @@ export default function ActivitiesPage() {
       languages: a.languages && a.languages.length > 0 ? a.languages : ["EN"],
       allowGuests: a.allow_guests || false,
       allow_participant_reminders: a.allow_participant_reminders || false,
+      enable_generated_links: a.enable_generated_links || false,
       isApprovalRequest: false,
       approvalId: null as string | null,
     };
@@ -425,6 +402,7 @@ export default function ActivitiesPage() {
     languages: pa.languages && pa.languages.length > 0 ? pa.languages : ["EN"],
     allowGuests: pa.allow_guests || false,
     allow_participant_reminders: false,
+    enable_generated_links: false,
     isApprovalRequest: true,
     approvalId: pa.id,
   })), [pendingApprovals]);
@@ -1083,6 +1061,31 @@ export default function ActivitiesPage() {
                                         </div>
                                       </div>
                                     )}
+                                    {/* Generated Links Section */}
+                                    {activity.enable_generated_links === true && (
+                                      <div className="border border-purple-200 rounded-lg p-3 hover:border-purple-400 hover:bg-purple-50/50 transition-all">
+                                        <div className="flex items-start gap-3">
+                                          <div className="p-2 bg-purple-100 rounded-lg">
+                                            <ExternalLink className="w-5 h-5 text-purple-600" />
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-semibold text-gray-900">Generated Links</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">Manage unique, trackable links for participants</p>
+                                            <div className="mt-2">
+                                              <button
+                                                onClick={() => {
+                                                  setLinksDropdown({ activityId: null, links: null, loading: false });
+                                                  router.push(`/activities/${activity.id}/generated-links`);
+                                                }}
+                                                className="px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 bg-purple-600 text-white hover:bg-purple-700"
+                                              >
+                                                <ExternalLink className="w-3.5 h-3.5" /> Manage Generated Links
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 ) : (
                                   <div className="p-8 text-center">
@@ -1094,22 +1097,29 @@ export default function ActivitiesPage() {
                               </div>
                             )}
                           </div>
-                          {/* Generated Links Button */}
-                          {activity.enable_generated_links && (
-                            <button
-                              onClick={() => router.push(`/activities/${activity.id}/generated-links`)}
-                              className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                              title="Manage Generated Links"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </button>
-                          )}
+                          {/* Generated Links Button - Always visible: grey=disabled, purple=enabled */}
+                          <button
+                            onClick={() => {
+                              const isEnabled = activity.enable_generated_links === true || activity.enable_generated_links === 'true' || activity.enable_generated_links === 1;
+                              if (isEnabled) {
+                                router.push(`/activities/${activity.id}/generated-links`);
+                              }
+                            }}
+                            className={`p-1.5 rounded transition-colors ${
+                              (activity.enable_generated_links === true || activity.enable_generated_links === 'true' || activity.enable_generated_links === 1)
+                                ? 'text-purple-600 hover:bg-purple-50 cursor-pointer'
+                                : 'text-gray-300 cursor-not-allowed'
+                            }`}
+                            title={(activity.enable_generated_links === true || activity.enable_generated_links === 'true' || activity.enable_generated_links === 1) ? 'Manage Generated Links' : 'Generated Links (Not Enabled)'}
+                            data-egl={String(activity.enable_generated_links)}
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
                           {currentUser?.role !== 'program-moderator' && (
                             <>
                               <button
                                 onClick={(e) => { 
                                   e.stopPropagation();
-                                  console.log('[BTN CLICK] activity.id:', activity.id, 'allow_participant_reminders:', activity.allow_participant_reminders);
                                   toggleParticipantReminders(activity.id.toString(), activity.allow_participant_reminders || false); 
                                 }}
                                 className={`p-1.5 rounded transition-colors ${
@@ -1119,11 +1129,7 @@ export default function ActivitiesPage() {
                                 }`}
                                 title={activity.allow_participant_reminders ? 'Participant Reminders Enabled' : 'Participant Reminders Disabled'}
                               >
-                                {(() => {
-                                  const icon = activity.allow_participant_reminders ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />;
-                                  console.log('[BTN RENDER] activity.id:', activity.id, 'allow_participant_reminders:', activity.allow_participant_reminders, 'showing:', activity.allow_participant_reminders ? 'BellRing' : 'Bell');
-                                  return icon;
-                                })()}
+                                {activity.allow_participant_reminders ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
                               </button>
                               <button
                                 onClick={() => handleSendNotification(activity.id.toString())}

@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\Activity;
 use App\Models\Question;
-use Illuminate\Support\Facades\Mail;
+use App\Services\EmailService;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -13,10 +13,12 @@ use Illuminate\Support\Facades\Log;
 class EmailEmbeddedSurveyService
 {
     private EmailResponseTokenService $tokenService;
+    private EmailService $emailService;
 
     public function __construct(EmailResponseTokenService $tokenService)
     {
         $this->tokenService = $tokenService;
+        $this->emailService = new EmailService();
     }
 
     /**
@@ -78,7 +80,8 @@ class EmailEmbeddedSurveyService
                 // Replace placeholders in header text
                 $personalizedHeader = $headerText ? str_replace('{{name}}', $participantName, $headerText) : null;
 
-                Mail::send('emails.embedded-question', [
+                // Render the blade template to HTML
+                $htmlContent = view('emails.embedded-question', [
                     'activity' => $activity,
                     'question' => $question,
                     'options' => $recipientOptions,
@@ -87,14 +90,19 @@ class EmailEmbeddedSurveyService
                     'headerText' => $personalizedHeader,
                     'footerText' => $footerText,
                     'participantName' => $participantName,
-                ], function ($message) use ($email, $activity, $subject, $fromName) {
-                    $message->to($email)
-                        ->subject($subject)
-                        ->from(
-                            $activity->sender_email ?? config('mail.from.address'),
-                            $fromName
-                        );
-                });
+                ])->render();
+
+                // Send using EmailService (uses database SendGrid credentials)
+                $this->emailService->send(
+                    $email,
+                    $subject,
+                    $htmlContent,
+                    [
+                        'activity_id' => $activity->id,
+                        'question_id' => $question->id,
+                        'event' => 'embedded_survey_sent',
+                    ]
+                );
 
                 $sent++;
             } catch (\Exception $e) {

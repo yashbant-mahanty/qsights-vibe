@@ -113,6 +113,13 @@ class EmailService
         }
 
         try {
+            \Log::debug('EmailService: Preparing to send email', [
+                'to' => $to,
+                'subject' => $subject,
+                'from_email' => $this->fromEmail,
+                'from_name' => $this->fromName,
+            ]);
+            
             $email = new Mail();
             $email->setFrom($this->fromEmail, $this->fromName);
             $email->setSubject($subject);
@@ -138,7 +145,11 @@ class EmailService
                 $email->addCustomArg('notification_log_id', $notificationLog->id);
             }
 
+            \Log::debug('EmailService: Calling SendGrid API...');
             $response = $this->sendgrid->send($email);
+            \Log::debug('EmailService: SendGrid API call completed', [
+                'status_code' => $response->statusCode(),
+            ]);
 
             // Extract SendGrid Message ID from response headers
             $sendgridMessageId = null;

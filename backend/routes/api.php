@@ -311,6 +311,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         
         Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
             Route::post('/', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'generate']);
+            Route::post('/email', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'emailLinks']);
             Route::post('/groups', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'createGroup']);
             Route::patch('/{linkId}', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'updateStatus']);
             Route::delete('/{linkId}', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'destroy']);

@@ -182,13 +182,18 @@ class ActivityController extends Controller
         $activities = $query->paginate($request->input('per_page', 15));
 
         // Add computed status to each activity
-        $activities->getCollection()->transform(function ($activity) {
+        $transformedCollection = $activities->getCollection()->map(function ($activity) {
             $activity->computed_status = $activity->getComputedStatus();
             // Add participants count from program
             // participants_count already calculated by withCount as authenticated + guest
             
             // Add program name for display
             $activity->program_name = $activity->program ? $activity->program->name : null;
+            
+            // FORCE these fields to be included in JSON response by explicitly setting them
+            // (makeVisible doesn't work for fields not in $hidden)
+            $activity->enable_generated_links = (bool) $activity->enable_generated_links;
+            $activity->allow_participant_reminders = (bool) $activity->allow_participant_reminders;
             
             // Make additional details fields visible
             $activity->makeVisible([
@@ -204,10 +209,13 @@ class ActivityController extends Controller
                 'number_of_participants',
                 'questions_to_randomize',
                 'enable_generated_links',
+                'allow_participant_reminders',
             ]);
             
             return $activity;
         });
+        
+        $activities->setCollection($transformedCollection);
 
         return response()->json($activities);
     }
@@ -330,6 +338,10 @@ class ActivityController extends Controller
 
         $activity->computed_status = $activity->getComputedStatus();
         
+        // FORCE these fields to be included in JSON response
+        $activity->enable_generated_links = (bool) $activity->enable_generated_links;
+        $activity->allow_participant_reminders = (bool) $activity->allow_participant_reminders;
+        
         // Ensure all additional fields are included in the response
         $activity->makeVisible([
             'sender_email',
@@ -344,6 +356,7 @@ class ActivityController extends Controller
             'number_of_participants',
             'questions_to_randomize',
             'enable_generated_links',
+            'allow_participant_reminders',
         ]);
 
         return response()->json(['data' => $activity]);
