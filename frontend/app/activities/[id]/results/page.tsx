@@ -829,7 +829,7 @@ export default function ActivityResultsPage() {
         },
       });
 
-      // Add question-wise analysis if questionnaire exists
+      // Add question-wise analysis with charts if questionnaire exists
       if (questionnaire?.sections && questionnaire.sections.length > 0) {
         let currentY = (doc as any).lastAutoTable.finalY + 15;
 
@@ -853,21 +853,26 @@ export default function ActivityResultsPage() {
             doc.text(`Q${sectionIndex + 1}.${qIndex + 1}: ${cleanTitle}`, 14, currentY);
             currentY += 7;
 
-            // Get responses for this question
-            const questionResponses = responses
+            // Get responses with participant details for this question
+            const questionResponsesWithDetails = responses
               .map(r => {
-                // answers is an array of {question_id, value, value_array}
                 if (Array.isArray(r.answers)) {
                   const answerObj = r.answers.find((a: any) => a.question_id === question.id);
                   if (answerObj) {
-                    return answerObj.value_array || answerObj.value;
+                    return {
+                      value: answerObj.value_array || answerObj.value,
+                      participant: r.participant?.name || r.participant?.email || 'Anonymous',
+                      submittedAt: r.submitted_at
+                    };
                   }
                 }
                 return null;
               })
-              .filter(a => a !== undefined && a !== null && a !== '');
+              .filter(a => a !== null && a.value !== undefined && a.value !== null && a.value !== '');
 
-            // Calculate statistics for choice questions
+            const questionResponses = questionResponsesWithDetails.map(r => r!.value);
+
+            // Calculate statistics for choice questions (MCQ, Radio, Checkboxes)
             if (['single_choice', 'multiple_choice', 'radio', 'checkbox'].includes(question.type)) {
               const stats: Record<string, number> = {};
               questionResponses.forEach((answer: any) => {
@@ -884,7 +889,51 @@ export default function ActivityResultsPage() {
                 `${((count / questionResponses.length) * 100).toFixed(1)}%`,
               ]);
 
-              // Add stats table - Call autoTable as a function
+              // Draw a simple bar chart
+              const chartX = 20;
+              const chartY = currentY;
+              const chartWidth = 120;
+              const chartHeight = 60;
+              const maxCount = Math.max(...Object.values(stats));
+
+              // Chart title
+              doc.setFontSize(9);
+              doc.setTextColor(100, 100, 100);
+              doc.text(`Response Distribution (${questionResponses.length} total)`, chartX, chartY);
+              
+              // Draw bars
+              const barSpacing = 4;
+              const barWidth = Math.min(15, (chartWidth - (statsData.length - 1) * barSpacing) / statsData.length);
+              let barX = chartX;
+
+              statsData.forEach(([option, count], index) => {
+                const barHeight = (Number(count) / maxCount) * chartHeight;
+                const barY = chartY + 10 + chartHeight - barHeight;
+
+                // Bar
+                doc.setFillColor(59, 130, 246); // Blue
+                doc.rect(barX, barY, barWidth, barHeight, 'F');
+
+                // Count label on top of bar
+                doc.setFontSize(8);
+                doc.setTextColor(40, 40, 40);
+                doc.text(String(count), barX + barWidth / 2, barY - 2, { align: 'center' });
+
+                // Option label (truncated)
+                doc.setFontSize(7);
+                doc.setTextColor(100, 100, 100);
+                const optionLabel = String(option).length > 10 ? String(option).substring(0, 10) + '...' : String(option);
+                doc.text(optionLabel, barX + barWidth / 2, chartY + 12 + chartHeight + 3, { 
+                  align: 'center',
+                  maxWidth: barWidth + 5
+                });
+
+                barX += barWidth + barSpacing;
+              });
+
+              currentY = chartY + 12 + chartHeight + 10;
+
+              // Add stats table below chart
               autoTable(doc, {
                 head: [['Option', 'Count', 'Percentage']],
                 body: statsData,
@@ -899,15 +948,159 @@ export default function ActivityResultsPage() {
                   fontSize: 9,
                   cellPadding: 2,
                 },
-                margin: { left: 20 },
+                margin: { left: 20, right: 20 },
               });
 
-              currentY = (doc as any).lastAutoTable.finalY + 8;
+              currentY = (doc as any).lastAutoTable.finalY + 10;
+            } 
+            // Rating questions (Star Rating, Likert Scale)
+            else if (['star_rating', 'likert_scale', 'likert_visual'].includes(question.type)) {
+              const ratings: Record<string, number> = {};
+              questionResponses.forEach((answer: any) => {
+                const rating = String(answer);
+                ratings[rating] = (ratings[rating] || 0) + 1;
+              });
+
+              // Calculate average
+              const total = questionResponses.reduce((sum: number, r: any) => sum + Number(r), 0);
+              const average = questionResponses.length > 0 ? (total / questionResponses.length).toFixed(2) : 0;
+
+              doc.setFontSize(9);
+              doc.setTextColor(40, 40, 40);
+              doc.text(`Average Rating: ${average} (${questionResponses.length} responses)`, 20, currentY);
+              currentY += 6;
+
+              // Draw rating distribution chart
+              const chartX = 20;
+              const chartY = currentY;
+              const maxRating = Math.max(...Object.keys(ratings).map(Number));
+              const barWidth = 15;
+              const barSpacing = 3;
+              const chartHeight = 40;
+              const maxCount = Math.max(...Object.values(ratings));
+
+              for (let i = 1; i <= maxRating; i++) {
+                const count = ratings[String(i)] || 0;
+                const barHeight = maxCount > 0 ? (count / maxCount) * chartHeight : 0;
+                const barX = chartX + (i - 1) * (barWidth + barSpacing);
+                const barY = chartY + chartHeight - barHeight;
+
+                // Bar
+                doc.setFillColor(245, 158, 11); // Amber
+                doc.rect(barX, barY, barWidth, barHeight, 'F');
+
+                // Count on top
+                if (count > 0) {
+                  doc.setFontSize(8);
+                  doc.setTextColor(40, 40, 40);
+                  doc.text(String(count), barX + barWidth / 2, barY - 2, { align: 'center' });
+                }
+
+                // Rating label
+                doc.setFontSize(7);
+                doc.setTextColor(100, 100, 100);
+                doc.text(String(i), barX + barWidth / 2, chartY + chartHeight + 4, { align: 'center' });
+              }
+
+              currentY = chartY + chartHeight + 10;
+            }
+            // Slider/Gauge questions
+            else if (['slider_scale', 'dial_gauge'].includes(question.type)) {
+              const valueDistribution: Record<string, number> = {};
+              
+              questionResponses.forEach((answer: any) => {
+                let displayValue = String(answer);
+                try {
+                  const parsed = typeof answer === 'string' ? JSON.parse(answer) : answer;
+                  displayValue = parsed.display_value || parsed.raw_value || String(answer);
+                } catch (e) {
+                  displayValue = String(answer);
+                }
+                valueDistribution[displayValue] = (valueDistribution[displayValue] || 0) + 1;
+              });
+
+              const distribData = Object.entries(valueDistribution).map(([value, count]) => [
+                value,
+                count,
+                `${((count / questionResponses.length) * 100).toFixed(1)}%`,
+              ]);
+
+              doc.setFontSize(9);
+              doc.setTextColor(40, 40, 40);
+              doc.text(`Value Distribution (${questionResponses.length} responses)`, 20, currentY);
+              currentY += 6;
+
+              autoTable(doc, {
+                head: [['Value', 'Count', 'Percentage']],
+                body: distribData,
+                startY: currentY,
+                theme: 'striped',
+                headStyles: {
+                  fillColor: [229, 231, 235],
+                  textColor: [40, 40, 40],
+                  fontStyle: 'bold',
+                },
+                styles: {
+                  fontSize: 9,
+                  cellPadding: 2,
+                },
+                margin: { left: 20, right: 20 },
+              });
+
+              currentY = (doc as any).lastAutoTable.finalY + 10;
+            }
+            // Text responses (Short Answer, Long Answer, Email, etc.)
+            else if (['short_answer', 'long_answer', 'email', 'number', 'text'].includes(question.type)) {
+              doc.setFontSize(9);
+              doc.setTextColor(40, 40, 40);
+              doc.text(`${questionResponses.length} text ${questionResponses.length === 1 ? 'response' : 'responses'}`, 20, currentY);
+              currentY += 6;
+
+              // Show sample responses (first 5)
+              const sampleResponses = questionResponsesWithDetails.slice(0, 5);
+              if (sampleResponses.length > 0) {
+                const responseData = sampleResponses.map((r, idx) => [
+                  r!.participant,
+                  String(r!.value).substring(0, 80) + (String(r!.value).length > 80 ? '...' : ''),
+                ]);
+
+                autoTable(doc, {
+                  head: [['Participant', 'Response']],
+                  body: responseData,
+                  startY: currentY,
+                  theme: 'striped',
+                  headStyles: {
+                    fillColor: [229, 231, 235],
+                    textColor: [40, 40, 40],
+                    fontStyle: 'bold',
+                  },
+                  styles: {
+                    fontSize: 8,
+                    cellPadding: 2,
+                  },
+                  margin: { left: 20, right: 20 },
+                  columnStyles: {
+                    0: { cellWidth: 50 },
+                    1: { cellWidth: 180 },
+                  },
+                });
+
+                currentY = (doc as any).lastAutoTable.finalY + 5;
+
+                if (questionResponses.length > 5) {
+                  doc.setFontSize(8);
+                  doc.setTextColor(100, 100, 100);
+                  doc.text(`... and ${questionResponses.length - 5} more responses`, 20, currentY);
+                  currentY += 5;
+                }
+              }
+
+              currentY += 5;
             } else {
-              // Text responses
+              // Other question types
               doc.setFontSize(9);
               doc.setTextColor(100, 100, 100);
-              doc.text(`${questionResponses.length} text ${questionResponses.length === 1 ? 'response' : 'responses'}`, 20, currentY);
+              doc.text(`${questionResponses.length} ${questionResponses.length === 1 ? 'response' : 'responses'}`, 20, currentY);
               currentY += 8;
             }
           });
