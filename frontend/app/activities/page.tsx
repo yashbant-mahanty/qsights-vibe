@@ -1094,6 +1094,16 @@ export default function ActivitiesPage() {
                               </div>
                             )}
                           </div>
+                          {/* Generated Links Button */}
+                          {activity.enable_generated_links && (
+                            <button
+                              onClick={() => router.push(`/activities/${activity.id}/generated-links`)}
+                              className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                              title="Manage Generated Links"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </button>
+                          )}
                           {currentUser?.role !== 'program-moderator' && (
                             <>
                               <button

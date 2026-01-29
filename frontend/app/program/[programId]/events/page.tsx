@@ -277,13 +277,13 @@ export default function ActivitiesPage({ params }: { params: { programId: string
     }
   };
 
-  // Export to PDF
+  // Export to PDF (Updated: 2026-01-29)
   const exportToPDF = async () => {
     try {
       // Dynamically import jspdf and jspdf-autotable (client-side only)
       const jsPDF = (await import('jspdf')).default;
-      // Import autotable plugin - explicitly import default to register autoTable method
-      const autoTable = (await import('jspdf-autotable')).default;
+      // Import autotable plugin - this import extends jsPDF prototype
+      await import('jspdf-autotable');
       
       const doc = new jsPDF();
 

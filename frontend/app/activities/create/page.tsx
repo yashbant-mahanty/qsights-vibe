@@ -24,6 +24,7 @@ import {
   UserPlus,
   Languages,
   MessageCircle,
+  ExternalLink,
 } from "lucide-react";
 import {
   questionnairesApi,
@@ -83,6 +84,7 @@ export default function CreateActivityPage() {
     questionsToRandomize: string;
     allowGuests: boolean;
     contactUsEnabled: boolean;
+    enableGeneratedLinks: boolean;
     isMultilingual: boolean;
     selectedLanguages: string[];
     enablePerQuestionLanguageSwitch: boolean;
@@ -112,6 +114,7 @@ export default function CreateActivityPage() {
     questionsToRandomize: "",
     allowGuests: false,
     contactUsEnabled: false,
+    enableGeneratedLinks: false,
     isMultilingual: false,
     selectedLanguages: ["EN"],
     enablePerQuestionLanguageSwitch: false,
@@ -468,6 +471,7 @@ export default function CreateActivityPage() {
           program_id: activityData.programId,
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
+          enable_generated_links: activityData.enableGeneratedLinks,
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
@@ -608,6 +612,7 @@ export default function CreateActivityPage() {
         questionnaire_id: selectedQuestionnaires[0] || undefined,
         allow_guests: activityData.allowGuests,
         contact_us_enabled: activityData.contactUsEnabled,
+        enable_generated_links: activityData.enableGeneratedLinks,
         is_multilingual: activityData.isMultilingual,
         languages: activityData.selectedLanguages,
         registration_form_fields: normalizedRegistrationFields,
@@ -1596,6 +1601,45 @@ export default function CreateActivityPage() {
                       <p className="text-xs text-blue-800">
                         <CheckCircle className="w-3 h-3 inline mr-1" />
                         A Contact Us icon will be shown during the event
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Generated Links */}
+                <div className="space-y-3 pt-4 border-t border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-2">
+                      <ExternalLink className="w-4 h-4 text-gray-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          Enable Generated Links
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Create unique one-time-use links with tracking
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={activityData.enableGeneratedLinks || false}
+                        onChange={(e) =>
+                          setActivityData((prev) => ({
+                            ...prev,
+                            enableGeneratedLinks: e.target.checked,
+                          }))
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
+                    </label>
+                  </div>
+                  {activityData.enableGeneratedLinks && (
+                    <div className="ml-6 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <p className="text-xs text-purple-800">
+                        <CheckCircle className="w-3 h-3 inline mr-1" />
+                        You can manage generated links after creating the activity
                       </p>
                     </div>
                   )}
