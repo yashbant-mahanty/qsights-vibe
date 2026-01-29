@@ -115,6 +115,8 @@ class Activity extends Model
         'pass_percentage' => 'decimal:2',
         'max_retakes' => 'integer',
         'contact_us_enabled' => 'boolean',
+        'allow_participant_reminders' => 'boolean',
+        'enable_generated_links' => 'boolean',
         // Additional fields
         'configuration_date' => 'date',
         'configuration_price' => 'decimal:2',
