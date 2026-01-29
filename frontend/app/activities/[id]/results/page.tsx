@@ -715,16 +715,14 @@ export default function ActivityResultsPage() {
     }
   }
 
-  // Export to PDF (Updated: 2026-01-29 - Fixed autoTable import v2)
+  // Export to PDF (Fixed: 2026-01-29 v3 - Call autoTable as function)
   async function exportToPDF() {
     try {
-      // Import jsPDF first
+      // Import jsPDF and autoTable function
       const jsPDFModule = await import('jspdf');
       const jsPDF = jsPDFModule.default;
-      
-      // Import jspdf-autotable which extends jsPDF.prototype as side effect
-      // This must happen BEFORE creating the instance
-      await import('jspdf-autotable');
+      const autoTableModule = await import('jspdf-autotable');
+      const autoTable = autoTableModule.default;
       
       // Validate that we have data to export
       if (!responses || responses.length === 0) {
@@ -807,9 +805,8 @@ export default function ActivityResultsPage() {
       // Build dynamic table headers
       const tableHeaders = ['#', 'Participant', 'Email', ...customFieldHeaders, 'Registration Date', 'Status', 'Submitted'];
 
-      // Add responses table
-      // @ts-ignore - autoTable extends jsPDF prototype
-      doc.autoTable({
+      // Add responses table - Call autoTable as a function
+      autoTable(doc, {
         head: [tableHeaders],
         body: tableData,
         startY: 32,
@@ -886,8 +883,8 @@ export default function ActivityResultsPage() {
                 `${((count / questionResponses.length) * 100).toFixed(1)}%`,
               ]);
 
-              // @ts-ignore - autoTable extends jsPDF prototype
-              doc.autoTable({
+              // Add stats table - Call autoTable as a function
+              autoTable(doc, {
                 head: [['Option', 'Count', 'Percentage']],
                 body: statsData,
                 startY: currentY,
