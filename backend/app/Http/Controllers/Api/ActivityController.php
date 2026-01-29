@@ -357,6 +357,14 @@ class ActivityController extends Controller
         $activity = Activity::findOrFail($id);
         $user = $request->user();
 
+        // Debug: Log incoming enable_generated_links value
+        \Log::info('Activity Update Debug', [
+            'activity_id' => $id,
+            'enable_generated_links_in_request' => $request->input('enable_generated_links'),
+            'enable_generated_links_type' => gettype($request->input('enable_generated_links')),
+            'has_field' => $request->has('enable_generated_links'),
+        ]);
+
         $validated = $request->validate([
             'program_id' => 'sometimes|required|uuid|exists:programs,id',
             'questionnaire_id' => 'nullable|integer|exists:questionnaires,id',
@@ -432,7 +440,18 @@ class ActivityController extends Controller
             }
         }
 
+        \Log::info('Before Update', [
+            'enable_generated_links_in_validated' => $validated['enable_generated_links'] ?? 'NOT_PRESENT',
+            'activity_enable_generated_links_before' => $activity->enable_generated_links,
+        ]);
+
         $activity->update($validated);
+        
+        \Log::info('After Update', [
+            'activity_enable_generated_links_after' => $activity->enable_generated_links,
+            'activity_fresh_from_db' => $activity->fresh()->enable_generated_links,
+        ]);
+
         $activity->load(['program', 'questionnaire']);
         $activity->computed_status = $activity->getComputedStatus();
         
