@@ -19,11 +19,11 @@ return new class extends Migration
             $table->string('token', 255)->unique(); // Secure token for URL
             $table->enum('link_type', ['registration', 'anonymous'])->default('registration');
             $table->enum('status', ['unused', 'used', 'expired', 'disabled'])->default('unused');
-            $table->uuid('created_by');
+            $table->unsignedBigInteger('created_by'); // Foreign key to users.id (bigint)
             $table->timestamp('created_at')->useCurrent();
             $table->timestamp('used_at')->nullable();
-            $table->uuid('used_by_participant_id')->nullable();
-            $table->uuid('response_id')->nullable();
+            $table->unsignedBigInteger('used_by_participant_id')->nullable(); // Foreign key to participants.id (bigint)
+            $table->uuid('response_id')->nullable(); // Foreign key to responses.id (UUID)
             $table->timestamp('expires_at')->nullable();
             $table->json('metadata')->nullable();
 
