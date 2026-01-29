@@ -86,6 +86,7 @@ export default function EditActivityPage() {
     questionsToRandomize: string;
     allowGuests: boolean;
     contactUsEnabled: boolean;
+    enableGeneratedLinks: boolean;
     isMultilingual: boolean;
     selectedLanguages: string[];
     enablePerQuestionLanguageSwitch: boolean;
@@ -115,6 +116,7 @@ export default function EditActivityPage() {
     questionsToRandomize: "",
     allowGuests: false,
     contactUsEnabled: false,
+    enableGeneratedLinks: false,
     isMultilingual: false,
     selectedLanguages: ["EN"],
     enablePerQuestionLanguageSwitch: false,
@@ -370,6 +372,7 @@ export default function EditActivityPage() {
         questionsToRandomize: activity.questions_to_randomize || "",
         allowGuests: activity.allow_guests || false,
         contactUsEnabled: activity.contact_us_enabled || false,
+        enableGeneratedLinks: activity.enable_generated_links || false,
         isMultilingual: activity.is_multilingual || false,
         selectedLanguages: activity.languages || ["EN"],
         enablePerQuestionLanguageSwitch: activity.settings?.enable_per_question_language_switch || false,
@@ -576,6 +579,7 @@ export default function EditActivityPage() {
           questionnaire_id: selectedQuestionnaires[0],
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
+          enable_generated_links: activityData.enableGeneratedLinks,
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
@@ -616,6 +620,7 @@ export default function EditActivityPage() {
           end_date: activityData.endDate ? `${activityData.endDate}T23:59:59` : undefined,
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
+          enable_generated_links: activityData.enableGeneratedLinks,
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
@@ -668,6 +673,7 @@ export default function EditActivityPage() {
           questionnaire_id: selectedQuestionnaires[0] || undefined,
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
+          enable_generated_links: activityData.enableGeneratedLinks,
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
@@ -699,6 +705,7 @@ export default function EditActivityPage() {
           questionnaire_id: selectedQuestionnaires[0] || undefined,
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
+          enable_generated_links: activityData.enableGeneratedLinks,
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,
@@ -778,6 +785,7 @@ export default function EditActivityPage() {
         questionnaire_id: selectedQuestionnaires[0] || undefined,
         allow_guests: activityData.allowGuests,
         contact_us_enabled: activityData.contactUsEnabled,
+        enable_generated_links: activityData.enableGeneratedLinks,
         is_multilingual: activityData.isMultilingual,
         languages: activityData.selectedLanguages,
         registration_form_fields: normalizedRegistrationFields,

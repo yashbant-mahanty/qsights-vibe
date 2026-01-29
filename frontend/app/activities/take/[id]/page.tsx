@@ -28,6 +28,7 @@ import { toast } from "@/components/ui/toast";
 import { filterQuestionsByLogic } from "@/utils/conditionalLogicEvaluator";
 import EventContactModal from "@/components/EventContactModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { generatedLinksApi } from "@/lib/api";
 import {
   SliderScale,
   DialGauge,
@@ -226,12 +227,56 @@ export default function TakeActivityPage() {
   const [tokenDecrypted, setTokenDecrypted] = useState(false);
   const [tokenLinkType, setTokenLinkType] = useState<string | null>(null);
   
+  // State for generated link token and tag
+  const [generatedLinkToken, setGeneratedLinkToken] = useState<string | null>(null);
+  const [generatedLinkTag, setGeneratedLinkTag] = useState<string | null>(null);
+  const [generatedLinkValidated, setGeneratedLinkValidated] = useState(false);
+  
   // Determine if this is an encrypted link token (from Copy Event Links)
   // Encrypted tokens are VERY long (>100 chars), access tokens are shorter (typically 64 chars)
   const isEncryptedLinkToken = urlToken && urlToken.length > 100;
   
-  // Validate encrypted link token on mount
+  // Validate encrypted link token AND generated link token on mount
   useEffect(() => {
+    // Check for generated link token (gltoken parameter)
+    const glToken = searchParams.get("gltoken");
+    if (glToken && !generatedLinkValidated) {
+      const validateGeneratedLink = async () => {
+        try {
+          console.log('[Generated Link] Validating token:', glToken.substring(0, 20) + '...');
+          const result = await generatedLinksApi.validateToken(glToken);
+          
+          if (result.valid && result.tag) {
+            setGeneratedLinkToken(glToken);
+            setGeneratedLinkTag(result.tag);
+            // Store tag in localStorage for post-submission flow
+            localStorage.setItem(`generated_link_tag_${activityId}`, result.tag);
+            console.log('[Generated Link] Token validated successfully, tag:', result.tag);
+          } else {
+            console.error('[Generated Link] Invalid token or missing tag');
+            toast({
+              title: "Invalid Link",
+              description: "This link is invalid, expired, or has already been used.",
+              variant: "error",
+            });
+          }
+        } catch (error) {
+          console.error('[Generated Link] Validation error:', error);
+          toast({
+            title: "Link Validation Failed",
+            description: "Unable to validate the generated link. Please contact support.",
+            variant: "error",
+          });
+        } finally {
+          setGeneratedLinkValidated(true);
+        }
+      };
+      validateGeneratedLink();
+    } else {
+      setGeneratedLinkValidated(true);
+    }
+    
+    // Validate encrypted link token (existing logic)
     if (isEncryptedLinkToken && !tokenDecrypted) {
       const validateLinkToken = async () => {
         try {
@@ -256,7 +301,7 @@ export default function TakeActivityPage() {
     } else {
       setTokenDecrypted(true);
     }
-  }, [isEncryptedLinkToken, urlToken, tokenDecrypted]);
+  }, [isEncryptedLinkToken, urlToken, tokenDecrypted, searchParams, activityId, generatedLinkValidated]);
   
   // Determine link type (encrypted token takes precedence over legacy params)
   const linkType = tokenLinkType || legacyType;
@@ -1471,6 +1516,9 @@ export default function TakeActivityPage() {
         time_expired_at = expirationTime.toISOString();
       }
 
+      // Get generated link tag from state or localStorage (for post-submission flow)
+      const linkTag = generatedLinkTag || localStorage.getItem(`generated_link_tag_${activityId}`);
+      
       const payload = {
         participant_id: currentParticipantId,
         answers: responses,
@@ -1478,6 +1526,7 @@ export default function TakeActivityPage() {
         time_expired_at,
         auto_submitted: autoSubmit,
         is_preview: isPreview, // Flag for preview mode
+        ...(linkTag && { generated_link_tag: linkTag }), // Include tag if generated link was used
       };
 
       console.log("Submitting payload:", payload);
@@ -1495,6 +1544,24 @@ export default function TakeActivityPage() {
       const data = await response.json();
       console.log("Response:", data);
 
+      // Mark generated link as used after successful submission
+      if (response.ok && generatedLinkToken && data.data?.response_id) {
+        try {
+          console.log('[Generated Link] Marking link as used, response_id:', data.data.response_id);
+          await generatedLinksApi.markAsUsed(
+            generatedLinkToken,
+            currentParticipantId,
+            data.data.response_id
+          );
+          console.log('[Generated Link] Link marked as used successfully');
+          // Clean up localStorage
+          localStorage.removeItem(`generated_link_tag_${activityId}`);
+        } catch (error) {
+          console.error('[Generated Link] Failed to mark link as used:', error);
+          // Don't fail the submission if this fails - it's a tracking issue
+        }
+      }
+      
       if (!response.ok) {
         // Check if it's a duplicate submission error or retakes exhausted (409 or 422)
         if (response.status === 409 || response.status === 422) {
