@@ -846,10 +846,11 @@ export default function ActivityResultsPage() {
               currentY = 15;
             }
 
-            // Question title
+            // Question title - strip HTML tags
+            const cleanTitle = (question.title || question.text || 'Question').replace(/<[^>]*>/g, '');
             doc.setFontSize(11);
             doc.setTextColor(59, 130, 246);
-            doc.text(`Q${sectionIndex + 1}.${qIndex + 1}: ${question.title || question.text || 'Question'}`, 14, currentY);
+            doc.text(`Q${sectionIndex + 1}.${qIndex + 1}: ${cleanTitle}`, 14, currentY);
             currentY += 7;
 
             // Get responses for this question
