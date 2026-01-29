@@ -203,6 +203,7 @@ class ActivityController extends Controller
                 'tax_percentage',
                 'number_of_participants',
                 'questions_to_randomize',
+                'enable_generated_links',
             ]);
             
             return $activity;
@@ -228,6 +229,7 @@ class ActivityController extends Controller
             'status' => 'nullable|in:draft,upcoming,live,expired,closed,archived',
             'allow_guests' => 'nullable|boolean',
             'contact_us_enabled' => 'nullable|boolean',
+            'enable_generated_links' => 'nullable|boolean',
             'is_multilingual' => 'nullable|boolean',
             'languages' => 'nullable|array',
             'languages.*' => 'string|max:10',
@@ -269,6 +271,7 @@ class ActivityController extends Controller
             'status' => $validated['status'] ?? 'draft',
             'allow_guests' => $validated['allow_guests'] ?? false,
             'contact_us_enabled' => $validated['contact_us_enabled'] ?? false,
+            'enable_generated_links' => $validated['enable_generated_links'] ?? false,
             'is_multilingual' => $validated['is_multilingual'] ?? false,
             'languages' => $validated['languages'] ?? null,
             'settings' => $validated['settings'] ?? [],
@@ -308,6 +311,7 @@ class ActivityController extends Controller
             'tax_percentage',
             'number_of_participants',
             'questions_to_randomize',
+            'enable_generated_links',
         ]);
 
         return response()->json([
@@ -339,6 +343,7 @@ class ActivityController extends Controller
             'tax_percentage',
             'number_of_participants',
             'questions_to_randomize',
+            'enable_generated_links',
         ]);
 
         return response()->json(['data' => $activity]);
@@ -364,6 +369,7 @@ class ActivityController extends Controller
             'status' => 'sometimes|in:draft,upcoming,live,expired,closed,archived',
             'allow_guests' => 'nullable|boolean',
             'contact_us_enabled' => 'nullable|boolean',
+            'enable_generated_links' => 'nullable|boolean',
             'is_multilingual' => 'nullable|boolean',
             'languages' => 'nullable|array',
             'languages.*' => 'string|max:10',
@@ -443,6 +449,7 @@ class ActivityController extends Controller
             'tax_percentage',
             'number_of_participants',
             'questions_to_randomize',
+            'enable_generated_links',
         ]);
 
         return response()->json([
