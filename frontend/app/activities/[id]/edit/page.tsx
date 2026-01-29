@@ -1793,6 +1793,45 @@ export default function EditActivityPage() {
                   )}
                 </div>
 
+                {/* Enable Generated Links */}
+                <div className="space-y-3 pt-4 border-t border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-2">
+                      <Globe className="w-4 h-4 text-gray-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          Enable Generated Links
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Create unique one-time-use links with tracking
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={activityData.enableGeneratedLinks}
+                        onChange={(e) =>
+                          setActivityData((prev) => ({
+                            ...prev,
+                            enableGeneratedLinks: e.target.checked,
+                          }))
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qsights-dark"></div>
+                    </label>
+                  </div>
+                  {activityData.enableGeneratedLinks && (
+                    <div className="ml-6 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-xs text-green-800">
+                        <CheckCircle className="w-3 h-3 inline mr-1" />
+                        Generate unique links for each participant with access tracking
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Registration Flow */}
                 <div className="space-y-3 pt-4 border-t border-gray-200">
                   <div className="flex items-start gap-2">
