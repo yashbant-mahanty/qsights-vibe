@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\GeneratedEventLink;
 use App\Models\GeneratedLinkGroup;
+use App\Models\SystemSetting;
 use App\Services\GeneratedLinkService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class GeneratedEventLinkController extends Controller
 {
@@ -267,6 +269,181 @@ class GeneratedEventLinkController extends Controller
             'data' => $data,
             'filename' => 'generated_links_' . date('Y-m-d_His') . '.csv',
         ]);
+    }
+
+    /**
+     * Email selected links to a recipient
+     * POST /api/activities/{id}/generated-links/email
+     */
+    public function emailLinks(Request $request, string $activityId)
+    {
+        $user = $request->user();
+
+        if (!in_array($user->role, ['super-admin', 'admin', 'program-admin', 'program-manager'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'email' => 'required|email',
+            'link_ids' => 'required|array|min:1',
+            'link_ids.*' => 'uuid',
+            'activity_name' => 'nullable|string',
+        ]);
+
+        try {
+            // Fetch the selected links
+            $links = GeneratedEventLink::with(['group'])
+                ->where('activity_id', $activityId)
+                ->whereIn('id', $validated['link_ids'])
+                ->get();
+
+            if ($links->isEmpty()) {
+                return response()->json(['message' => 'No valid links found'], 404);
+            }
+
+            // Generate full URLs for the links
+            $frontendUrl = config('app.frontend_url', 'https://prod.qsights.com');
+            foreach ($links as $link) {
+                $link->full_url = "{$frontendUrl}/activities/take/{$link->activity_id}?token=" . urlencode($link->token);
+            }
+
+            // Build HTML email content with tabular format
+            $activityName = $validated['activity_name'] ?? 'Activity';
+            $htmlContent = $this->buildEmailHtml($links, $activityName);
+
+            // Load SendGrid configuration from System Settings (database) - same as NotificationController
+            $sendGridApiKey = SystemSetting::getValue('email_sendgrid_api_key');
+            $fromEmail = SystemSetting::getValue('email_sender_email') ?? 'info@qsights.com';
+            $fromName = SystemSetting::getValue('email_sender_name') ?? 'QSights';
+
+            Log::info('GeneratedEventLinkController: Sending email', [
+                'to' => $validated['email'],
+                'activity_id' => $activityId,
+                'link_count' => count($links),
+                'from_email' => $fromEmail,
+                'api_key_prefix' => substr($sendGridApiKey ?? '', 0, 15) . '...',
+            ]);
+
+            if (!$sendGridApiKey) {
+                throw new \Exception('SendGrid API key not configured in System Settings');
+            }
+
+            // Send via SendGrid directly (same approach as NotificationController)
+            $sendgrid = new \SendGrid($sendGridApiKey);
+            $mail = new \SendGrid\Mail\Mail();
+            $mail->setFrom($fromEmail, $fromName);
+            $mail->setSubject("Generated Links for {$activityName}");
+            $mail->addTo($validated['email']);
+            $mail->addContent("text/html", $htmlContent);
+
+            $response = $sendgrid->send($mail);
+
+            Log::info('GeneratedEventLinkController: SendGrid response', [
+                'status_code' => $response->statusCode(),
+                'to' => $validated['email'],
+            ]);
+
+            if ($response->statusCode() >= 200 && $response->statusCode() < 300) {
+                return response()->json([
+                    'message' => 'Email sent successfully to ' . $validated['email'],
+                ]);
+            } else {
+                Log::error('GeneratedEventLinkController: SendGrid failed', [
+                    'status_code' => $response->statusCode(),
+                    'body' => $response->body(),
+                ]);
+                throw new \Exception('SendGrid returned status ' . $response->statusCode());
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Email links error: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to send email',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Build HTML email content
+     */
+    private function buildEmailHtml($links, $activityName): string
+    {
+        $rows = '';
+        foreach ($links as $index => $link) {
+            $groupName = $link->group?->name ?? '—';
+            $rows .= "
+                <tr style='border-bottom: 1px solid #e5e7eb;'>
+                    <td style='padding: 12px; text-align: left;'>" . ($index + 1) . "</td>
+                    <td style='padding: 12px; text-align: left; font-family: monospace; font-weight: 600;'>{$link->tag}</td>
+                    <td style='padding: 12px; text-align: left; word-break: break-all;'>
+                        <a href='{$link->full_url}' style='color: #6366f1;'>{$link->full_url}</a>
+                    </td>
+                    <td style='padding: 12px; text-align: left;'>{$groupName}</td>
+                    <td style='padding: 12px; text-align: left;'>{$link->status}</td>
+                </tr>
+            ";
+        }
+
+        return "
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+                h1 { color: #6366f1; margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th { background-color: #f3f4f6; padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #d1d5db; }
+                tr:hover { background-color: #f9fafb; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <h1>Generated Links for {$activityName}</h1>
+                <p>Here are the requested links (" . count($links) . " total):</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Tag</th>
+                            <th>URL</th>
+                            <th>Group</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {$rows}
+                    </tbody>
+                </table>
+                <p style='margin-top: 30px; color: #6b7280; font-size: 14px;'>
+                    This email was sent from QSights. Please do not reply to this email.
+                </p>
+            </div>
+        </body>
+        </html>
+        ";
+    }
+
+    /**
+     * Build plain text email content
+     */
+    private function buildEmailText($links, $activityName): string
+    {
+        $text = "Generated Links for {$activityName}\n";
+        $text .= "================================\n\n";
+        $text .= "Total Links: " . count($links) . "\n\n";
+
+        foreach ($links as $index => $link) {
+            $groupName = $link->group?->name ?? 'No Group';
+            $text .= ($index + 1) . ". Tag: {$link->tag}\n";
+            $text .= "   URL: {$link->full_url}\n";
+            $text .= "   Group: {$groupName}\n";
+            $text .= "   Status: {$link->status}\n\n";
+        }
+
+        $text .= "---\nThis email was sent from QSights. Please do not reply to this email.\n";
+        
+        return $text;
     }
 
     /**

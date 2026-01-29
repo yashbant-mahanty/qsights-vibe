@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Mail;
+use App\Services\EmailService;
 use Illuminate\Support\Str;
 use App\Models\User;
 use Carbon\Carbon;
@@ -212,46 +212,21 @@ class PasswordResetController extends Controller
     }
 
     /**
-     * Send OTP email via SendGrid
+     * Send OTP email via EmailService (uses database SendGrid credentials)
      */
     private function sendOTPEmail($email, $otp)
     {
-        $sendgridApiKey = env('SENDGRID_API_KEY');
-        $fromEmail = env('SENDGRID_FROM_EMAIL', 'do-not-reply@qsights.com');
-        $fromName = env('SENDGRID_FROM_NAME', 'QSights');
+        $htmlContent = $this->getOTPEmailTemplate($otp);
 
-        $emailData = [
-            'personalizations' => [[
-                'to' => [['email' => $email]],
-                'subject' => 'Password Reset OTP - QSights'
-            ]],
-            'from' => ['email' => $fromEmail, 'name' => $fromName],
-            'content' => [[
-                'type' => 'text/html',
-                'value' => $this->getOTPEmailTemplate($otp)
-            ]]
-        ];
-
-        $ch = curl_init('https://api.sendgrid.com/v3/mail/send');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($emailData));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Authorization: Bearer ' . $sendgridApiKey,
-            'Content-Type: application/json'
-        ]);
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpCode < 200 || $httpCode >= 300) {
-            \Log::error('Failed to send OTP email', [
-                'email' => $email,
-                'http_code' => $httpCode,
-                'response' => $response
-            ]);
-        }
+        $emailService = new EmailService();
+        $emailService->send(
+            $email,
+            'Password Reset OTP - QSights',
+            $htmlContent,
+            [
+                'event' => 'password_reset_otp',
+            ]
+        );
     }
 
     /**

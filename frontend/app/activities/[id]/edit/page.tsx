@@ -733,6 +733,9 @@ export default function EditActivityPage() {
         };
 
         console.log('[UPDATE] Sending payload with registration_flow:', activityPayload.registration_flow);
+        console.log('[UPDATE] enable_generated_links value:', activityPayload.enable_generated_links, 'Type:', typeof activityPayload.enable_generated_links);
+        console.log('[UPDATE] activityData.enableGeneratedLinks:', activityData.enableGeneratedLinks);
+        
         await activitiesApi.update(activityId, activityPayload);
         toast({ title: "Success!", description: "Event updated successfully!", variant: "success" });
         router.push("/activities");
@@ -811,6 +814,9 @@ export default function EditActivityPage() {
         number_of_participants: activityData.numberOfParticipants ? parseInt(activityData.numberOfParticipants) : undefined,
         questions_to_randomize: activityData.questionsToRandomize ? parseInt(activityData.questionsToRandomize) : undefined,
       };
+
+      console.log('[SAVE DRAFT] enable_generated_links value:', activityPayload.enable_generated_links, 'Type:', typeof activityPayload.enable_generated_links);
+      console.log('[SAVE DRAFT] activityData.enableGeneratedLinks:', activityData.enableGeneratedLinks);
 
       await activitiesApi.update(activityId, activityPayload);
       toast({ title: "Success!", description: "Event saved as draft!", variant: "success" });

@@ -230,6 +230,7 @@ export default function TakeActivityPage() {
   // State for generated link token and tag
   const [generatedLinkToken, setGeneratedLinkToken] = useState<string | null>(null);
   const [generatedLinkTag, setGeneratedLinkTag] = useState<string | null>(null);
+  const [generatedLinkType, setGeneratedLinkType] = useState<string | null>(null); // 'registration' or 'anonymous'
   const [generatedLinkValidated, setGeneratedLinkValidated] = useState(false);
   
   // Determine if this is an encrypted link token (from Copy Event Links)
@@ -238,35 +239,28 @@ export default function TakeActivityPage() {
   
   // Validate encrypted link token AND generated link token on mount
   useEffect(() => {
-    // Check for generated link token (gltoken parameter)
-    const glToken = searchParams.get("gltoken");
-    if (glToken && !generatedLinkValidated) {
+    // First, check if the token parameter might be a generated link token
+    // Generated link tokens are 64 characters and use the 'token' parameter
+    const potentialGeneratedLinkToken = urlToken && !isEncryptedLinkToken ? urlToken : searchParams.get("gltoken");
+    
+    if (potentialGeneratedLinkToken && !generatedLinkValidated) {
       const validateGeneratedLink = async () => {
         try {
-          console.log('[Generated Link] Validating token:', glToken.substring(0, 20) + '...');
-          const result = await generatedLinksApi.validateToken(glToken);
+          console.log('[Generated Link] Validating token:', potentialGeneratedLinkToken.substring(0, 20) + '...');
+          const result = await generatedLinksApi.validateToken(potentialGeneratedLinkToken);
           
-          if (result.valid && result.tag) {
-            setGeneratedLinkToken(glToken);
-            setGeneratedLinkTag(result.tag);
+          if (result.valid && result.data) {
+            setGeneratedLinkToken(potentialGeneratedLinkToken);
+            setGeneratedLinkTag(result.data.tag);
+            setGeneratedLinkType(result.data.link_type); // 'registration' or 'anonymous'
             // Store tag in localStorage for post-submission flow
-            localStorage.setItem(`generated_link_tag_${activityId}`, result.tag);
-            console.log('[Generated Link] Token validated successfully, tag:', result.tag);
+            localStorage.setItem(`generated_link_tag_${activityId}`, result.data.tag);
+            console.log('[Generated Link] Token validated successfully, tag:', result.data.tag, 'type:', result.data.link_type);
           } else {
-            console.error('[Generated Link] Invalid token or missing tag');
-            toast({
-              title: "Invalid Link",
-              description: "This link is invalid, expired, or has already been used.",
-              variant: "error",
-            });
+            console.log('[Generated Link] Not a valid generated link token, may be participant access token');
           }
         } catch (error) {
-          console.error('[Generated Link] Validation error:', error);
-          toast({
-            title: "Link Validation Failed",
-            description: "Unable to validate the generated link. Please contact support.",
-            variant: "error",
-          });
+          console.log('[Generated Link] Not a generated link token or validation failed, treating as access token');
         } finally {
           setGeneratedLinkValidated(true);
         }
@@ -306,14 +300,16 @@ export default function TakeActivityPage() {
   // Determine link type (encrypted token takes precedence over legacy params)
   const linkType = tokenLinkType || legacyType;
   const isPreview = tokenLinkType === 'preview' || legacyPreview;
-  const mode = tokenLinkType === 'anonymous' ? 'anonymous' : legacyMode;
+  // Check for anonymous mode from generated link or legacy params
+  const mode = generatedLinkType === 'anonymous' ? 'anonymous' : (tokenLinkType === 'anonymous' ? 'anonymous' : legacyMode);
   
-  // Access token (for participant validation) - only use non-encrypted tokens
-  const token = !isEncryptedLinkToken ? urlToken : null;
+  // Access token (for participant validation) - only use non-encrypted tokens AND only if not a generated link
+  const token = !isEncryptedLinkToken && !generatedLinkToken ? urlToken : null;
   
   // Set initial form/start state based on link type
-  const isAnonymous = mode === "anonymous";
-  const isRegistration = linkType === "registration" || (!isPreview && !isAnonymous && !token);
+  // Anonymous generated links should skip registration
+  const isAnonymous = mode === "anonymous" || generatedLinkType === "anonymous";
+  const isRegistration = linkType === "registration" || (!isPreview && !isAnonymous && !token && !generatedLinkToken);
   
   // Get current user for preview mode
   const { currentUser } = useAuth();
@@ -749,6 +745,40 @@ export default function TakeActivityPage() {
       validateAccessToken();
     }
   }, [token]);
+
+  // Handle anonymous generated links - auto-start questionnaire when validated
+  useEffect(() => {
+    if (generatedLinkValidated && generatedLinkType === 'anonymous' && activity && !started && !submitted) {
+      console.log('[Anonymous Generated Link] Auto-starting questionnaire');
+      
+      // Create anonymous participant
+      const anonymousParticipantId = `anon_${generatedLinkTag || 'unknown'}_${Date.now()}`;
+      setParticipantId(anonymousParticipantId);
+      setParticipantData({ anonymous: true, generated_link_tag: generatedLinkTag });
+      
+      // Set start time
+      const now = Date.now();
+      setStartTime(now);
+      
+      // Skip form and start directly
+      setShowForm(false);
+      setStarted(true);
+      
+      // Set default language if not multilingual or single language
+      if (!activity.is_multilingual) {
+        setSelectedLanguage('EN');
+      } else if (activity.languages && activity.languages.length === 1) {
+        setSelectedLanguage(activity.languages[0]);
+      }
+      
+      toast({
+        title: "Welcome!",
+        description: "Starting your activity now...",
+        variant: "success",
+        duration: 2000
+      });
+    }
+  }, [generatedLinkValidated, generatedLinkType, activity, started, submitted, generatedLinkTag]);
 
   async function validateAccessToken() {
     // Prevent duplicate calls

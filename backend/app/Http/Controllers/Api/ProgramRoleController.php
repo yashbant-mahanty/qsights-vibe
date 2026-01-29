@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\ProgramRole;
 use App\Models\Program;
 use App\Models\Activity;
+use App\Services\EmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class ProgramRoleController extends Controller
@@ -431,10 +431,21 @@ class ProgramRoleController extends Controller
             'created_by' => $creator->name,
         ];
 
-        Mail::send('emails.role-created', $emailData, function ($message) use ($role) {
-            $message->to($role->email)
-                    ->subject('Your Role Access Has Been Created - ' . $role->program->name);
-        });
+        // Render the blade template to HTML
+        $htmlContent = view('emails.role-created', $emailData)->render();
+
+        // Send using EmailService (uses database SendGrid credentials)
+        $emailService = new EmailService();
+        $emailService->send(
+            $role->email,
+            'Your Role Access Has Been Created - ' . $role->program->name,
+            $htmlContent,
+            [
+                'event' => 'role_created',
+                'program_id' => $program->id,
+                'role_id' => $role->id,
+            ]
+        );
     }
 
     /**
@@ -621,9 +632,19 @@ class ProgramRoleController extends Controller
             'created_by' => $creator->name,
         ];
 
-        Mail::send('emails.role-created', $emailData, function ($message) use ($role) {
-            $message->to($role->email)
-                    ->subject('Your System Role Access Has Been Created - QSights Platform');
-        });
+        // Render the blade template to HTML
+        $htmlContent = view('emails.role-created', $emailData)->render();
+
+        // Send using EmailService (uses database SendGrid credentials)
+        $emailService = new EmailService();
+        $emailService->send(
+            $role->email,
+            'Your System Role Access Has Been Created - QSights Platform',
+            $htmlContent,
+            [
+                'event' => 'system_role_created',
+                'role_id' => $role->id,
+            ]
+        );
     }
 }

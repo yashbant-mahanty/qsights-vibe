@@ -7,9 +7,9 @@ use App\Models\ActivityApprovalRequest;
 use App\Models\Activity;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\EmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 
 class ActivityApprovalRequestController extends Controller
@@ -329,21 +329,20 @@ class ActivityApprovalRequestController extends Controller
     protected function notifySuperAdmins(ActivityApprovalRequest $request)
     {
         $superAdmins = User::where('role', 'super-admin')->get();
+        $emailService = new EmailService();
         
         foreach ($superAdmins as $admin) {
             try {
-                Mail::raw(
-                    "New Activity Approval Request\n\n" .
-                    "Event Name: {$request->name}\n" .
-                    "Type: {$request->type}\n" .
-                    "Requested by: {$request->requestedBy->name} ({$request->requestedBy->email})\n" .
-                    "Program: {$request->program->name}\n\n" .
-                    "Please log in to review and approve/reject this request.\n" .
-                    "Review Link: " . url("/activities/approvals/{$request->id}"),
-                    function ($message) use ($admin, $request) {
-                        $message->to($admin->email)
-                            ->subject("New Activity Approval Request: {$request->name}");
-                    }
+                $htmlContent = $this->buildApprovalNotificationHtml($request, 'new');
+                $emailService->send(
+                    $admin->email,
+                    "New Activity Approval Request: {$request->name}",
+                    $htmlContent,
+                    [
+                        'event' => 'approval_request_notification',
+                        'user_id' => $admin->id,
+                        'request_id' => $request->id,
+                    ]
                 );
             } catch (\Exception $e) {
                 \Log::error("Failed to send approval notification email: " . $e->getMessage());
@@ -360,23 +359,75 @@ class ActivityApprovalRequestController extends Controller
             $requester = $request->requestedBy;
             $status = $request->isApproved() ? 'APPROVED' : 'REJECTED';
             
-            Mail::raw(
-                "Activity Approval Request {$status}\n\n" .
-                "Event Name: {$request->name}\n" .
-                "Status: {$status}\n" .
-                "Reviewed by: {$request->reviewedBy->name}\n" .
-                "Remarks: {$request->remarks}\n\n" .
-                ($request->isApproved() 
-                    ? "Your activity has been approved and is now available in the Activities section."
-                    : "Your activity request has been rejected. Please review the remarks and resubmit if needed."),
-                function ($message) use ($requester, $request, $status) {
-                    $message->to($requester->email)
-                        ->subject("Activity Request {$status}: {$request->name}");
-                }
+            $htmlContent = $this->buildApprovalNotificationHtml($request, $status);
+            
+            $emailService = new EmailService();
+            $emailService->send(
+                $requester->email,
+                "Activity Request {$status}: {$request->name}",
+                $htmlContent,
+                [
+                    'event' => 'approval_request_result',
+                    'user_id' => $requester->id,
+                    'request_id' => $request->id,
+                    'status' => $status,
+                ]
             );
         } catch (\Exception $e) {
             \Log::error("Failed to send requester notification email: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Build HTML email for approval notifications
+     */
+    private function buildApprovalNotificationHtml(ActivityApprovalRequest $request, string $type): string
+    {
+        $isNew = $type === 'new';
+        $isApproved = $type === 'APPROVED';
+        
+        $statusColor = $isNew ? '#3b82f6' : ($isApproved ? '#22c55e' : '#ef4444');
+        $statusText = $isNew ? 'New Request' : $type;
+        
+        $content = $isNew
+            ? "<p>A new activity approval request has been submitted.</p>
+               <p><strong>Event Name:</strong> {$request->name}</p>
+               <p><strong>Type:</strong> {$request->type}</p>
+               <p><strong>Requested by:</strong> {$request->requestedBy->name} ({$request->requestedBy->email})</p>
+               <p><strong>Program:</strong> {$request->program->name}</p>
+               <p style='margin-top: 20px;'>Please log in to review and approve/reject this request.</p>"
+            : "<p>Your activity approval request has been <strong>{$type}</strong>.</p>
+               <p><strong>Event Name:</strong> {$request->name}</p>
+               <p><strong>Reviewed by:</strong> {$request->reviewedBy->name}</p>
+               <p><strong>Remarks:</strong> {$request->remarks}</p>
+               <p style='margin-top: 20px;'>" . 
+               ($isApproved 
+                   ? "Your activity has been approved and is now available in the Activities section."
+                   : "Your activity request has been rejected. Please review the remarks and resubmit if needed.") . 
+               "</p>";
+        
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='UTF-8'>
+            <title>Activity Approval Request</title>
+        </head>
+        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 20px;'>
+            <div style='max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden;'>
+                <div style='background: {$statusColor}; color: #ffffff; padding: 20px; text-align: center;'>
+                    <h1 style='margin: 0; font-size: 20px;'>Activity Approval Request - {$statusText}</h1>
+                </div>
+                <div style='padding: 30px 20px;'>
+                    {$content}
+                </div>
+                <div style='background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
+                    <p style='margin: 0;'>This is an automated email from QSights. Please do not reply.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
     }
 
     /**

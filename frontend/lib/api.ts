@@ -2118,6 +2118,18 @@ export const generatedLinksApi = {
     return await fetchWithAuth(`/activities/${activityId}/generated-links/export${queryString}`);
   },
 
+  // Email selected links
+  async emailLinks(activityId: string, data: {
+    email: string;
+    link_ids: string[];
+    activity_name?: string;
+  }): Promise<{ message: string }> {
+    return await fetchWithAuth(`/activities/${activityId}/generated-links/email`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
   // Validate generated link token (public, no auth)
   async validateToken(token: string): Promise<{
     valid: boolean;
