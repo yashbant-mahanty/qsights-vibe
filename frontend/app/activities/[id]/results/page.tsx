@@ -435,7 +435,13 @@ export default function ActivityResultsPage() {
 
       setActivity(activityData);
       setStatistics(stats);
-      setResponses(responsesData);
+      // Sort responses by latest first (most recent at top)
+      const sortedResponses = [...responsesData].sort((a, b) => {
+        const dateA = new Date(a.submitted_at || a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.submitted_at || b.updated_at || b.created_at || 0).getTime();
+        return dateB - dateA; // Descending order (latest first)
+      });
+      setResponses(sortedResponses);
 
       // Debug log for data consistency verification
       console.log('=== DATA CONSISTENCY CHECK ===');
@@ -709,15 +715,16 @@ export default function ActivityResultsPage() {
     }
   }
 
-  // Export to PDF (Updated: 2026-01-29)
+  // Export to PDF (Updated: 2026-01-29 - Fixed autoTable import)
   async function exportToPDF() {
     try {
       // Dynamically import jspdf and jspdf-autotable (client-side only)
-      const jsPDF = (await import('jspdf')).default;
+      const { default: jsPDF } = await import('jspdf');
+      const autoTable = (await import('jspdf-autotable')).default;
       
-      // Import autotable plugin - this import extends jsPDF prototype
-      // We need to import it to trigger the side effect of registering autoTable method
-      await import('jspdf-autotable');
+      // Apply the plugin to jsPDF
+      // @ts-ignore
+      jsPDF.autoTable = autoTable;
       
       // Validate that we have data to export
       if (!responses || responses.length === 0) {
