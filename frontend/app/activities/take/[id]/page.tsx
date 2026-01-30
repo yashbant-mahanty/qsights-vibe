@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -232,6 +232,9 @@ export default function TakeActivityPage() {
   const [generatedLinkTag, setGeneratedLinkTag] = useState<string | null>(null);
   const [generatedLinkType, setGeneratedLinkType] = useState<string | null>(null); // 'registration' or 'anonymous'
   const [generatedLinkValidated, setGeneratedLinkValidated] = useState(false);
+  
+  // Ref to prevent duplicate welcome toasts (React Strict Mode can trigger effects twice)
+  const hasShownWelcomeToast = useRef(false);
   
   // Determine if this is an encrypted link token (from Copy Event Links)
   // Encrypted tokens are VERY long (>100 chars), access tokens are shorter (typically 64 chars)
@@ -739,12 +742,20 @@ export default function TakeActivityPage() {
     }
   }, [submittedParam]);
 
-  // Validate token if present - start validation early (don't wait for activity)
+  // Validate token if present - but wait for generated link validation to complete first
+  // This prevents the access token validation from running when URL has a generated link token
   useEffect(() => {
+    // Wait for generated link validation to complete first
+    if (!generatedLinkValidated) return;
+    
+    // Skip if it was validated as a generated link token
+    if (generatedLinkToken) return;
+    
+    // Now validate as access token if present
     if (token && !tokenValidated && !tokenValidating) {
       validateAccessToken();
     }
-  }, [token]);
+  }, [token, generatedLinkValidated, generatedLinkToken, tokenValidated, tokenValidating]);
 
   // Handle anonymous generated links - auto-start questionnaire when validated
   useEffect(() => {
@@ -771,12 +782,16 @@ export default function TakeActivityPage() {
         setSelectedLanguage(activity.languages[0]);
       }
       
-      toast({
-        title: "Welcome!",
-        description: "Starting your activity now...",
-        variant: "success",
-        duration: 2000
-      });
+      // Show welcome toast only once (prevent duplicate from React Strict Mode)
+      if (!hasShownWelcomeToast.current) {
+        hasShownWelcomeToast.current = true;
+        toast({
+          title: "Welcome!",
+          description: "Starting your activity now...",
+          variant: "success",
+          duration: 2000
+        });
+      }
     }
   }, [generatedLinkValidated, generatedLinkType, activity, started, submitted, generatedLinkTag]);
 
@@ -819,8 +834,10 @@ export default function TakeActivityPage() {
         setTokenValidating(false);
         setShowForm(true);
         
-        // Only show toast if NOT a generated link (generated links have their own toast)
-        if (!generatedLinkValidated && !generatedLinkType) {
+        // Show friendly info message only if NOT a generated link AND haven't shown toast yet
+        // (generated links handle their own welcome toast)
+        if ((!generatedLinkValidated || !generatedLinkToken) && !hasShownWelcomeToast.current) {
+          hasShownWelcomeToast.current = true;
           toast({
             title: "Welcome!",
             description: "Please register to participate in this activity.",
@@ -897,12 +914,16 @@ export default function TakeActivityPage() {
         setShowForm(false);
         setStarted(true);
         
-        toast({
-          title: `Welcome, ${participantName}!`,
-          description: "Starting your activity now...",
-          variant: "success",
-          duration: 2000
-        });
+        // Show welcome toast only once
+        if (!hasShownWelcomeToast.current) {
+          hasShownWelcomeToast.current = true;
+          toast({
+            title: `Welcome, ${participantName}!`,
+            description: "Starting your activity now...",
+            variant: "success",
+            duration: 2000
+          });
+        }
       } else {
         // Show form to collect additional fields or language selection
         setShowForm(true);
@@ -911,12 +932,16 @@ export default function TakeActivityPage() {
           ? `Hello ${participantName}, please select your language to continue.`
           : `Hello ${participantName}, please complete the additional details below.`;
 
-        toast({
-          title: "Welcome!",
-          description: detailsMessage,
-          variant: "success",
-          duration: 3000
-        });
+        // Show welcome toast only once
+        if (!hasShownWelcomeToast.current) {
+          hasShownWelcomeToast.current = true;
+          toast({
+            title: "Welcome!",
+            description: detailsMessage,
+            variant: "success",
+            duration: 3000
+          });
+        }
       }
     } catch (err) {
       console.error('Token validation error:', err);
