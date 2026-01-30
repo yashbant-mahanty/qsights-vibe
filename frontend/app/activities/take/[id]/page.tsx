@@ -823,7 +823,7 @@ export default function TakeActivityPage() {
         toast({
           title: "Welcome!",
           description: "Please register to participate in this activity.",
-          variant: "default",
+          variant: "success",
           duration: 3000
         });
         return;
@@ -1226,6 +1226,7 @@ export default function TakeActivityPage() {
             answers: linkData.data.responses,
             started_at: startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
             is_preview: false,
+            ...(generatedLinkToken && { token: generatedLinkToken }), // Include generated link token for status update
           };
 
           const submitResponse = await fetch(`/api/public/activities/${activityId}/submit`, {
@@ -1557,6 +1558,7 @@ export default function TakeActivityPage() {
         auto_submitted: autoSubmit,
         is_preview: isPreview, // Flag for preview mode
         ...(linkTag && { generated_link_tag: linkTag }), // Include tag if generated link was used
+        ...(generatedLinkToken && { token: generatedLinkToken }), // Pass generated link token for status update
       };
 
       console.log("Submitting payload:", payload);
@@ -1575,13 +1577,22 @@ export default function TakeActivityPage() {
       console.log("Response:", data);
 
       // Mark generated link as used after successful submission
-      if (response.ok && generatedLinkToken && data.data?.response_id) {
+      // The response ID can be in data.response.id (from backend) or data.response_id
+      const responseId = data.data?.response?.id || data.data?.response_id;
+      console.log('[Generated Link] Checking link update:', {
+        hasToken: !!generatedLinkToken,
+        responseOk: response.ok,
+        responseId,
+        dataStructure: JSON.stringify(data?.data ? Object.keys(data.data) : 'no data')
+      });
+      
+      if (response.ok && generatedLinkToken && responseId) {
         try {
-          console.log('[Generated Link] Marking link as used, response_id:', data.data.response_id);
+          console.log('[Generated Link] Marking link as used, response_id:', responseId);
           await generatedLinksApi.markAsUsed(
             generatedLinkToken,
             currentParticipantId,
-            data.data.response_id
+            responseId
           );
           console.log('[Generated Link] Link marked as used successfully');
           // Clean up localStorage
@@ -1590,6 +1601,8 @@ export default function TakeActivityPage() {
           console.error('[Generated Link] Failed to mark link as used:', error);
           // Don't fail the submission if this fails - it's a tracking issue
         }
+      } else if (response.ok && generatedLinkToken && !responseId) {
+        console.warn('[Generated Link] Token present but no response_id found in response data:', data);
       }
       
       if (!response.ok) {

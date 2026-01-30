@@ -142,7 +142,12 @@ export default function GeneratedLinksPage() {
     }
   };
 
-  const handleCopyLink = (url: string, tag: string) => {
+  const handleCopyLink = (url: string, tag: string, status?: string) => {
+    // Prevent copying used links
+    if (status === 'used') {
+      toast({ title: "Cannot Copy", description: "This link has already been used", variant: "error" });
+      return;
+    }
     navigator.clipboard.writeText(url);
     setCopiedLink(tag);
     toast({ title: "Copied!", description: `Link ${tag} copied to clipboard`, variant: "success" });
@@ -783,9 +788,14 @@ export default function GeneratedLinksPage() {
                         <td className="py-4 px-4">
                           <div className="flex items-center justify-end gap-1">
                             <button
-                              onClick={() => handleCopyLink(link.full_url!, link.tag)}
-                              className="p-2 text-gray-500 hover:text-qsights-cyan hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Copy Link"
+                              onClick={() => handleCopyLink(link.full_url!, link.tag, link.status)}
+                              disabled={link.status === 'used'}
+                              className={`p-2 rounded-lg transition-colors ${
+                                link.status === 'used'
+                                  ? 'text-gray-300 cursor-not-allowed opacity-50'
+                                  : 'text-gray-500 hover:text-qsights-cyan hover:bg-blue-50'
+                              }`}
+                              title={link.status === 'used' ? 'Link already used' : 'Copy Link'}
                             >
                               {copiedLink === link.tag ? (
                                 <Check className="w-4 h-4 text-emerald-600" />
