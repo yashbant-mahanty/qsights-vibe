@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
+use App\Models\GeneratedEventLink;
 use App\Models\Participant;
 use App\Models\Response;
 use Illuminate\Http\Request;
@@ -271,14 +272,19 @@ class PublicActivityController extends Controller
                 'participant_id' => 'required|string',
                 'answers' => 'required',
                 'is_preview' => 'sometimes|boolean',
+                'token' => 'sometimes|nullable|string', // Generated link token
             ]);
         } else {
             $request->validate([
                 'participant_id' => 'required|exists:participants,id',
                 'answers' => 'required',
                 'is_preview' => 'sometimes|boolean',
+                'token' => 'sometimes|nullable|string', // Generated link token
             ]);
         }
+        
+        // Store the token for later use after successful submission
+        $generatedLinkToken = $request->input('token');
 
         $activity = Activity::with('questionnaire.sections.questions')->findOrFail($activityId);
         
@@ -675,9 +681,58 @@ class PublicActivityController extends Controller
         //   After attempt 4: can_retake = false (4 >= 4)
         $canRetake = false;
 
+        // CRITICAL: Mark generated link as used if token was provided
+        // This updates the status, used_at, participant, and response_id
+        if (!empty($generatedLinkToken)) {
+            \Log::info('Attempting to mark generated link as used', [
+                'token_preview' => substr($generatedLinkToken, 0, 20) . '...',
+                'participant_id' => $participant->id,
+                'response_id' => $response->id,
+            ]);
+            try {
+                $generatedLink = GeneratedEventLink::where('token', $generatedLinkToken)->first();
+                if ($generatedLink) {
+                    \Log::info('Found generated link', [
+                        'link_id' => $generatedLink->id,
+                        'current_status' => $generatedLink->status,
+                        'tag' => $generatedLink->tag,
+                    ]);
+                    if ($generatedLink->status === 'unused') {
+                        $generatedLink->markAsUsed($participant->id, $response->id);
+                        \Log::info('Generated link marked as used', [
+                            'token_preview' => substr($generatedLinkToken, 0, 20) . '...',
+                            'link_id' => $generatedLink->id,
+                            'participant_id' => $participant->id,
+                            'response_id' => $response->id,
+                            'tag' => $generatedLink->tag,
+                            'new_status' => 'used',
+                        ]);
+                    } else {
+                        \Log::info('Generated link already used/expired', [
+                            'link_id' => $generatedLink->id,
+                            'status' => $generatedLink->status,
+                        ]);
+                    }
+                } else {
+                    \Log::warning('Generated link not found for token', [
+                        'token_preview' => substr($generatedLinkToken, 0, 20) . '...',
+                    ]);
+                }
+            } catch (\Exception $e) {
+                \Log::error('Failed to mark generated link as used', [
+                    'token_preview' => substr($generatedLinkToken, 0, 20) . '...',
+                    'error' => $e->getMessage()
+                ]);
+                // Don't fail the submission if link marking fails
+            }
+        } else {
+            \Log::debug('No generated link token provided in submission');
+        }
+
         return response()->json([
             'data' => [
                 'response' => $response,
+                'response_id' => $response->id, // Added for easier frontend access
                 'attempt_number' => $attemptNumber,
                 'score' => $score,
                 'assessment_result' => $assessmentResult,

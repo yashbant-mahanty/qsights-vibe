@@ -7,7 +7,7 @@ export async function POST(
   try {
     const { id: activityId } = await params;
     const body = await request.json();
-    const { participant_id, answers, started_at, time_expired_at, auto_submitted } = body;
+    const { participant_id, answers, started_at, time_expired_at, auto_submitted, token, is_preview, generated_link_tag } = body;
 
     // Validate required fields
     if (!participant_id) {
@@ -31,10 +31,13 @@ export async function POST(
       started_at,
       time_expired_at,
       auto_submitted,
+      hasToken: !!token,
+      is_preview,
+      generated_link_tag,
       sampleAnswer: answers[Object.keys(answers)[0]]
     });
 
-    // Submit response to backend with all fields
+    // Submit response to backend with all fields including token for generated link status update
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/activities/${activityId}/submit`, {
       method: "POST",
       headers: {
@@ -47,6 +50,9 @@ export async function POST(
         started_at,
         time_expired_at,
         auto_submitted,
+        token,  // Generated link token for status update
+        is_preview,
+        generated_link_tag,
       }),
     });
 
