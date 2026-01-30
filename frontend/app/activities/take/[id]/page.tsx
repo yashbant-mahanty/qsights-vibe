@@ -819,13 +819,15 @@ export default function TakeActivityPage() {
         setTokenValidating(false);
         setShowForm(true);
         
-        // Show friendly info message instead of error
-        toast({
-          title: "Welcome!",
-          description: "Please register to participate in this activity.",
-          variant: "success",
-          duration: 3000
-        });
+        // Only show toast if NOT a generated link (generated links have their own toast)
+        if (!generatedLinkValidated && !generatedLinkType) {
+          toast({
+            title: "Welcome!",
+            description: "Please register to participate in this activity.",
+            variant: "success",
+            duration: 3000
+          });
+        }
         return;
       }
 
