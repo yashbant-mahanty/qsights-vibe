@@ -1248,7 +1248,7 @@ export const publicActivityApi = {
     return data.data || data;
   },
 
-  async submitResponse(activityId: string, participantId: string, answers: any): Promise<Response> {
+  async submitResponse(activityId: string, participantId: string, answers: any, token?: string): Promise<Response> {
     const response = await fetch(`${API_URL}/public/activities/${activityId}/submit`, {
       method: 'POST',
       headers: {
@@ -1257,7 +1257,8 @@ export const publicActivityApi = {
       },
       body: JSON.stringify({ 
         participant_id: participantId, 
-        answers 
+        answers,
+        token: token || undefined, // Pass generated link token if available
       }),
     });
 

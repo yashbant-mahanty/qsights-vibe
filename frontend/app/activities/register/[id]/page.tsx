@@ -327,6 +327,9 @@ export default function PostSubmissionRegistrationPage() {
         const participantId = registerData.data.participant_id;
         console.log('[REGISTER] Anonymous participant created:', participantId);
 
+        // Get stored token for generated link status update
+        const storedToken = localStorage.getItem(`temp_token_${activityId}`);
+        
         // Step 2: Submit responses with participant_id
         const submitPayload = {
           participant_id: participantId,
@@ -334,6 +337,7 @@ export default function PostSubmissionRegistrationPage() {
           started_at: new Date().toISOString(),
           is_anonymous: true,
           is_preview: false,
+          ...(storedToken && { token: storedToken }), // Include generated link token for status update
         };
 
         const submitResponse = await fetch(`/api/public/activities/${activityId}/submit`, {
@@ -450,12 +454,16 @@ export default function PostSubmissionRegistrationPage() {
 
       const linkData = await linkResponse.json();
 
+      // Get stored token for generated link status update
+      const storedToken = localStorage.getItem(`temp_token_${activityId}`);
+
       // Submit final response
       const submitPayload = {
         participant_id: participantId,
         answers: linkData.data.responses,
         started_at: new Date().toISOString(),
         is_preview: false,
+        ...(storedToken && { token: storedToken }), // Include generated link token for status update
       };
 
       const submitResponse = await fetch(`/api/public/activities/${activityId}/submit`, {
