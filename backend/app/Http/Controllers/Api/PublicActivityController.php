@@ -11,6 +11,62 @@ use Illuminate\Http\Request;
 class PublicActivityController extends Controller
 {
     /**
+     * Get or create an anonymous participant for generated links
+     * Anonymous participants have IDs like: anon_TAG_TIMESTAMP
+     */
+    private function getOrCreateAnonymousParticipant(string $anonymousId, $activityId)
+    {
+        // Extract tag from anonymous ID (format: anon_TAG_TIMESTAMP)
+        $parts = explode('_', $anonymousId);
+        $tag = count($parts) >= 2 ? $parts[1] : 'unknown';
+        
+        // Check if we already have a participant for this anonymous ID
+        // We store the anonymous_id in additional_data
+        $participant = Participant::whereJsonContains('additional_data->anonymous_session_id', $anonymousId)->first();
+        
+        if ($participant) {
+            // Ensure participant is linked to activity
+            if (!$participant->activities()->where('activities.id', $activityId)->exists()) {
+                $participant->activities()->attach($activityId, ['joined_at' => now()]);
+            }
+            return $participant;
+        }
+        
+        // Create new anonymous participant
+        $participant = Participant::create([
+            'name' => 'Anonymous (' . $tag . ')',
+            'email' => $anonymousId . '@anonymous.qsights.local', // Fake email for anonymous
+            'is_guest' => true,
+            'status' => 'active',
+            'additional_data' => [
+                'participant_type' => 'anonymous_generated_link',
+                'anonymous_session_id' => $anonymousId,
+                'generated_link_tag' => $tag,
+            ],
+        ]);
+        
+        // Attach to activity
+        $participant->activities()->attach($activityId, ['joined_at' => now()]);
+        
+        \Log::info('Created anonymous participant for generated link', [
+            'participant_id' => $participant->id,
+            'anonymous_id' => $anonymousId,
+            'tag' => $tag,
+            'activity_id' => $activityId
+        ]);
+        
+        return $participant;
+    }
+    
+    /**
+     * Check if participant_id is an anonymous generated link ID
+     */
+    private function isAnonymousParticipantId($participantId): bool
+    {
+        return is_string($participantId) && str_starts_with($participantId, 'anon_');
+    }
+
+    /**
      * Get public activity details (no authentication required)
      */
     public function show(Request $request, $id)
@@ -205,14 +261,34 @@ class PublicActivityController extends Controller
      */
     public function submitResponse(Request $request, $activityId)
     {
-        $request->validate([
-            'participant_id' => 'required|exists:participants,id',
-            'answers' => 'required',
-            'is_preview' => 'sometimes|boolean',
-        ]);
+        // Custom validation - handle anonymous participants specially
+        $participantId = $request->input('participant_id');
+        $isAnonymous = $this->isAnonymousParticipantId($participantId);
+        
+        if ($isAnonymous) {
+            // For anonymous participants, skip the exists:participants,id validation
+            $request->validate([
+                'participant_id' => 'required|string',
+                'answers' => 'required',
+                'is_preview' => 'sometimes|boolean',
+            ]);
+        } else {
+            $request->validate([
+                'participant_id' => 'required|exists:participants,id',
+                'answers' => 'required',
+                'is_preview' => 'sometimes|boolean',
+            ]);
+        }
 
         $activity = Activity::with('questionnaire.sections.questions')->findOrFail($activityId);
-        $participant = Participant::findOrFail($request->participant_id);
+        
+        // Get or create participant (handles anonymous participants)
+        if ($isAnonymous) {
+            $participant = $this->getOrCreateAnonymousParticipant($participantId, $activityId);
+        } else {
+            $participant = Participant::findOrFail($request->participant_id);
+        }
+        
         $isPreview = $request->input('is_preview', false);
         
         // Normalize answers format - handle both array of objects and associative array
@@ -619,13 +695,31 @@ class PublicActivityController extends Controller
      */
     public function saveProgress(Request $request, $activityId)
     {
-        $request->validate([
-            'participant_id' => 'required|exists:participants,id',
-            'answers' => 'required|array',
-        ]);
+        // Custom validation - handle anonymous participants specially
+        $participantId = $request->input('participant_id');
+        $isAnonymous = $this->isAnonymousParticipantId($participantId);
+        
+        if ($isAnonymous) {
+            // For anonymous participants, skip the exists:participants,id validation
+            $request->validate([
+                'participant_id' => 'required|string',
+                'answers' => 'required|array',
+            ]);
+        } else {
+            $request->validate([
+                'participant_id' => 'required|exists:participants,id',
+                'answers' => 'required|array',
+            ]);
+        }
 
         $activity = Activity::with('questionnaire.sections.questions')->findOrFail($activityId);
-        $participant = Participant::findOrFail($request->participant_id);
+        
+        // Get or create participant (handles anonymous participants)
+        if ($isAnonymous) {
+            $participant = $this->getOrCreateAnonymousParticipant($participantId, $activityId);
+        } else {
+            $participant = Participant::findOrFail($request->participant_id);
+        }
 
         // Normalize answers (array of objects or associative array)
         $normalizedAnswers = [];
@@ -741,7 +835,24 @@ class PublicActivityController extends Controller
     public function loadProgress(Request $request, $activityId, $participantId)
     {
         $activity = Activity::findOrFail($activityId);
-        $participant = Participant::findOrFail($participantId);
+        
+        // Handle anonymous participants
+        $isAnonymous = $this->isAnonymousParticipantId($participantId);
+        
+        if ($isAnonymous) {
+            // For anonymous participants, try to find existing participant
+            $participant = Participant::whereJsonContains('additional_data->anonymous_session_id', $participantId)->first();
+            
+            if (!$participant) {
+                // No progress saved yet for this anonymous session
+                return response()->json([
+                    'data' => null,
+                    'message' => 'No progress found for this session'
+                ], 404);
+            }
+        } else {
+            $participant = Participant::findOrFail($participantId);
+        }
 
         // Verify participant is linked to this activity
         if (!$participant->activities()->where('activities.id', $activityId)->exists()) {
@@ -753,7 +864,7 @@ class PublicActivityController extends Controller
         // Find in-progress response
         $response = Response::with('answers')
             ->where('activity_id', $activityId)
-            ->where('participant_id', $participantId)
+            ->where('participant_id', $participant->id)
             ->where('status', 'in_progress')
             ->first();
 
