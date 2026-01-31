@@ -1,7 +1,7 @@
 "use client";
 // Version: 2.0 - Fixed UUID routing for default users vs custom roles
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ProgramAdminLayout from "@/components/program-admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Eye, EyeOff, RefreshCw, Filter, Users, UserCog, Network } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, RefreshCw, Filter, Users, UserCog, Network, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -99,6 +99,10 @@ function RolesPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
   
   // Hierarchy modal states
   const [managerAssignmentModal, setManagerAssignmentModal] = useState(false);
@@ -195,7 +199,15 @@ function RolesPage() {
     } else {
       setRoles(allRoles.filter(role => role.program_id === selectedProgramFilter));
     }
+    setCurrentPage(1); // Reset to first page when filter changes
   }, [selectedProgramFilter, allRoles]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(roles.length / itemsPerPage);
+  const paginatedRoles = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return roles.slice(startIndex, startIndex + itemsPerPage);
+  }, [roles, currentPage, itemsPerPage]);
 
   const getAuthHeaders = () => {
     const cookies = document.cookie.split(';');
@@ -1237,7 +1249,7 @@ function RolesPage() {
                         <TableHead className="w-12">
                           <input
                             type="checkbox"
-                            checked={selectedRoleIds.length === roles.length && roles.length > 0}
+                            checked={selectedRoleIds.length === paginatedRoles.length && paginatedRoles.length > 0}
                             onChange={handleSelectAll}
                             className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                           />
@@ -1250,7 +1262,7 @@ function RolesPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {roles.map((role) => (
+                      {paginatedRoles.map((role) => (
                         <TableRow key={role.id}>
                           <TableCell>
                             <input
@@ -1304,6 +1316,101 @@ function RolesPage() {
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              )}
+              
+              {/* Pagination */}
+              {roles.length > 0 && (
+                <div className="px-6 py-4 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm text-gray-600">
+                        Showing {roles.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                        {Math.min(currentPage * itemsPerPage, roles.length)} of{" "}
+                        {roles.length} roles
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Per page:</span>
+                        <select
+                          value={itemsPerPage}
+                          onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        title="First page"
+                      >
+                        «
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                      </button>
+                      {(() => {
+                        const pages: (number | string)[] = [];
+                        const maxVisible = 5;
+                        if (totalPages <= maxVisible + 2) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          let start = Math.max(2, currentPage - Math.floor(maxVisible / 2));
+                          let end = Math.min(totalPages - 1, start + maxVisible - 1);
+                          if (end === totalPages - 1) start = Math.max(2, end - maxVisible + 1);
+                          if (start > 2) pages.push('...');
+                          for (let i = start; i <= end; i++) pages.push(i);
+                          if (end < totalPages - 1) pages.push('...');
+                          if (totalPages > 1) pages.push(totalPages);
+                        }
+                        return pages.map((page, idx) => (
+                          page === '...' ? (
+                            <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                          ) : (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page as number)}
+                              className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                currentPage === page
+                                  ? "bg-qsights-dark text-white shadow-sm"
+                                  : "text-gray-700 hover:bg-gray-100 border border-gray-300"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          )
+                        ));
+                      })()}
+                      <button
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        title="Last page"
+                      >
+                        »
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>

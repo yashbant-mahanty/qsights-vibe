@@ -29,6 +29,8 @@ import {
   TrendingUp,
   Tag,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { generatedLinksApi, type GeneratedEventLink, type GeneratedLinkGroup, activitiesApi } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -78,10 +80,19 @@ export default function GeneratedLinksPage() {
     group_description: "",
     link_type: "registration" as "registration" | "anonymous",
   });
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
   useEffect(() => {
     loadData();
   }, [activityId, statusFilter, groupFilter]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, groupFilter, searchQuery]);
 
   async function loadData() {
     try {
@@ -389,6 +400,13 @@ export default function GeneratedLinksPage() {
     });
   }, [links, searchQuery]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredLinks.length / itemsPerPage);
+  const paginatedLinks = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredLinks.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredLinks, currentPage, itemsPerPage]);
+
   const statsCards = useMemo(() => {
     if (!statistics) return [];
     return [
@@ -676,6 +694,7 @@ export default function GeneratedLinksPage() {
                 </button>
               </div>
             ) : (
+              <>
               <div className="overflow-x-auto">
                 {/* Selection actions bar */}
                 {selectedLinks.size > 0 && (
@@ -738,7 +757,7 @@ export default function GeneratedLinksPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {filteredLinks.map((link) => (
+                    {paginatedLinks.map((link) => (
                       <tr 
                         key={link.id} 
                         className={`hover:bg-gray-50 transition-colors ${selectedLinks.has(link.id) ? 'bg-blue-50/50' : ''}`}
@@ -828,6 +847,102 @@ export default function GeneratedLinksPage() {
                   </tbody>
                 </table>
               </div>
+              
+              {/* Pagination */}
+              {filteredLinks.length > 0 && (
+                <div className="px-6 py-4 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm text-gray-600">
+                        Showing {filteredLinks.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                        {Math.min(currentPage * itemsPerPage, filteredLinks.length)} of{" "}
+                        {filteredLinks.length} links
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Per page:</span>
+                        <select
+                          value={itemsPerPage}
+                          onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        title="First page"
+                      >
+                        «
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                      </button>
+                      {(() => {
+                        const pages: (number | string)[] = [];
+                        const maxVisible = 5;
+                        if (totalPages <= maxVisible + 2) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          let start = Math.max(2, currentPage - Math.floor(maxVisible / 2));
+                          let end = Math.min(totalPages - 1, start + maxVisible - 1);
+                          if (end === totalPages - 1) start = Math.max(2, end - maxVisible + 1);
+                          if (start > 2) pages.push('...');
+                          for (let i = start; i <= end; i++) pages.push(i);
+                          if (end < totalPages - 1) pages.push('...');
+                          if (totalPages > 1) pages.push(totalPages);
+                        }
+                        return pages.map((page, idx) => (
+                          page === '...' ? (
+                            <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                          ) : (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page as number)}
+                              className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                currentPage === page
+                                  ? "bg-qsights-dark text-white shadow-sm"
+                                  : "text-gray-700 hover:bg-gray-100 border border-gray-300"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          )
+                        ));
+                      })()}
+                      <button
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        title="Last page"
+                      >
+                        »
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </CardContent>
         </Card>

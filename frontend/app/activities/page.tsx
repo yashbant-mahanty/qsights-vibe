@@ -44,7 +44,7 @@ export default function ActivitiesPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
   const [selectedTab, setSelectedTab] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -473,6 +473,11 @@ export default function ActivitiesPage() {
       return matchesTab && matchesStatus && matchesSearch;
     });
   }, [allActivitiesDisplay, selectedTab, selectedStatus, searchQuery]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedTab, selectedStatus, searchQuery]);
 
   const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
   
@@ -1190,40 +1195,95 @@ export default function ActivitiesPage() {
             </div>
 
             {/* Pagination */}
-            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-              <div className="text-sm text-gray-500">
-                Showing{" "}
-                <span className="font-medium text-gray-900">
-                  {(currentPage - 1) * itemsPerPage + 1}
-                </span>{" "}
-                to{" "}
-                <span className="font-medium text-gray-900">
-                  {Math.min(currentPage * itemsPerPage, filteredActivities.length)}
-                </span>{" "}
-                of{" "}
-                <span className="font-medium text-gray-900">
-                  {filteredActivities.length}
-                </span>{" "}
-                results
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="px-4 py-2 text-sm font-medium text-gray-900">
-                  {currentPage}
-                </span>
-                <button
-                  onClick={() => setCurrentPage((prev) => prev + 1)}
-                  disabled={currentPage * itemsPerPage >= filteredActivities.length}
-                  className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+            <div className="px-6 py-4 border-t border-gray-200">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-gray-600">
+                    Showing {filteredActivities.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                    {Math.min(currentPage * itemsPerPage, filteredActivities.length)} of{" "}
+                    {filteredActivities.length} events
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    title="First page"
+                  >
+                    «
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-600" />
+                  </button>
+                  {(() => {
+                    const pages: (number | string)[] = [];
+                    const maxVisible = 5;
+                    if (totalPages <= maxVisible + 2) {
+                      for (let i = 1; i <= totalPages; i++) pages.push(i);
+                    } else {
+                      pages.push(1);
+                      let start = Math.max(2, currentPage - Math.floor(maxVisible / 2));
+                      let end = Math.min(totalPages - 1, start + maxVisible - 1);
+                      if (end === totalPages - 1) start = Math.max(2, end - maxVisible + 1);
+                      if (start > 2) pages.push('...');
+                      for (let i = start; i <= end; i++) pages.push(i);
+                      if (end < totalPages - 1) pages.push('...');
+                      if (totalPages > 1) pages.push(totalPages);
+                    }
+                    return pages.map((page, idx) => (
+                      page === '...' ? (
+                        <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                      ) : (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page as number)}
+                          className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            currentPage === page
+                              ? "bg-qsights-dark text-white shadow-sm"
+                              : "text-gray-700 hover:bg-gray-100 border border-gray-300"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      )
+                    ));
+                  })()}
+                  <button
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    title="Last page"
+                  >
+                    »
+                  </button>
+                </div>
               </div>
             </div>
           </CardContent>
