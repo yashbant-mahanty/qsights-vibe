@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import RoleBasedLayout from "@/components/role-based-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +32,7 @@ export default function ParticipantsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedProgram, setSelectedProgram] = useState("all");
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -438,32 +438,44 @@ export default function ParticipantsPage() {
     },
   ];
 
-  const programNames = Array.from(
+  const programNames = useMemo(() => Array.from(
     new Set(displayParticipants.flatMap((p) => p.programs))
-  );
+  ), [displayParticipants]);
 
-  const filteredParticipants = displayParticipants.filter((participant) => {
-    const matchesSearch =
-      participant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      participant.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      participant.organization.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      selectedStatus === "all" || participant.status === selectedStatus;
-    const matchesProgram =
-      selectedProgram === "all" ||
-      participant.programs.includes(selectedProgram);
-    return matchesSearch && matchesStatus && matchesProgram;
-  }).sort((a, b) => {
-    // Sort by latest first (joinedDate)
-    const dateA = new Date(a.joinedDate || 0).getTime();
-    const dateB = new Date(b.joinedDate || 0).getTime();
-    return dateB - dateA;
-  });
+  // Memoize filtered participants to improve performance
+  const filteredParticipants = useMemo(() => {
+    const searchLower = searchQuery.toLowerCase();
+    return displayParticipants.filter((participant) => {
+      const matchesSearch =
+        participant.name.toLowerCase().includes(searchLower) ||
+        participant.email.toLowerCase().includes(searchLower) ||
+        participant.organization.toLowerCase().includes(searchLower);
+      const matchesStatus =
+        selectedStatus === "all" || participant.status === selectedStatus;
+      const matchesProgram =
+        selectedProgram === "all" ||
+        participant.programs.includes(selectedProgram);
+      return matchesSearch && matchesStatus && matchesProgram;
+    }).sort((a, b) => {
+      // Sort by latest first (joinedDate)
+      const dateA = new Date(a.joinedDate || 0).getTime();
+      const dateB = new Date(b.joinedDate || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [displayParticipants, searchQuery, selectedStatus, selectedProgram]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedStatus, selectedProgram]);
 
   const totalPages = Math.ceil(filteredParticipants.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentParticipants = filteredParticipants.slice(startIndex, endIndex);
+  const currentParticipants = useMemo(() => 
+    filteredParticipants.slice(startIndex, endIndex),
+    [filteredParticipants, startIndex, endIndex]
+  );
 
   if (loading) {
     return (
@@ -758,45 +770,119 @@ export default function ParticipantsPage() {
 
             {/* Pagination */}
             <div className="px-6 py-4 border-t border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600">
-                  Showing {startIndex + 1} to{" "}
-                  {Math.min(endIndex, filteredParticipants.length)} of{" "}
-                  {filteredParticipants.length} participants
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-gray-600">
+                    Showing {filteredParticipants.length > 0 ? startIndex + 1 : 0} to{" "}
+                    {Math.min(endIndex, filteredParticipants.length)} of{" "}
+                    {filteredParticipants.length} participants
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  {/* First page button */}
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    title="First page"
+                  >
+                    «
+                  </button>
+                  {/* Previous button */}
                   <button
                     onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
-                    className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <ChevronLeft className="w-4 h-4 text-gray-600" />
                   </button>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                      (page) => (
+                  
+                  {/* Smart page numbers - show max 5 with ellipsis */}
+                  {(() => {
+                    const pages: (number | string)[] = [];
+                    const maxVisible = 5;
+                    
+                    if (totalPages <= maxVisible + 2) {
+                      // Show all pages if total is small
+                      for (let i = 1; i <= totalPages; i++) pages.push(i);
+                    } else {
+                      // Always show first page
+                      pages.push(1);
+                      
+                      // Calculate start and end of visible range
+                      let start = Math.max(2, currentPage - Math.floor(maxVisible / 2));
+                      let end = Math.min(totalPages - 1, start + maxVisible - 1);
+                      
+                      // Adjust start if end is at max
+                      if (end === totalPages - 1) {
+                        start = Math.max(2, end - maxVisible + 1);
+                      }
+                      
+                      // Add ellipsis if needed before range
+                      if (start > 2) pages.push('...');
+                      
+                      // Add visible range
+                      for (let i = start; i <= end; i++) pages.push(i);
+                      
+                      // Add ellipsis if needed after range
+                      if (end < totalPages - 1) pages.push('...');
+                      
+                      // Always show last page
+                      if (totalPages > 1) pages.push(totalPages);
+                    }
+                    
+                    return pages.map((page, idx) => (
+                      page === '...' ? (
+                        <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">
+                          ...
+                        </span>
+                      ) : (
                         <button
                           key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                          onClick={() => setCurrentPage(page as number)}
+                          className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                             currentPage === page
-                              ? "bg-qsights-dark text-white"
-                              : "text-gray-700 hover:bg-gray-100"
+                              ? "bg-qsights-dark text-white shadow-sm"
+                              : "text-gray-700 hover:bg-gray-100 border border-gray-300"
                           }`}
                         >
                           {page}
                         </button>
                       )
-                    )}
-                  </div>
+                    ));
+                  })()}
+                  
+                  {/* Next button */}
                   <button
-                    onClick={() =>
-                      setCurrentPage(Math.min(totalPages, currentPage + 1))
-                    }
-                    disabled={currentPage === totalPages}
-                    className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <ChevronRight className="w-4 h-4 text-gray-600" />
+                  </button>
+                  {/* Last page button */}
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    title="Last page"
+                  >
+                    »
                   </button>
                 </div>
               </div>
