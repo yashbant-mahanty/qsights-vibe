@@ -671,6 +671,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
         });
     });
     
+    // Evaluation Custom Questionnaires (persistent storage for evaluation form selection)
+    Route::prefix('evaluation-custom-questionnaires')->group(function () {
+        Route::get('/', [App\Http\Controllers\EvaluationCustomQuestionnaireController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\EvaluationCustomQuestionnaireController::class, 'store']);
+        Route::delete('/{questionnaireId}', [App\Http\Controllers\EvaluationCustomQuestionnaireController::class, 'destroy']);
+    });
+    
     // My Evaluations (for logged-in staff to see/complete their pending evaluations)
     Route::prefix('my-evaluations')->group(function () {
         Route::get('/pending', [App\Http\Controllers\Api\EvaluationTakeController::class, 'getMyPendingEvaluations']);

@@ -54,7 +54,8 @@ function QuestionnairesPageContent() {
 
   // Handle canceling selection mode
   const handleCancelSelection = () => {
-    router.push('/evaluation-new?tab=trigger');
+    // Use window.location for full page navigation to ensure tab state is properly set
+    window.location.href = '/evaluation-new?tab=trigger';
   };
 
   useEffect(() => {
@@ -119,12 +120,14 @@ function QuestionnairesPageContent() {
 
   const handlePreview = (questionnaireId: string) => {
     // Navigate to builder in preview mode
-    router.push(`/questionnaires/${questionnaireId}?mode=preview`);
+    const returnParam = selectionMode ? '&return=evaluation' : '';
+    router.push(`/questionnaires/${questionnaireId}?mode=preview${returnParam}`);
   };
 
   const handleEdit = (questionnaireId: string) => {
     // Navigate to builder in edit mode
-    router.push(`/questionnaires/${questionnaireId}?mode=edit`);
+    const returnParam = selectionMode ? '&return=evaluation' : '';
+    router.push(`/questionnaires/${questionnaireId}?mode=edit${returnParam}`);
   };
 
   const handleDuplicate = async (questionnaireId: string) => {
