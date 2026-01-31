@@ -108,7 +108,9 @@ function QuestionnaireBuilderPageContent() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selectedProgramId, setSelectedProgramId] = useState("");
   const [loadingPrograms, setLoadingPrograms] = useState(true);
-  const [questionnaireType, setQuestionnaireType] = useState("Survey");
+  // Default to Evaluation type when coming from evaluation page
+  const defaultType = searchParams.get('type') === 'evaluation' ? 'Evaluation' : 'Survey';
+  const [questionnaireType, setQuestionnaireType] = useState(defaultType);
   const [randomizeQuestions, setRandomizeQuestions] = useState(false);
   const [randomizeOptions, setRandomizeOptions] = useState(false);
   const [showProgressBar, setShowProgressBar] = useState(true);

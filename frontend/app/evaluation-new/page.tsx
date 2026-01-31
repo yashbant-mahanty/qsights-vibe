@@ -282,7 +282,25 @@ function EvaluationNewPageContent() {
     try {
       const response = await fetchWithAuth(`/questionnaires/${id}`);
       if (response) {
-        setCustomQuestionnaireData(response);
+        // The API returns { data: questionnaire } - extract it
+        const questionnaire = response.data || response;
+        
+        // Extract all questions from sections
+        const allQuestions: any[] = [];
+        if (questionnaire.sections && Array.isArray(questionnaire.sections)) {
+          questionnaire.sections.forEach((section: any) => {
+            if (section.questions && Array.isArray(section.questions)) {
+              allQuestions.push(...section.questions);
+            }
+          });
+        }
+        
+        // Add extracted questions to the questionnaire data
+        setCustomQuestionnaireData({
+          ...questionnaire,
+          questions: allQuestions
+        });
+        console.log('[Evaluation] Loaded questionnaire with', allQuestions.length, 'questions');
       }
     } catch (error) {
       console.error('Failed to fetch questionnaire:', error);
@@ -1137,14 +1155,33 @@ function EvaluationNewPageContent() {
       if (selectedTemplate === 'custom_questionnaire' && customQuestionnaireData) {
         triggerTemplateId = `questionnaire_${customQuestionnaireId}`;
         triggerTemplateName = customQuestionnaireName || 'Custom Questionnaire';
+        
+        // Log the questionnaire data for debugging
+        console.log('[Evaluation] Custom questionnaire data:', customQuestionnaireData);
+        console.log('[Evaluation] Questions available:', customQuestionnaireData.questions);
+        
         // Convert questionnaire questions to evaluation format
-        triggerTemplateQuestions = customQuestionnaireData.questions?.map((q: any) => ({
-          question: q.title || q.question,
-          type: mapQuestionType(q.type),
-          options: q.options || q.choices,
-          scale: q.scale || 5,
-          description: q.description || '',
-        })) || [];
+        const questions = customQuestionnaireData.questions || [];
+        triggerTemplateQuestions = questions.map((q: any) => {
+          // Get options from various possible locations
+          const options = q.options || q.choices || q.settings?.options || [];
+          return {
+            question: q.title || q.question || q.text || '',
+            type: mapQuestionType(q.type),
+            options: Array.isArray(options) ? options : [],
+            scale: q.scale || q.settings?.scale || 5,
+            description: q.description || '',
+          };
+        });
+        
+        console.log('[Evaluation] Converted questions:', triggerTemplateQuestions);
+        
+        // Validate we have questions
+        if (!triggerTemplateQuestions || triggerTemplateQuestions.length === 0) {
+          showToast.error('The selected questionnaire has no questions. Please add questions or select a different questionnaire.');
+          setTriggering(false);
+          return;
+        }
       }
       
       // For superadmin, get program_id from the selected evaluators' mappings
@@ -1918,19 +1955,11 @@ function EvaluationNewPageContent() {
                     );
                   })}
                   
-                  {/* Custom Questionnaire Option */}
+                  {/* Custom Questionnaire Option - Always show for selecting/creating new */}
                   <button
                     onClick={() => {
-                      if (selectedTemplate === 'custom_questionnaire' && customQuestionnaireId) {
-                        // If already selected, deselect
-                        setSelectedTemplate(null);
-                        setCustomQuestionnaireId(null);
-                        setCustomQuestionnaireName(null);
-                        setCustomQuestionnaireData(null);
-                      } else {
-                        // Navigate to questionnaires page in selection mode
-                        router.push('/questionnaires?mode=select-for-evaluation');
-                      }
+                      // Always navigate to questionnaires page to select or create
+                      router.push('/questionnaires?mode=select-for-evaluation');
                     }}
                     className={`p-4 rounded-xl border-2 text-left transition-all ${
                       selectedTemplate === 'custom_questionnaire'
@@ -1942,17 +1971,42 @@ function EvaluationNewPageContent() {
                       <FileQuestion className="h-5 w-5 text-green-600" />
                     </div>
                     <h4 className="font-semibold text-gray-900">
-                      {customQuestionnaireName || 'Custom Questionnaire'}
+                      {customQuestionnaireId ? customQuestionnaireName : 'Custom Questionnaire'}
                     </h4>
                     <p className="text-xs text-gray-500 mt-1">
                       {customQuestionnaireId 
-                        ? 'Click to change or deselect'
+                        ? 'Click to select a different questionnaire'
                         : 'Select or create from your questionnaires'}
                     </p>
                     {customQuestionnaireData ? (
-                      <p className="text-xs text-green-600 mt-2">
-                        {customQuestionnaireData.questions?.length || 0} questions
-                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-xs text-green-600">
+                          {customQuestionnaireData.questions?.length || 0} questions
+                        </p>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Navigate to edit the questionnaire
+                            router.push(`/questionnaires/${customQuestionnaireId}?mode=edit&return=evaluation`);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          <Edit2 className="h-3 w-3" /> Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Clear the custom questionnaire selection
+                            setSelectedTemplate(null);
+                            setCustomQuestionnaireId(null);
+                            setCustomQuestionnaireName(null);
+                            setCustomQuestionnaireData(null);
+                          }}
+                          className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1"
+                        >
+                          <X className="h-3 w-3" /> Clear
+                        </button>
+                      </div>
                     ) : (
                       <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
                         <Plus className="h-3 w-3" /> Select questionnaire

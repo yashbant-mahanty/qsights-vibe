@@ -446,7 +446,7 @@ function QuestionnairesPageContent() {
             )}
             {currentUser && canCreateResource(currentUser.role, 'questionnaires') && (
               <a
-                href={selectionMode ? "/questionnaires/create?mode=select-for-evaluation" : "/questionnaires/create"}
+                href={selectionMode ? "/questionnaires/create?mode=select-for-evaluation&type=evaluation" : "/questionnaires/create"}
                 className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
               >
                 <Plus className="w-4 h-4" />
