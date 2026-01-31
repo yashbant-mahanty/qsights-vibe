@@ -560,9 +560,14 @@ export const groupHeadsApi = {
 
 // Programs API
 export const programsApi = {
-  async getAll(filters?: { program_id?: string; organization_id?: string }): Promise<Program[]> {
-    const query = buildQueryString({ with: 'organization', withCount: 'participants,activities', ...filters });
+  async getAll(filters?: { program_id?: string; organization_id?: string; all_statuses?: boolean }): Promise<Program[]> {
+    // Request all results without pagination by setting per_page to a high number
+    // For Programs page (super-admin), pass all_statuses=true to see all programs including expired
+    const query = buildQueryString({ with: 'organization', withCount: 'participants,activities', per_page: 9999, ...filters });
     const data = await fetchWithAuth(`/programs${query}`);
+    console.log('[programsApi.getAll] Raw response:', data);
+    console.log('[programsApi.getAll] Filters applied:', filters);
+    console.log('[programsApi.getAll] Total programs:', data.total || (data.data ? data.data.length : 'unknown'));
     return data.data || data;
   },
 

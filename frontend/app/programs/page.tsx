@@ -88,12 +88,25 @@ export default function ProgramsPage() {
         const isProgramRole = userData?.user?.role && ['program-admin', 'program-manager', 'program-moderator'].includes(userData.user.role);
         const programId = userData?.user?.programId;
         
-        console.log('🔍 Loading programs with filter:', { isProgramRole, programId });
+        console.log('🔍 [PROGRAMS PAGE] Loading programs with filter:', { 
+          isProgramRole, 
+          programId,
+          userRole: userData?.user?.role,
+          userName: userData?.user?.name
+        });
         
+        // For Programs page, always request all statuses (active, expired, completed) for super-admin
+        // Program-scoped roles will still be filtered by their program_id
         const data = await programsApi.getAll(
-          isProgramRole && programId ? { program_id: programId } : {}
+          isProgramRole && programId ? { program_id: programId, all_statuses: true } : { all_statuses: true }
         );
-        console.log('✅ Programs loaded:', data.length, 'programs');
+        console.log('✅ [PROGRAMS PAGE] Programs loaded:', data.length, 'programs');
+        console.log('📋 [PROGRAMS PAGE] Program details:', data.map(p => ({ 
+          id: p.id, 
+          name: p.name || '(EMPTY NAME)', 
+          code: p.code,
+          status: p.status 
+        })));
         setPrograms(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load programs');
@@ -536,7 +549,7 @@ export default function ProgramsPage() {
                             </div>
                             <div className="ml-3">
                               <p className="text-sm font-semibold text-gray-900">
-                                {program.name}
+                                {program.name || "(Unnamed Program)"}
                               </p>
                               <p className="text-xs text-gray-500 font-mono">
                                 {program.code}

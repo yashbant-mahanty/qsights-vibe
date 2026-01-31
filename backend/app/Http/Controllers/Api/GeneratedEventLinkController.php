@@ -88,8 +88,8 @@ class GeneratedEventLinkController extends Controller
     {
         $user = $request->user();
 
-        // Check permissions
-        if (!in_array($user->role, ['super-admin', 'admin', 'program-admin', 'program-manager'])) {
+        // Check permissions - moderators can view but not generate/modify
+        if (!in_array($user->role, ['super-admin', 'admin', 'program-admin', 'program-manager', 'program-moderator'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -249,7 +249,8 @@ class GeneratedEventLinkController extends Controller
     {
         $user = $request->user();
 
-        if (!in_array($user->role, ['super-admin', 'admin', 'program-admin', 'program-manager'])) {
+        // Moderators can also export links for viewing purposes
+        if (!in_array($user->role, ['super-admin', 'admin', 'program-admin', 'program-manager', 'program-moderator'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
