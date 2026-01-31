@@ -32,11 +32,16 @@ import {
 } from "lucide-react";
 import { generatedLinksApi, type GeneratedEventLink, type GeneratedLinkGroup, activitiesApi } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function GeneratedLinksPage() {
   const router = useRouter();
   const params = useParams();
   const activityId = params.id as string;
+  const { currentUser } = useAuth();
+  
+  // Check if user is moderator (can view but not modify)
+  const isModerator = currentUser?.role === 'program-moderator';
 
   const [activity, setActivity] = useState<any>(null);
   const [links, setLinks] = useState<GeneratedEventLink[]>([]);
@@ -451,13 +456,15 @@ export default function GeneratedLinksPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
-            <button
-              onClick={() => setShowGenerateForm(!showGenerateForm)}
-              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Generate Links
-            </button>
+            {!isModerator && (
+              <button
+                onClick={() => setShowGenerateForm(!showGenerateForm)}
+                className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Generate Links
+              </button>
+            )}
           </div>
         </div>
 
@@ -687,13 +694,15 @@ export default function GeneratedLinksPage() {
                         <Mail className="w-4 h-4" />
                         Email Selected
                       </button>
-                      <button
-                        onClick={handleBulkDeleteClick}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete Selected
-                      </button>
+                      {!isModerator && (
+                        <button
+                          onClick={handleBulkDeleteClick}
+                          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete Selected
+                        </button>
+                      )}
                       <button
                         onClick={() => setSelectedLinks(new Set())}
                         className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
@@ -803,13 +812,15 @@ export default function GeneratedLinksPage() {
                                 <Copy className="w-4 h-4" />
                               )}
                             </button>
-                            <button
-                              onClick={() => handleDeleteClick(link.id, link.tag)}
-                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete Link"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {!isModerator && (
+                              <button
+                                onClick={() => handleDeleteClick(link.id, link.tag)}
+                                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete Link"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

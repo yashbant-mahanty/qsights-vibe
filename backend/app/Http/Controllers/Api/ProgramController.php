@@ -49,10 +49,17 @@ class ProgramController extends Controller
                 }
             ]);
         
-        // Only include active, non-deleted programs
-        if (!$request->boolean('with_trashed')) {
-            $query->where('status', 'active')
-                  ->whereNull('deleted_at');
+        // Filter by status - default to active only, unless 'all_statuses' is requested
+        if (!$request->boolean('all_statuses')) {
+            $query->where('status', 'active');
+        }
+        
+        // Exclude soft-deleted programs
+        $query->whereNull('deleted_at');
+        
+        // Include trashed only if explicitly requested
+        if ($request->boolean('with_trashed')) {
+            $query->withTrashed();
         }
         
         // Auto-update expired programs

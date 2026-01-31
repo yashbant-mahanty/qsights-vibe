@@ -52,6 +52,7 @@ interface Mapping {
   evaluator_name: string;
   evaluator_role: string;
   evaluator_dept: string;
+  program_id?: string;
   subordinates: {
     id: string;
     staff_id: string;
@@ -128,7 +129,7 @@ interface EvaluatorReport {
   total_subordinates_evaluated: number;
 }
 
-type TabType = 'setup' | 'trigger' | 'history' | 'reports';
+type TabType = 'setup' | 'trigger' | 'history' | 'reports' | 'my-dashboard';
 
 // Predefined Evaluation Templates
 const evaluationTemplates: EvaluationTemplate[] = [
@@ -220,8 +221,16 @@ const evaluationTemplates: EvaluationTemplate[] = [
 export default function EvaluationNewPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('setup');
   const [loading, setLoading] = useState(false);
+  
+  // Program ID (for multi-tenancy) and user - defined early
+  const [programId, setProgramId] = useState<string>('');
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [selectedProgramFilter, setSelectedProgramFilter] = useState<string>('all'); // For superadmin filter
+  
+  // Set default active tab based on user role
+  const [activeTab, setActiveTab] = useState<TabType>('setup');
   
   // Toast helper functions for uniform styling
   const showToast = {
@@ -349,13 +358,8 @@ export default function EvaluationNewPage() {
       };
     };
   }, []);
-  
-  // Program ID (for multi-tenancy)
-  const [programId, setProgramId] = useState<string>('');
-  const [programs, setPrograms] = useState<any[]>([]);
-  const [user, setUser] = useState<any>(null);
 
-  // Fetch program from user
+  // Fetch program from user - moved up in component
   useEffect(() => {
     const fetchProgramId = async () => {
       try {
@@ -375,11 +379,18 @@ export default function EvaluationNewPage() {
           setProgramId(userProgramId);
           console.log('[Evaluation Page] State set to programId:', userProgramId);
           
-          // If super-admin, fetch all programs
+          // Set default tab based on role
+          if (userData.role === 'program-moderator' || userData.role === 'program-manager') {
+            setActiveTab('my-dashboard');
+          } else {
+            setActiveTab('setup');
+          }
+          
+          // If super-admin, fetch all programs (including expired)
           if (userData.role === 'super-admin') {
-            const programsRes = await fetchWithAuth('/programs');
-            if (programsRes.success || programsRes.programs) {
-              setPrograms(programsRes.programs || []);
+            const programsRes = await fetchWithAuth('/programs?all_statuses=true');
+            if (programsRes.data || programsRes.programs) {
+              setPrograms(programsRes.data || programsRes.programs || []);
             }
           }
         }
@@ -391,11 +402,16 @@ export default function EvaluationNewPage() {
   }, []);
 
   // Fetch data - Derive departments from roles categories
-  const fetchDepartments = useCallback(async () => {
-    console.log('[Evaluation Page] fetchDepartments called, programId:', programId);
-    if (!programId) return;
+  const fetchDepartments = useCallback(async (filterProgramId?: string) => {
+    // Use filterProgramId if provided and non-empty, otherwise fall back to user's programId
+    const effectiveProgramId = (filterProgramId && filterProgramId !== '') ? filterProgramId : programId;
+    console.log('[Evaluation Page] fetchDepartments called, effectiveProgramId:', effectiveProgramId, 'programId:', programId, 'user role:', user?.role);
+    if (!effectiveProgramId && user?.role !== 'super-admin') return;
     try {
-      const response = await fetchWithAuth(`/evaluation/departments?program_id=${programId}`);
+      const url = effectiveProgramId 
+        ? `/evaluation/departments?program_id=${effectiveProgramId}`
+        : '/evaluation/departments'; // Fetch all for superadmin
+      const response = await fetchWithAuth(url);
       console.log('[Evaluation Page] Departments response:', response);
       if (response.success) {
         setDepartments(response.departments || []);
@@ -403,13 +419,18 @@ export default function EvaluationNewPage() {
     } catch (error) {
       console.error('Failed to fetch departments:', error);
     }
-  }, [programId]);
+  }, [programId, user]);
 
-  const fetchRoles = useCallback(async () => {
-    console.log('[Evaluation Page] fetchRoles called, programId:', programId);
-    if (!programId) return;
+  const fetchRoles = useCallback(async (filterProgramId?: string) => {
+    // Use filterProgramId if provided and non-empty, otherwise fall back to user's programId
+    const effectiveProgramId = (filterProgramId && filterProgramId !== '') ? filterProgramId : programId;
+    console.log('[Evaluation Page] fetchRoles called, effectiveProgramId:', effectiveProgramId, 'programId:', programId);
+    if (!effectiveProgramId && user?.role !== 'super-admin') return;
     try {
-      const response = await fetchWithAuth(`/evaluation/roles?program_id=${programId}`);
+      const url = effectiveProgramId 
+        ? `/evaluation/roles?program_id=${effectiveProgramId}`
+        : '/evaluation/roles'; // Fetch all for superadmin
+      const response = await fetchWithAuth(url);
       console.log('[Evaluation Page] Roles response:', response);
       if (response.success) {
         setRoles(response.roles || []);
@@ -417,13 +438,18 @@ export default function EvaluationNewPage() {
     } catch (error) {
       console.error('Failed to fetch roles:', error);
     }
-  }, [programId]);
+  }, [programId, user]);
 
-  const fetchStaff = useCallback(async () => {
-    console.log('[Evaluation Page] fetchStaff called, programId:', programId);
-    if (!programId) return;
+  const fetchStaff = useCallback(async (filterProgramId?: string) => {
+    // Use filterProgramId if provided and non-empty, otherwise fall back to user's programId
+    const effectiveProgramId = (filterProgramId && filterProgramId !== '') ? filterProgramId : programId;
+    console.log('[Evaluation Page] fetchStaff called, effectiveProgramId:', effectiveProgramId, 'programId:', programId);
+    if (!effectiveProgramId && user?.role !== 'super-admin') return;
     try {
-      const response = await fetchWithAuth(`/evaluation/staff?program_id=${programId}`);
+      const url = effectiveProgramId 
+        ? `/evaluation/staff?program_id=${effectiveProgramId}`
+        : '/evaluation/staff'; // Fetch all for superadmin
+      const response = await fetchWithAuth(url);
       console.log('[Evaluation Page] Staff response:', response);
       if (response.success) {
         setStaff(response.staff || []);
@@ -431,12 +457,18 @@ export default function EvaluationNewPage() {
     } catch (error) {
       console.error('Failed to fetch staff:', error);
     }
-  }, [programId]);
+  }, [programId, user]);
 
-  const fetchMappings = useCallback(async () => {
-    if (!programId) return;
+  const fetchMappings = useCallback(async (filterProgramId?: string) => {
+    // Use filterProgramId if provided and non-empty, otherwise fall back to user's programId
+    const effectiveProgramId = (filterProgramId && filterProgramId !== '') ? filterProgramId : programId;
+    console.log('[Evaluation Page] fetchMappings called, effectiveProgramId:', effectiveProgramId, 'programId:', programId);
+    if (!effectiveProgramId && user?.role !== 'super-admin') return;
     try {
-      const response = await fetchWithAuth(`/evaluation/hierarchy?program_id=${programId}`);
+      const url = effectiveProgramId 
+        ? `/evaluation/hierarchy?program_id=${effectiveProgramId}`
+        : '/evaluation/hierarchy'; // Fetch all for superadmin
+      const response = await fetchWithAuth(url);
       if (response.success) {
         // Transform hierarchy data into mapping format
         const hierarchyData = response.hierarchies || response.hierarchy || [];
@@ -461,6 +493,7 @@ export default function EvaluationNewPage() {
             evaluator_name: firstItem.manager_name || 'Unknown',
             evaluator_role: firstItem.manager_role_name || '',
             evaluator_dept: firstItem.manager_role_category || firstItem.manager_department || '',
+            program_id: firstItem.program_id, // Include program_id from hierarchy
             subordinates: grouped[managerId].map((h: any) => ({
               id: h.id,
               staff_id: h.staff_id,
@@ -475,38 +508,53 @@ export default function EvaluationNewPage() {
     } catch (error) {
       console.error('Failed to fetch mappings:', error);
     }
-  }, [programId]);
+  }, [programId, user]);
 
   const fetchTriggeredEvaluations = useCallback(async () => {
-    if (!programId) return;
+    // Superadmin can view all programs, regular users need programId
+    if (!programId && user?.role !== 'super-admin') return;
     try {
-      const response = await fetchWithAuth(`/evaluation/triggered?program_id=${programId}`);
+      const effectiveProgramId = selectedProgramFilter !== 'all' ? selectedProgramFilter : programId;
+      const url = effectiveProgramId 
+        ? `/evaluation/triggered?program_id=${effectiveProgramId}`
+        : '/evaluation/triggered'; // Fetch all for superadmin with "All Programs" filter
+      const response = await fetchWithAuth(url);
       if (response.success) {
         setTriggeredEvaluations(response.evaluations || []);
       }
     } catch (error) {
       console.error('Failed to fetch triggered evaluations:', error);
     }
-  }, [programId]);
+  }, [programId, selectedProgramFilter, user]);
 
   // Fetch report data
   const fetchReportSummary = useCallback(async () => {
-    if (!programId) return;
+    if (!programId && user?.role !== 'super-admin') return;
     try {
-      const response = await fetchWithAuth(`/evaluation/reports/summary?program_id=${programId}`);
+      const effectiveProgramId = selectedProgramFilter !== 'all' ? selectedProgramFilter : programId;
+      const url = effectiveProgramId
+        ? `/evaluation/reports/summary?program_id=${effectiveProgramId}`
+        : '/evaluation/reports/summary'; // Fetch all for superadmin
+      const response = await fetchWithAuth(url);
       if (response.success) {
         setReportSummary(response.summary);
       }
     } catch (error) {
       console.error('Failed to fetch report summary:', error);
     }
-  }, [programId]);
+  }, [programId, selectedProgramFilter, user]);
 
   const fetchStaffReports = useCallback(async () => {
-    if (!programId) return;
+    if (!programId && user?.role !== 'super-admin') return;
     try {
       setReportLoading(true);
-      const params = new URLSearchParams({ program_id: programId });
+      const effectiveProgramId = selectedProgramFilter !== 'all' ? selectedProgramFilter : programId;
+      const params = new URLSearchParams();
+      
+      // Only add program_id if we have one (superadmin with "All Programs" won't have one)
+      if (effectiveProgramId) {
+        params.append('program_id', effectiveProgramId);
+      }
       
       if (reportFilters.department_id) params.append('department_id', reportFilters.department_id);
       if (reportFilters.evaluator_id) params.append('evaluator_id', reportFilters.evaluator_id);
@@ -524,23 +572,31 @@ export default function EvaluationNewPage() {
     } finally {
       setReportLoading(false);
     }
-  }, [programId, reportFilters]);
+  }, [programId, selectedProgramFilter, reportFilters, user]);
 
   const fetchEvaluatorReports = useCallback(async () => {
-    if (!programId) return;
+    if (!programId && user?.role !== 'super-admin') return;
     try {
-      const response = await fetchWithAuth(`/evaluation/reports/evaluators?program_id=${programId}`);
+      const effectiveProgramId = selectedProgramFilter !== 'all' ? selectedProgramFilter : programId;
+      const url = effectiveProgramId
+        ? `/evaluation/reports/evaluators?program_id=${effectiveProgramId}`
+        : '/evaluation/reports/evaluators'; // Fetch all for superadmin
+      const response = await fetchWithAuth(url);
       if (response.success) {
         setEvaluatorReports(response.evaluators || []);
       }
     } catch (error) {
       console.error('Failed to fetch evaluator reports:', error);
     }
-  }, [programId]);
+  }, [programId, selectedProgramFilter, user]);
 
   const handleExportReport = async (format: 'json' | 'csv') => {
     try {
-      const params = new URLSearchParams({ program_id: programId, format });
+      const effectiveProgramId = selectedProgramFilter !== 'all' ? selectedProgramFilter : programId;
+      const params = new URLSearchParams({ format });
+      if (effectiveProgramId) {
+        params.append('program_id', effectiveProgramId);
+      }
       
       if (format === 'csv') {
         window.open(`${process.env.NEXT_PUBLIC_API_URL}/evaluation/reports/export?${params.toString()}`, '_blank');
@@ -564,39 +620,41 @@ export default function EvaluationNewPage() {
   };
 
   useEffect(() => {
-    if (programId) {
-      fetchDepartments();
-      fetchRoles();
-      fetchStaff();
+    if (programId || user?.role === 'super-admin') {
+      const filterProgramId = selectedProgramFilter === 'all' ? '' : selectedProgramFilter;
+      fetchDepartments(filterProgramId);
+      fetchRoles(filterProgramId);
+      fetchStaff(filterProgramId);
     }
-  }, [programId, fetchDepartments, fetchRoles, fetchStaff]);
+  }, [programId, selectedProgramFilter, user, fetchDepartments, fetchRoles, fetchStaff]);
 
   useEffect(() => {
-    if (programId) {
-      fetchMappings();
+    if (programId || user?.role === 'super-admin') {
+      const filterProgramId = selectedProgramFilter === 'all' ? '' : selectedProgramFilter;
+      fetchMappings(filterProgramId);
     }
-  }, [programId, fetchMappings]);
+  }, [programId, selectedProgramFilter, user, fetchMappings]);
 
   useEffect(() => {
-    if (programId && activeTab === 'history') {
+    if ((programId || user?.role === 'super-admin') && (activeTab === 'history' || activeTab === 'my-dashboard')) {
       fetchTriggeredEvaluations();
     }
-  }, [programId, activeTab, fetchTriggeredEvaluations]);
+  }, [programId, activeTab, user, fetchTriggeredEvaluations]);
 
   useEffect(() => {
-    if (programId && activeTab === 'reports') {
+    if ((programId || user?.role === 'super-admin') && activeTab === 'reports') {
       fetchReportSummary();
       fetchStaffReports();
       fetchEvaluatorReports();
     }
-  }, [programId, activeTab, fetchReportSummary, fetchStaffReports, fetchEvaluatorReports]);
+  }, [programId, activeTab, user, fetchReportSummary, fetchStaffReports, fetchEvaluatorReports]);
 
   // Refetch staff reports when filters change
   useEffect(() => {
-    if (programId && activeTab === 'reports') {
+    if ((programId || user?.role === 'super-admin') && activeTab === 'reports') {
       fetchStaffReports();
     }
-  }, [reportFilters, programId, activeTab, fetchStaffReports]);
+  }, [reportFilters, programId, activeTab, user, fetchStaffReports]);
 
   // CRUD handlers for Department
   const handleAddDepartment = async () => {
@@ -996,6 +1054,29 @@ export default function EvaluationNewPage() {
       
       const template = evaluationTemplates.find(t => t.id === selectedTemplate);
       
+      // For superadmin, get program_id from the selected evaluators' mappings
+      // For regular users, use their programId
+      let effectiveProgramId = programId;
+      if (user?.role === 'super-admin' && !programId) {
+        // Priority 1: Use selected program filter if not 'all'
+        if (selectedProgramFilter && selectedProgramFilter !== 'all') {
+          effectiveProgramId = selectedProgramFilter;
+        }
+        // Priority 2: Get from the first selected evaluator's mapping
+        else if (selectedEvaluators.length > 0) {
+          const firstMapping = mappings.find(m => selectedEvaluators.includes(m.evaluator_id));
+          if (firstMapping?.program_id) {
+            effectiveProgramId = firstMapping.program_id;
+          }
+        }
+        // Priority 3: If still no program_id, get from first program in list (for super-admin)
+        if (!effectiveProgramId && programs.length > 0) {
+          effectiveProgramId = programs[0].id;
+        }
+      }
+      
+      console.log('[Evaluation] Triggering with program_id:', effectiveProgramId, 'selectedFilter:', selectedProgramFilter, 'mappings:', mappings.length);
+      
       const response = await fetchWithAuth('/evaluation/trigger', {
         method: 'POST',
         body: JSON.stringify({
@@ -1003,7 +1084,7 @@ export default function EvaluationNewPage() {
           template_name: template?.name,
           template_questions: template?.questions,
           evaluator_ids: selectedEvaluators,
-          program_id: programId,
+          program_id: effectiveProgramId,
           email_subject: emailSubject,
           email_body: emailBody,
           start_date: startDate || null,
@@ -1160,12 +1241,28 @@ export default function EvaluationNewPage() {
   // Get evaluators with subordinates (for trigger tab)
   const evaluatorsWithSubordinates = mappings.filter(m => m.subordinates.length > 0);
 
-  const tabs = [
-    { id: 'setup' as TabType, label: 'Setup', icon: Building2, description: 'Departments, Roles, Staff & Mapping' },
-    { id: 'trigger' as TabType, label: 'Trigger', icon: Play, description: 'Send evaluation forms' },
-    { id: 'history' as TabType, label: 'History', icon: History, description: 'View status & results' },
-    { id: 'reports' as TabType, label: 'Reports', icon: BarChart3, description: 'View evaluation reports' },
-  ];
+  // Define tabs based on user role
+  const getTabs = () => {
+    const isModeratorOrManager = user?.role === 'program-moderator' || user?.role === 'program-manager';
+    
+    if (isModeratorOrManager) {
+      // Moderators and Managers only see My Dashboard and Reports
+      return [
+        { id: 'my-dashboard' as TabType, label: 'My Dashboard', icon: CheckCircle, description: 'View evaluations assigned to me' },
+        { id: 'reports' as TabType, label: 'Reports', icon: BarChart3, description: 'View my team reports' },
+      ];
+    }
+    
+    // Admins see all tabs
+    return [
+      { id: 'setup' as TabType, label: 'Setup', icon: Building2, description: 'Departments, Roles, Staff & Mapping' },
+      { id: 'trigger' as TabType, label: 'Trigger', icon: Play, description: 'Send evaluation forms' },
+      { id: 'history' as TabType, label: 'History', icon: History, description: 'View status & results' },
+      { id: 'reports' as TabType, label: 'Reports', icon: BarChart3, description: 'View evaluation reports' },
+    ];
+  };
+  
+  const tabs = getTabs();
 
   return (
     <AppLayout>
@@ -1179,27 +1276,62 @@ export default function EvaluationNewPage() {
           {/* Header with Tabs */}
           <div className="bg-white border-b shadow-sm">
             <div className="px-6 py-4">
-              <h1 className="text-2xl font-bold text-gray-900">Evaluation System</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Setup, trigger, and manage staff performance evaluations
-              </p>
-          </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Evaluation System</h1>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Setup, trigger, and manage staff performance evaluations
+                  </p>
+                </div>
+                {user?.role === 'super-admin' && programs.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700">Program:</label>
+                    <select
+                      value={selectedProgramFilter}
+                      onChange={(e) => {
+                        setSelectedProgramFilter(e.target.value);
+                        // Refetch data when program changes
+                        const newProgramId = e.target.value === 'all' ? '' : e.target.value;
+                        if (activeTab === 'setup') {
+                          fetchDepartments(newProgramId);
+                          fetchRoles(newProgramId);
+                          fetchStaff(newProgramId);
+                          fetchMappings(newProgramId);
+                        }
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                    >
+                      <option value="all">All Programs</option>
+                      {programs.map((program) => (
+                        <option key={program.id} value={program.id}>
+                          {program.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 px-6">
+          {/* Modern Tabs */}
+          <div className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200 flex-wrap gap-1 mx-6 mb-0">
             {tabs.map((tab) => {
               const Icon = tab.icon;
+              const colorClasses = 
+                tab.id === 'my-dashboard' ? 'data-[active=true]:bg-white data-[active=true]:text-green-600 data-[active=true]:shadow-lg data-[active=true]:shadow-green-100' :
+                tab.id === 'setup' ? 'data-[active=true]:bg-white data-[active=true]:text-blue-600 data-[active=true]:shadow-lg data-[active=true]:shadow-blue-100' :
+                tab.id === 'trigger' ? 'data-[active=true]:bg-white data-[active=true]:text-purple-600 data-[active=true]:shadow-lg data-[active=true]:shadow-purple-100' :
+                tab.id === 'history' ? 'data-[active=true]:bg-white data-[active=true]:text-amber-600 data-[active=true]:shadow-lg data-[active=true]:shadow-amber-100' :
+                'data-[active=true]:bg-white data-[active=true]:text-cyan-600 data-[active=true]:shadow-lg data-[active=true]:shadow-cyan-100';
+              
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-5 py-3 border-b-2 transition-all ${
-                    activeTab === tab.id
-                      ? 'border-blue-600 text-blue-600 font-medium bg-blue-50/50'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
+                  data-active={activeTab === tab.id}
+                  className={`inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:text-gray-900 ${colorClasses}`}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="w-4 h-4 mr-2" />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -1209,6 +1341,88 @@ export default function EvaluationNewPage() {
 
         {/* Content */}
         <div className="p-6">
+          {/* MY DASHBOARD TAB - For Moderators and Managers */}
+          {activeTab === 'my-dashboard' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border">
+                <div className="p-4 border-b bg-gray-50">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    My Evaluations
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">Evaluations assigned to me for completion</p>
+                </div>
+                <div className="p-4">
+                  {triggeredEvaluations.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <CheckCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                      <p>No evaluations assigned yet</p>
+                      <p className="text-sm">Evaluations will appear here when assigned by your administrator</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="text-left text-sm text-gray-500 border-b">
+                            <th className="pb-3 font-medium">Form</th>
+                            <th className="pb-3 font-medium">Subordinates to Evaluate</th>
+                            <th className="pb-3 font-medium">Status</th>
+                            <th className="pb-3 font-medium">Assigned</th>
+                            <th className="pb-3 font-medium text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {triggeredEvaluations.map((evaluation) => (
+                            <tr key={evaluation.id} className="text-sm">
+                              <td className="py-4 font-medium text-gray-900">
+                                {evaluation.template_name}
+                              </td>
+                              <td className="py-4 text-gray-600">
+                                {evaluation.subordinates_count} staff member(s)
+                              </td>
+                              <td className="py-4">
+                                {evaluation.status === 'completed' ? (
+                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                    Completed
+                                  </span>
+                                ) : evaluation.status === 'in_progress' ? (
+                                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
+                                    In Progress
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                                    Pending
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-4 text-gray-500">
+                                {new Date(evaluation.triggered_at).toLocaleDateString()}
+                              </td>
+                              <td className="py-4 text-right">
+                                {evaluation.status !== 'completed' && (
+                                  <button
+                                    onClick={() => {
+                                      // TODO: Navigate to evaluation form
+                                      window.open(`/e/evaluate/${evaluation.id}`, '_blank');
+                                    }}
+                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium inline-flex items-center gap-1"
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                    {evaluation.status === 'in_progress' ? 'Continue' : 'Start Evaluation'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* SETUP TAB */}
           {activeTab === 'setup' && (
             <div className="space-y-6">
