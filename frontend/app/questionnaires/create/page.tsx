@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -77,6 +77,8 @@ import { CSS } from '@dnd-kit/utilities';
 
 export default function QuestionnaireBuilderPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectionMode = searchParams.get('mode') === 'select-for-evaluation';
   const [questionnaireName, setQuestionnaireName] = useState("");
   const [questionnaireCode, setQuestionnaireCode] = useState("");
   const [showPreview, setShowPreview] = useState(false);
@@ -913,9 +915,15 @@ export default function QuestionnaireBuilderPage() {
         })),
       };
 
-      await questionnairesApi.create(questionnaireData as any);
+      const createdQuestionnaire = await questionnairesApi.create(questionnaireData as any);
       toast({ title: "Success!", description: "Questionnaire saved successfully!", variant: "success" });
-      router.push('/questionnaires');
+      
+      // If in selection mode, redirect back to evaluation with the newly created questionnaire
+      if (selectionMode && createdQuestionnaire && createdQuestionnaire.id) {
+        router.push(`/evaluation-new?tab=trigger&questionnaire_id=${createdQuestionnaire.id}&questionnaire_name=${encodeURIComponent(questionnaireName)}`);
+      } else {
+        router.push('/questionnaires');
+      }
     } catch (err) {
       console.error('Failed to save questionnaire:', err);
       toast({ title: "Error", description: 'Failed to save questionnaire: ' + (err instanceof Error ? err.message : 'Unknown error'), variant: "error" });
@@ -4013,11 +4021,24 @@ export default function QuestionnaireBuilderPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        {/* Selection Mode Banner */}
+        {selectionMode && (
+          <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-4 text-white">
+            <div className="flex items-center gap-3">
+              <CheckSquare className="h-6 w-6" />
+              <div>
+                <h3 className="text-lg font-semibold">Creating Questionnaire for Evaluation</h3>
+                <p className="text-green-100 text-sm">This questionnaire will be used for staff evaluation after saving</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <a
-              href="/questionnaires"
+              href={selectionMode ? "/questionnaires?mode=select-for-evaluation" : "/questionnaires"}
               className="group flex items-center gap-2 px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
             >
               <ArrowLeft className="w-4 h-4 text-gray-600" />

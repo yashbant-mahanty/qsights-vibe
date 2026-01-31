@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import RoleBasedLayout from "@/components/role-based-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
@@ -23,6 +23,8 @@ import {
   Download,
   Filter,
   Users,
+  ArrowLeft,
+  CheckSquare,
 } from "lucide-react";
 import { questionnairesApi, type Questionnaire } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
@@ -31,6 +33,8 @@ import { canCreateResource, canEditResource, canDeleteResource, UserRole } from 
 
 export default function QuestionnairesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectionMode = searchParams.get('mode') === 'select-for-evaluation';
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
@@ -42,6 +46,16 @@ export default function QuestionnairesPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; questionnaireId: string | null; questionnaireName: string | null }>({ isOpen: false, questionnaireId: null, questionnaireName: null });
   const [currentUser, setCurrentUser] = useState<{ role: UserRole } | null>(null);
+
+  // Handle selecting a questionnaire for evaluation
+  const handleSelectForEvaluation = (questionnaireId: string, questionnaireName: string) => {
+    router.push(`/evaluation-new?tab=trigger&questionnaire_id=${questionnaireId}&questionnaire_name=${encodeURIComponent(questionnaireName)}`);
+  };
+
+  // Handle canceling selection mode
+  const handleCancelSelection = () => {
+    router.push('/evaluation-new?tab=trigger');
+  };
 
   useEffect(() => {
     loadQuestionnaires();
@@ -386,6 +400,28 @@ export default function QuestionnairesPage() {
   return (
     <RoleBasedLayout>
       <div className="space-y-6">
+        {/* Selection Mode Banner */}
+        {selectionMode && (
+          <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CheckSquare className="h-6 w-6" />
+                <div>
+                  <h3 className="text-lg font-semibold">Select a Questionnaire for Evaluation</h3>
+                  <p className="text-green-100 text-sm">Choose an existing questionnaire or create a new one to use for staff evaluation</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCancelSelection}
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Evaluation
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -393,20 +429,24 @@ export default function QuestionnairesPage() {
               <h1 className="text-2xl font-bold text-gray-900">Questionnaires</h1>
             </div>
             <p className="text-sm text-gray-500 mt-1">
-              Manage surveys, assessments, and feedback forms
+              {selectionMode 
+                ? "Click 'Select' on a questionnaire to use it for evaluation, or create a new one"
+                : "Manage surveys, assessments, and feedback forms"}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={handleExport}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
+            {!selectionMode && (
+              <button 
+                onClick={handleExport}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Export
+              </button>
+            )}
             {currentUser && canCreateResource(currentUser.role, 'questionnaires') && (
               <a
-                href="/questionnaires/create"
+                href={selectionMode ? "/questionnaires/create?mode=select-for-evaluation" : "/questionnaires/create"}
                 className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -616,39 +656,63 @@ export default function QuestionnairesPage() {
                       {/* Actions */}
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handlePreview(questionnaire.id.toString())}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Preview"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          {currentUser && canEditResource(currentUser.role, 'questionnaires') && (
-                            <button
-                              onClick={() => handleEdit(questionnaire.id.toString())}
-                              className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                              title="Edit"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                          )}
-                          {currentUser && canCreateResource(currentUser.role, 'questionnaires') && (
-                            <button
-                              onClick={() => handleDuplicate(questionnaire.id.toString())}
-                              className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                              title="Duplicate"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                          )}
-                          {currentUser && canDeleteResource(currentUser.role, 'questionnaires') && (
-                            <button
-                              onClick={() => handleDelete(questionnaire.id.toString(), questionnaire.title)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                          {selectionMode ? (
+                            // Selection mode - show Select button prominently
+                            <>
+                              <button
+                                onClick={() => handlePreview(questionnaire.id.toString())}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="Preview"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleSelectForEvaluation(questionnaire.id.toString(), questionnaire.title)}
+                                className="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                                title="Select for Evaluation"
+                              >
+                                <CheckSquare className="w-4 h-4" />
+                                Select
+                              </button>
+                            </>
+                          ) : (
+                            // Normal mode - show all action buttons
+                            <>
+                              <button
+                                onClick={() => handlePreview(questionnaire.id.toString())}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="Preview"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              {currentUser && canEditResource(currentUser.role, 'questionnaires') && (
+                                <button
+                                  onClick={() => handleEdit(questionnaire.id.toString())}
+                                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                  title="Edit"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                              )}
+                              {currentUser && canCreateResource(currentUser.role, 'questionnaires') && (
+                                <button
+                                  onClick={() => handleDuplicate(questionnaire.id.toString())}
+                                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                  title="Duplicate"
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </button>
+                              )}
+                              {currentUser && canDeleteResource(currentUser.role, 'questionnaires') && (
+                                <button
+                                  onClick={() => handleDelete(questionnaire.id.toString(), questionnaire.title)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
