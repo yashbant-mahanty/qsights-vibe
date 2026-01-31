@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import RoleBasedLayout from "@/components/role-based-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,8 @@ import {
   FileSpreadsheet,
   FileText,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Send,
   Eye,
   MousePointer,
@@ -391,6 +393,17 @@ export default function ActivityResultsPage() {
   // Modal state for participant details
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<any>(null);
+  
+  // Pagination state for responses
+  const [responsePage, setResponsePage] = useState(1);
+  const [responsesPerPage, setResponsesPerPage] = useState(50);
+
+  // Pagination calculations
+  const totalResponsePages = Math.ceil(responses.length / responsesPerPage);
+  const paginatedResponses = useMemo(() => {
+    const startIndex = (responsePage - 1) * responsesPerPage;
+    return responses.slice(startIndex, startIndex + responsesPerPage);
+  }, [responses, responsePage, responsesPerPage]);
 
   useEffect(() => {
     loadData();
@@ -1550,13 +1563,14 @@ export default function ActivityResultsPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-100">
-                      {responses.map((response: any, index: number) => {
+                      {paginatedResponses.map((response: any, index: number) => {
                         const isOrphaned = orphanedResponses.includes(response.id);
                         const isDeleting = deletingResponses.has(response.id);
+                        const actualIndex = (responsePage - 1) * responsesPerPage + index;
                         
                         return (
                         <tr key={response.id} className={`hover:bg-blue-50 transition-colors ${isOrphaned ? 'bg-yellow-50' : ''}`}>
-                          <td className="px-6 py-4 text-sm font-semibold text-gray-900">{index + 1}</td>
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-900">{actualIndex + 1}</td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold">
@@ -1716,6 +1730,101 @@ export default function ActivityResultsPage() {
                     </tbody>
                   </table>
                 </div>
+                
+                {/* Pagination */}
+                {responses.length > 0 && (
+                  <div className="px-6 py-4 border-t border-gray-200">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="text-sm text-gray-600">
+                          Showing {responses.length > 0 ? (responsePage - 1) * responsesPerPage + 1 : 0} to{" "}
+                          {Math.min(responsePage * responsesPerPage, responses.length)} of{" "}
+                          {responses.length} responses
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">Per page:</span>
+                          <select
+                            value={responsesPerPage}
+                            onChange={(e) => {
+                              setResponsesPerPage(Number(e.target.value));
+                              setResponsePage(1);
+                            }}
+                            className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setResponsePage(1)}
+                          disabled={responsePage === 1}
+                          className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                          title="First page"
+                        >
+                          «
+                        </button>
+                        <button
+                          onClick={() => setResponsePage(Math.max(1, responsePage - 1))}
+                          disabled={responsePage === 1}
+                          className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <ChevronLeft className="w-4 h-4 text-gray-600" />
+                        </button>
+                        {(() => {
+                          const pages: (number | string)[] = [];
+                          const maxVisible = 5;
+                          if (totalResponsePages <= maxVisible + 2) {
+                            for (let i = 1; i <= totalResponsePages; i++) pages.push(i);
+                          } else {
+                            pages.push(1);
+                            let start = Math.max(2, responsePage - Math.floor(maxVisible / 2));
+                            let end = Math.min(totalResponsePages - 1, start + maxVisible - 1);
+                            if (end === totalResponsePages - 1) start = Math.max(2, end - maxVisible + 1);
+                            if (start > 2) pages.push('...');
+                            for (let i = start; i <= end; i++) pages.push(i);
+                            if (end < totalResponsePages - 1) pages.push('...');
+                            if (totalResponsePages > 1) pages.push(totalResponsePages);
+                          }
+                          return pages.map((page, idx) => (
+                            page === '...' ? (
+                              <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                            ) : (
+                              <button
+                                key={page}
+                                onClick={() => setResponsePage(page as number)}
+                                className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                  responsePage === page
+                                    ? "bg-qsights-dark text-white shadow-sm"
+                                    : "text-gray-700 hover:bg-gray-100 border border-gray-300"
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            )
+                          ));
+                        })()}
+                        <button
+                          onClick={() => setResponsePage(Math.min(totalResponsePages, responsePage + 1))}
+                          disabled={responsePage === totalResponsePages || totalResponsePages === 0}
+                          className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <ChevronRight className="w-4 h-4 text-gray-600" />
+                        </button>
+                        <button
+                          onClick={() => setResponsePage(totalResponsePages)}
+                          disabled={responsePage === totalResponsePages || totalResponsePages === 0}
+                          className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                          title="Last page"
+                        >
+                          »
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
               </div>
             ) : (
