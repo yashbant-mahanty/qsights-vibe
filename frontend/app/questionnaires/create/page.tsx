@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,7 +75,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-export default function QuestionnaireBuilderPage() {
+function QuestionnaireBuilderPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectionMode = searchParams.get('mode') === 'select-for-evaluation';
@@ -5254,5 +5254,20 @@ export default function QuestionnaireBuilderPage() {
         }}
       />
     </AppLayout>
+  );
+}
+
+export default function QuestionnaireBuilderPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading questionnaire builder...</p>
+        </div>
+      </div>
+    }>
+      <QuestionnaireBuilderPageContent />
+    </Suspense>
   );
 }

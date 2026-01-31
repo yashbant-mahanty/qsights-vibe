@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import RoleBasedLayout from "@/components/role-based-layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,7 +31,7 @@ import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import { toast } from "@/components/ui/toast";
 import { canCreateResource, canEditResource, canDeleteResource, UserRole } from "@/lib/permissions";
 
-export default function QuestionnairesPage() {
+function QuestionnairesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectionMode = searchParams.get('mode') === 'select-for-evaluation';
@@ -828,5 +828,20 @@ export default function QuestionnairesPage() {
         itemType="questionnaire"
       />
     </RoleBasedLayout>
+  );
+}
+
+export default function QuestionnairesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading questionnaires...</p>
+        </div>
+      </div>
+    }>
+      <QuestionnairesPageContent />
+    </Suspense>
   );
 }

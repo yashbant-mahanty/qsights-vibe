@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Building2, Users, Network, Play, History, Plus, Edit2, Trash2, 
@@ -218,7 +218,7 @@ const evaluationTemplates: EvaluationTemplate[] = [
   },
 ];
 
-export default function EvaluationNewPage() {
+function EvaluationNewPageContent() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -3610,5 +3610,20 @@ export default function EvaluationNewPage() {
         </div>
       )}
     </AppLayout>
+  );
+}
+
+export default function EvaluationNewPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading evaluation...</p>
+        </div>
+      </div>
+    }>
+      <EvaluationNewPageContent />
+    </Suspense>
   );
 }
