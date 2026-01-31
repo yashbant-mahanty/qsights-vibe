@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Building2, Users, Network, Play, History, Plus, Edit2, Trash2, 
   Search, ChevronRight, ChevronDown, Send, CheckCircle, Clock,
   Star, TrendingUp, MessageSquare, UserCheck, Smile, List, X,
   Mail, AlertCircle, Loader2, Power, RefreshCw, Calendar, BarChart3,
   Download, Filter, Eye, FileText, ChevronUp, Award, Target, 
-  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart
+  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart, FileQuestion
 } from 'lucide-react';
 import AppLayout from '@/components/app-layout';
 import { fetchWithAuth } from '@/lib/api';
@@ -239,6 +239,9 @@ export default function EvaluationNewPage() {
     warning: (message: string) => toast({ title: 'Warning', description: message, variant: 'warning' }),
   };
   
+  // URL search params for questionnaire selection return
+  const searchParams = useSearchParams();
+  
   // Setup state
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -249,6 +252,42 @@ export default function EvaluationNewPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
+  
+  // Handle URL params for custom questionnaire selection
+  useEffect(() => {
+    const questionnaireId = searchParams.get('questionnaire_id');
+    const questionnaireName = searchParams.get('questionnaire_name');
+    const tab = searchParams.get('tab');
+    
+    if (questionnaireId && questionnaireName) {
+      setCustomQuestionnaireId(questionnaireId);
+      setCustomQuestionnaireName(decodeURIComponent(questionnaireName));
+      setSelectedTemplate('custom_questionnaire');
+      
+      // Fetch the questionnaire data
+      fetchQuestionnaireData(questionnaireId);
+      
+      // Set active tab to trigger
+      if (tab === 'trigger') {
+        setActiveTab('trigger');
+      }
+      
+      // Clear URL params without reloading
+      window.history.replaceState({}, '', '/evaluation-new?tab=trigger');
+    }
+  }, [searchParams]);
+  
+  // Fetch questionnaire data for custom form
+  const fetchQuestionnaireData = async (id: string) => {
+    try {
+      const response = await fetchWithAuth(`/questionnaires/${id}`);
+      if (response) {
+        setCustomQuestionnaireData(response);
+      }
+    } catch (error) {
+      console.error('Failed to fetch questionnaire:', error);
+    }
+  };
   
   // Selected state for cascading
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
@@ -289,6 +328,11 @@ export default function EvaluationNewPage() {
   const [endDate, setEndDate] = useState('');
   const [evaluatorDeptFilter, setEvaluatorDeptFilter] = useState<string>('');
   const [scheduledDate, setScheduledDate] = useState('');
+  
+  // Custom questionnaire state
+  const [customQuestionnaireId, setCustomQuestionnaireId] = useState<string | null>(null);
+  const [customQuestionnaireName, setCustomQuestionnaireName] = useState<string | null>(null);
+  const [customQuestionnaireData, setCustomQuestionnaireData] = useState<any>(null);
   
   // History state
   const [triggeredEvaluations, setTriggeredEvaluations] = useState<TriggeredEvaluation[]>([]);
@@ -1024,10 +1068,37 @@ export default function EvaluationNewPage() {
     }
   };
 
+  // Helper function to map questionnaire question types to evaluation types
+  const mapQuestionType = (type: string): 'rating' | 'mcq' | 'text' => {
+    const typeMap: Record<string, 'rating' | 'mcq' | 'text'> = {
+      'rating': 'rating',
+      'scale': 'rating',
+      'slider': 'rating',
+      'likert': 'rating',
+      'nps': 'rating',
+      'single_choice': 'mcq',
+      'multiple_choice': 'mcq',
+      'mcq': 'mcq',
+      'dropdown': 'mcq',
+      'text': 'text',
+      'textarea': 'text',
+      'short_answer': 'text',
+      'long_answer': 'text',
+      'open_ended': 'text',
+    };
+    return typeMap[type?.toLowerCase()] || 'text';
+  };
+
   // Trigger evaluation
   const handleTriggerEvaluation = async () => {
     if (!selectedTemplate) {
       showToast.error('Please select an evaluation form');
+      return;
+    }
+    
+    // Check for custom questionnaire selection
+    if (selectedTemplate === 'custom_questionnaire' && !customQuestionnaireId) {
+      showToast.error('Please select a questionnaire first');
       return;
     }
     
@@ -1038,13 +1109,16 @@ export default function EvaluationNewPage() {
     
     // Prepare email preview
     const template = evaluationTemplates.find(t => t.id === selectedTemplate);
+    const templateName = selectedTemplate === 'custom_questionnaire' 
+      ? customQuestionnaireName 
+      : template?.name;
     const evaluatorsList = mappings
       .filter(m => selectedEvaluators.includes(m.evaluator_id))
       .map(m => m.evaluator_name)
       .join(', ');
     
-    setEmailSubject(`Evaluation Request: ${template?.name || 'Staff Evaluation'}`);
-    setEmailBody(`Hello {evaluator_name},\n\nYou have been requested to complete a ${template?.name} evaluation for your team members.\n\nEvaluation Period: {start_date} to {end_date}\n\nYour subordinates to evaluate:\n{subordinates_list}\n\nPlease complete the evaluation by clicking the button in your email.\n\nBest regards,\nQSights Team`);
+    setEmailSubject(`Evaluation Request: ${templateName || 'Staff Evaluation'}`);
+    setEmailBody(`Hello {evaluator_name},\n\nYou have been requested to complete a ${templateName || 'Staff'} evaluation for your team members.\n\nEvaluation Period: {start_date} to {end_date}\n\nYour subordinates to evaluate:\n{subordinates_list}\n\nPlease complete the evaluation by clicking the button in your email.\n\nBest regards,\nQSights Team`);
     setShowTriggerModal(true);
   };
 
@@ -1053,6 +1127,25 @@ export default function EvaluationNewPage() {
       setTriggering(true);
       
       const template = evaluationTemplates.find(t => t.id === selectedTemplate);
+      
+      // Determine template data based on selection type
+      let triggerTemplateId = selectedTemplate;
+      let triggerTemplateName = template?.name;
+      let triggerTemplateQuestions = template?.questions;
+      
+      // If custom questionnaire is selected, use its data
+      if (selectedTemplate === 'custom_questionnaire' && customQuestionnaireData) {
+        triggerTemplateId = `questionnaire_${customQuestionnaireId}`;
+        triggerTemplateName = customQuestionnaireName || 'Custom Questionnaire';
+        // Convert questionnaire questions to evaluation format
+        triggerTemplateQuestions = customQuestionnaireData.questions?.map((q: any) => ({
+          question: q.title || q.question,
+          type: mapQuestionType(q.type),
+          options: q.options || q.choices,
+          scale: q.scale || 5,
+          description: q.description || '',
+        })) || [];
+      }
       
       // For superadmin, get program_id from the selected evaluators' mappings
       // For regular users, use their programId
@@ -1080,9 +1173,10 @@ export default function EvaluationNewPage() {
       const response = await fetchWithAuth('/evaluation/trigger', {
         method: 'POST',
         body: JSON.stringify({
-          template_id: selectedTemplate,
-          template_name: template?.name,
-          template_questions: template?.questions,
+          template_id: triggerTemplateId,
+          template_name: triggerTemplateName,
+          template_questions: triggerTemplateQuestions,
+          questionnaire_id: selectedTemplate === 'custom_questionnaire' ? customQuestionnaireId : null,
           evaluator_ids: selectedEvaluators,
           program_id: effectiveProgramId,
           email_subject: emailSubject,
@@ -1108,6 +1202,9 @@ export default function EvaluationNewPage() {
         }
         setSelectedTemplate(null);
         setSelectedEvaluators([]);
+        setCustomQuestionnaireId(null);
+        setCustomQuestionnaireName(null);
+        setCustomQuestionnaireData(null);
         setShowTriggerModal(false);
         setActiveTab('history');
         fetchTriggeredEvaluations();
@@ -1796,7 +1893,15 @@ export default function EvaluationNewPage() {
                     return (
                       <button
                         key={template.id}
-                        onClick={() => setSelectedTemplate(template.id === selectedTemplate ? null : template.id)}
+                        onClick={() => {
+                          setSelectedTemplate(template.id === selectedTemplate ? null : template.id);
+                          // Clear custom questionnaire if switching to predefined template
+                          if (template.id !== 'custom_questionnaire') {
+                            setCustomQuestionnaireId(null);
+                            setCustomQuestionnaireName(null);
+                            setCustomQuestionnaireData(null);
+                          }
+                        }}
                         className={`p-4 rounded-xl border-2 text-left transition-all ${
                           selectedTemplate === template.id
                             ? 'border-blue-500 bg-blue-50 shadow-md'
@@ -1812,6 +1917,48 @@ export default function EvaluationNewPage() {
                       </button>
                     );
                   })}
+                  
+                  {/* Custom Questionnaire Option */}
+                  <button
+                    onClick={() => {
+                      if (selectedTemplate === 'custom_questionnaire' && customQuestionnaireId) {
+                        // If already selected, deselect
+                        setSelectedTemplate(null);
+                        setCustomQuestionnaireId(null);
+                        setCustomQuestionnaireName(null);
+                        setCustomQuestionnaireData(null);
+                      } else {
+                        // Navigate to questionnaires page in selection mode
+                        router.push('/questionnaires?mode=select-for-evaluation');
+                      }
+                    }}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      selectedTemplate === 'custom_questionnaire'
+                        ? 'border-green-500 bg-green-50 shadow-md'
+                        : 'border-dashed border-gray-300 hover:border-green-400 hover:bg-green-50/50'
+                    }`}
+                  >
+                    <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center mb-3">
+                      <FileQuestion className="h-5 w-5 text-green-600" />
+                    </div>
+                    <h4 className="font-semibold text-gray-900">
+                      {customQuestionnaireName || 'Custom Questionnaire'}
+                    </h4>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {customQuestionnaireId 
+                        ? 'Click to change or deselect'
+                        : 'Select or create from your questionnaires'}
+                    </p>
+                    {customQuestionnaireData ? (
+                      <p className="text-xs text-green-600 mt-2">
+                        {customQuestionnaireData.questions?.length || 0} questions
+                      </p>
+                    ) : (
+                      <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                        <Plus className="h-3 w-3" /> Select questionnaire
+                      </p>
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -1928,14 +2075,16 @@ export default function EvaluationNewPage() {
                   <div>
                     <h3 className="text-lg font-semibold">Ready to send?</h3>
                     <p className="text-blue-100 text-sm mt-1">
-                      {selectedTemplate ? evaluationTemplates.find(t => t.id === selectedTemplate)?.name : 'No form selected'}
+                      {selectedTemplate === 'custom_questionnaire' 
+                        ? (customQuestionnaireName || 'Custom Questionnaire')
+                        : (selectedTemplate ? evaluationTemplates.find(t => t.id === selectedTemplate)?.name : 'No form selected')}
                       {' • '}
                       {selectedEvaluators.length} evaluator(s) selected
                     </p>
                   </div>
                   <button
                     onClick={handleTriggerEvaluation}
-                    disabled={!selectedTemplate || selectedEvaluators.length === 0 || triggering}
+                    disabled={!selectedTemplate || (selectedTemplate === 'custom_questionnaire' && !customQuestionnaireId) || selectedEvaluators.length === 0 || triggering}
                     className="px-6 py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {triggering ? (
