@@ -121,13 +121,13 @@ function QuestionnairesPageContent() {
   const handlePreview = (questionnaireId: string) => {
     // Navigate to builder in preview mode
     const returnParam = selectionMode ? '&return=evaluation' : '';
-    router.push(`/questionnaires/${questionnaireId}?mode=preview${returnParam}`);
+    window.location.href = `/questionnaires/${questionnaireId}?mode=preview${returnParam}`;
   };
 
   const handleEdit = (questionnaireId: string) => {
     // Navigate to builder in edit mode
     const returnParam = selectionMode ? '&return=evaluation' : '';
-    router.push(`/questionnaires/${questionnaireId}?mode=edit${returnParam}`);
+    window.location.href = `/questionnaires/${questionnaireId}?mode=edit${returnParam}`;
   };
 
   const handleDuplicate = async (questionnaireId: string) => {
@@ -226,6 +226,9 @@ function QuestionnairesPageContent() {
   const authenticatedResponses = displayQuestionnaires.reduce((sum, q) => sum + (q.authenticatedResponses || 0), 0);
   const guestResponses = displayQuestionnaires.reduce((sum, q) => sum + (q.guestResponses || 0), 0);
 
+  // Role-based stats - evaluation-admin sees Staff Responses, others see Total Responses
+  const isEvaluationAdmin = currentUser?.role === 'evaluation-admin';
+
   const stats = [
     {
       title: "Total Questionnaires",
@@ -241,7 +244,13 @@ function QuestionnairesPageContent() {
       icon: CheckCircle,
       variant: 'green' as const,
     },
-    {
+    isEvaluationAdmin ? {
+      title: "Total Staff Responses",
+      value: authenticatedResponses,
+      subtitle: "Responses from staff",
+      icon: Users,
+      variant: 'amber' as const,
+    } : {
       title: "Total Responses",
       value: `${totalResponses} (${authenticatedResponses}/${guestResponses})`,
       subtitle: "(Participant/Anonymous)",

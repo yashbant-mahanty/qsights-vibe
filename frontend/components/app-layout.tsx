@@ -20,12 +20,14 @@ import {
   FileText,
   Activity,
   BarChart3,
+  Brain,
   Settings,
   Menu,
   X,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ClipboardCheck,
 } from "lucide-react";
 
 interface AppLayoutProps {
@@ -42,8 +44,10 @@ const iconMap: { [key: string]: any } = {
   FileText,
   Activity,
   BarChart3,
+  Brain,
   Settings,
   Users,
+  ClipboardCheck,
 };
 
 // Search options for different pages
@@ -67,35 +71,36 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [logoUrl, setLogoUrl] = useState<string | null>(() => {
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoLoading, setLogoLoading] = useState(true);
+  const [sidebarItems, setSidebarItems] = useState<any[]>([]);
+
+  // Load cached data after mount to avoid hydration mismatch
+  useEffect(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('qsights_logo');
-    }
-    return null;
-  });
-  const [logoLoading, setLogoLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return !localStorage.getItem('qsights_logo');
-    }
-    return true;
-  });
-  const [sidebarItems, setSidebarItems] = useState<any[]>(() => {
-    // Try to get cached sidebar items on initial load
-    if (typeof window !== 'undefined') {
+      // Load cached logo
+      const cachedLogo = localStorage.getItem('qsights_logo');
+      if (cachedLogo) {
+        setLogoUrl(cachedLogo);
+        setLogoLoading(false);
+      }
+      
+      // Load cached sidebar items
       const cached = sessionStorage.getItem('qsights_sidebar_items');
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          // Re-map icons since they can't be serialized
-          return parsed.map((item: any) => ({
+          const remapped = parsed.map((item: any) => ({
             ...item,
             icon: iconMap[item.iconName] || LayoutDashboard
           }));
-        } catch (e) {}
+          setSidebarItems(remapped);
+        } catch (e) {
+          console.error('Failed to parse cached sidebar items:', e);
+        }
       }
     }
-    return [];
-  });
+  }, []);
 
   useEffect(() => {
     async function loadLogo() {

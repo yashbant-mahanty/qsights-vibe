@@ -6,6 +6,7 @@ import AppLayout from "./app-layout";
 import ProgramAdminLayout from "./program-admin-layout";
 import ProgramManagerLayout from "./program-manager-layout";
 import ProgramModeratorLayout from "./program-moderator-layout";
+import EvaluationAdminLayout from "./evaluation-admin-layout";
 
 interface RoleBasedLayoutProps {
   children: React.ReactNode;
@@ -53,6 +54,11 @@ export default function RoleBasedLayout({ children }: RoleBasedLayoutProps) {
   if (role === 'program-moderator') {
     console.log('✅ Rendering ProgramModeratorLayout');
     return <ProgramModeratorLayout>{children}</ProgramModeratorLayout>;
+  }
+
+  if (role === 'evaluation-admin') {
+    console.log('✅ Rendering EvaluationAdminLayout');
+    return <EvaluationAdminLayout>{children}</EvaluationAdminLayout>;
   }
 
   // Default to AppLayout for super-admin, admin, and other roles

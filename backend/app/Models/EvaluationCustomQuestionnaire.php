@@ -15,6 +15,7 @@ class EvaluationCustomQuestionnaire extends Model
 
     protected $fillable = [
         'organization_id',
+        'program_id',
         'questionnaire_id',
         'questionnaire_name',
         'added_by',

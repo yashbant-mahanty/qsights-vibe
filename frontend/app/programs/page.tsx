@@ -635,13 +635,16 @@ export default function ProgramsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleViewUsers(programs.find(p => p.id === program.id)!)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                              title="View Program Users"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
+                            {/* Hide View Users for program-manager - they don't have Roles & Services tab */}
+                            {currentUser && currentUser.role !== 'program-manager' && (
+                              <button
+                                onClick={() => handleViewUsers(programs.find(p => p.id === program.id)!)}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="View Program Users"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            )}
                             {currentUser && canEditResource(currentUser.role, 'programs') && (
                               <button
                                 onClick={() => handleEdit(programs.find(p => p.id === program.id)!)}

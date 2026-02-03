@@ -53,6 +53,12 @@ export default function DashboardPage() {
           const userRole = data.user?.role as UserRole;
           const programId = data.user?.programId;
           
+          // Redirect evaluation-staff to evaluation page
+          if (userRole === 'evaluation-staff' || userRole === 'evaluation_staff') {
+            router.push('/evaluation-new');
+            return;
+          }
+          
           // NEW: Redirect to program-scoped pages
           if (userRole === 'program-admin' || userRole === 'program-manager' || userRole === 'program-moderator') {
             if (programId) {

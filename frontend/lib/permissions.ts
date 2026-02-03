@@ -5,7 +5,10 @@ export type UserRole =
   | 'admin'
   | 'program-admin'
   | 'program-manager'
-  | 'program-moderator';
+  | 'program-moderator'
+  | 'evaluation-admin'
+  | 'evaluation-staff'
+  | 'evaluation_staff'; // Database uses underscore
 
 export interface Permission {
   canCreate: boolean;
@@ -147,6 +150,66 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     reports: viewExport, // Can view and export reports
     notifications: noAccess,
   },
+
+  // Evaluation Admin - Questionnaire & Evaluation full access, Org/Program view-only, NO Events access
+  'evaluation-admin': {
+    organizations: viewOnly, // View only
+    groupHeads: noAccess,
+    programs: viewOnly, // View only
+    participants: viewExport, // Can view participants
+    questionnaires: fullAccess, // Full access
+    activities: noAccess, // NO access to events/activities
+    reports: { ...viewExport, canExport: true }, // View and export
+    notifications: { ...viewExport, canSendNotifications: true },
+  },
+
+  // Evaluation Staff - Can take evaluations assigned to them
+  'evaluation-staff': {
+    organizations: noAccess,
+    groupHeads: noAccess,
+    programs: viewOnly,
+    participants: noAccess,
+    questionnaires: viewOnly,
+    activities: viewOnly,
+    reports: viewOnly,
+    notifications: noAccess,
+  },
+
+  // Evaluation Staff (underscore variant)
+  'evaluation_staff': {
+    organizations: noAccess,
+    groupHeads: noAccess,
+    programs: viewOnly,
+    participants: noAccess,
+    questionnaires: viewOnly,
+    activities: viewOnly,
+    reports: viewOnly,
+    notifications: noAccess,
+  },
+
+  // Evaluation Staff - Access to evaluation dashboards only
+  'evaluation-staff': {
+    organizations: noAccess,
+    groupHeads: noAccess,
+    programs: noAccess,
+    participants: noAccess,
+    questionnaires: noAccess,
+    activities: noAccess,
+    reports: viewOnly, // Can view their own reports
+    notifications: noAccess,
+  },
+
+  // Evaluation Staff (underscore variant from database)
+  'evaluation_staff': {
+    organizations: noAccess,
+    groupHeads: noAccess,
+    programs: noAccess,
+    participants: noAccess,
+    questionnaires: noAccess,
+    activities: noAccess,
+    reports: viewOnly, // Can view their own reports
+    notifications: noAccess,
+  },
 };
 
 // Helper functions
@@ -198,6 +261,11 @@ export function hasFullAccess(role: UserRole): boolean {
   return ['super-admin', 'admin'].includes(role);
 }
 
+// Helper to check if role is evaluation staff (handles both hyphen and underscore)
+function isEvaluationStaff(role: string): boolean {
+  return role === 'evaluation-staff' || role === 'evaluation_staff';
+}
+
 // Get navigation items based on role and services (for custom roles)
 export function getNavigationItems(role: UserRole, services?: string[]) {
   const items = [];
@@ -211,6 +279,12 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
     return services.includes(serviceId);
   };
 
+  // Evaluation Staff only gets Evaluation navigation item - no Dashboard
+  if (isEvaluationStaff(role)) {
+    items.push({ label: 'Evaluation', href: '/evaluation-new', icon: 'ClipboardCheck' });
+    return items; // Return early - evaluation staff only sees Evaluation
+  }
+
   // Dashboard - all roles except moderator have dashboard
   if (hasService('dashboard')) {
     if (role === 'super-admin' || role === 'admin') {
@@ -221,11 +295,15 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
       items.push({ label: 'Dashboard', href: '/program-manager', icon: 'LayoutDashboard' });
     } else if (role === 'program-moderator') {
       items.push({ label: 'Dashboard', href: '/program-moderator', icon: 'LayoutDashboard' });
+    } else if (role === 'evaluation-admin') {
+      items.push({ label: 'Dashboard', href: '/evaluation-admin', icon: 'LayoutDashboard' });
     }
   }
 
-  // Organizations - only super admin/admin
+  // Organizations - super admin/admin have full access, evaluation-admin has view-only
   if (hasFullAccess(role) && hasService('list_organization')) {
+    items.push({ label: 'Organizations', href: '/organizations', icon: 'Building2' });
+  } else if (role === 'evaluation-admin' && hasService('list_organization')) {
     items.push({ label: 'Organizations', href: '/organizations', icon: 'Building2' });
   }
 
@@ -234,23 +312,23 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
     items.push({ label: 'Group Heads', href: '/group-heads', icon: 'Users' });
   }
 
-  // Programs - super admin, admin, program admin can manage; program manager can view
-  if (canAccessResource(role, 'programs') && hasService('programs-view')) {
+  // Programs - super admin, admin, program admin can manage; program manager can view; HIDE from evaluation-admin
+  if (role !== 'evaluation-admin' && canAccessResource(role, 'programs') && hasService('programs-view')) {
     items.push({ label: 'Programs', href: '/programs', icon: 'FolderTree' });
   }
 
-  // Participants - all except moderator
-  if (canAccessResource(role, 'participants') && hasService('participants-view')) {
+  // Participants - all except moderator and evaluation-admin
+  if (role !== 'evaluation-admin' && canAccessResource(role, 'participants') && hasService('participants-view')) {
     items.push({ label: 'Participants', href: '/participants', icon: 'UserCheck' });
   }
 
-  // Questionnaires - all except moderator
+  // Questionnaires - all roles can access (full for evaluation-admin)
   if (canAccessResource(role, 'questionnaires') && hasService('questionnaires-view')) {
     items.push({ label: 'Questionnaires', href: '/questionnaires', icon: 'FileText' });
   }
 
-  // Activities - all roles can access
-  if (canAccessResource(role, 'activities') && hasService('activities-view')) {
+  // Activities - all roles can access EXCEPT evaluation-admin
+  if (role !== 'evaluation-admin' && canAccessResource(role, 'activities') && hasService('activities-view')) {
     items.push({ label: 'Events', href: '/activities', icon: 'Activity' });
   }
 
@@ -259,17 +337,21 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
     items.push({ label: 'Roles & Services', href: '/program-admin/roles', icon: 'UserCog' });
   }
 
-  // Reports & Analytics - all roles can access
-  if (canAccessResource(role, 'reports') && hasService('reports-view')) {
+  // Reports & Analytics - all roles can access EXCEPT evaluation-admin
+  if (role !== 'evaluation-admin' && canAccessResource(role, 'reports') && hasService('reports-view')) {
     items.push({ label: 'Reports & Analytics', href: '/analytics', icon: 'BarChart3' });
   }
 
-  // Evaluation Module - All Program roles have full access (program-scoped)
-  // Check for service availability
+  // AI Report Builder - service-based access (typically super-admin, admin, program-admin)
+  if (hasService('ai-reports-view') || hasService('report-builder-view')) {
+    items.push({ label: 'AI Reports', href: '/report-builder', icon: 'Brain' });
+  }
+
+  // Evaluation Module - ONLY evaluation-admin has access (specialized module)
+  // Note: evaluation-staff is handled at the top of this function with early return
+  // Super-admin and admin have access to everything by default
   if (hasService('evaluation-view') || hasService('evaluation-manage')) {
-    if (role === 'super-admin' || role === 'admin' || 
-        role === 'program-admin' || role === 'program-manager' || 
-        role === 'program-moderator') {
+    if (role === 'super-admin' || role === 'admin' || role === 'evaluation-admin') {
       items.push({ label: 'Evaluation', href: '/evaluation-new', icon: 'ClipboardCheck' });
     }
   }
@@ -284,12 +366,14 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
 
 // Get role display name
 export function getRoleDisplayName(role: UserRole): string {
-  const roleMap: Record<UserRole, string> = {
+  const roleMap: Record<string, string> = {
     'super-admin': 'Super Admin',
     'admin': 'Admin',
     'program-admin': 'Program Admin',
     'program-manager': 'Program Manager',
     'program-moderator': 'Program Moderator',
+    'evaluation-staff': 'Evaluation Staff',
+    'evaluation_staff': 'Evaluation Staff', // Database uses underscore
   };
   return roleMap[role] || role;
 }

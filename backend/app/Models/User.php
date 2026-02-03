@@ -23,6 +23,7 @@ class User extends Authenticatable
         'communication_email',
         'password',
         'role',
+        'permission_overrides',
         'default_services',
         'organization_id',
         'program_id',
@@ -61,6 +62,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'preferences' => 'array',
             'default_services' => 'array',
+            'permission_overrides' => 'array',
         ];
     }
 

@@ -11,44 +11,83 @@ use Illuminate\Support\Facades\Log;
 class EvaluationCustomQuestionnaireController extends Controller
 {
     /**
-     * Get all custom questionnaires for the user's organization.
+     * Get all custom questionnaires for the user's organization or program.
      */
     public function index(Request $request)
     {
         try {
             $user = Auth::user();
             
-            if (!$user || !$user->organization_id) {
+            if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not authenticated or organization not found'
+                    'message' => 'User not authenticated'
                 ], 401);
             }
 
-            $customQuestionnaires = EvaluationCustomQuestionnaire::where('organization_id', $user->organization_id)
-                ->where('is_active', true)
-                ->orderBy('created_at', 'desc')
-                ->get();
+            // Filter by program_id for evaluation-admin, by organization for others
+            $query = EvaluationCustomQuestionnaire::where('is_active', true);
+            
+            if ($user->role === 'evaluation-admin') {
+                // Evaluation admin only sees questionnaires for their program
+                if ($user->program_id) {
+                    $query->where('program_id', $user->program_id);
+                } else {
+                    // If no program_id, return empty
+                    return response()->json([
+                        'success' => true,
+                        'data' => []
+                    ]);
+                }
+            } elseif ($user->role !== 'super-admin' && $user->organization_id) {
+                // Other roles see their organization's questionnaires
+                $query->where('organization_id', $user->organization_id);
+            }
+            
+            $customQuestionnaires = $query->orderBy('created_at', 'desc')->get();
 
             // Fetch full questionnaire data for each
             $result = [];
             foreach ($customQuestionnaires as $cq) {
-                $questionnaire = Questionnaire::find($cq->questionnaire_id);
+                // Load questionnaire with sections and questions using Eloquent relationships
+                $questionnaire = Questionnaire::with(['sections.questions'])->find($cq->questionnaire_id);
                 if ($questionnaire) {
                     // Extract questions from sections
                     $questions = [];
-                    $sections = is_string($questionnaire->sections) 
-                        ? json_decode($questionnaire->sections, true) 
-                        : ($questionnaire->sections ?? []);
+                    $sectionsData = [];
                     
-                    if (is_array($sections)) {
-                        foreach ($sections as $section) {
-                            if (isset($section['questions']) && is_array($section['questions'])) {
-                                foreach ($section['questions'] as $q) {
-                                    $questions[] = $q;
-                                }
-                            }
+                    // Convert sections to array with questions
+                    foreach ($questionnaire->sections as $section) {
+                        $sectionQuestions = [];
+                        foreach ($section->questions as $question) {
+                            $questionData = [
+                                'id' => $question->id,
+                                'type' => $question->type,
+                                'title' => $question->title,
+                                'description' => $question->description,
+                                'is_required' => $question->is_required,
+                                'options' => $question->options,
+                                'validation_rules' => $question->validation_rules,
+                                'conditional_logic' => $question->conditional_logic,
+                                'order' => $question->order,
+                            ];
+                            $sectionQuestions[] = $questionData;
+                            $questions[] = $questionData;
                         }
+                        
+                        $sectionsData[] = [
+                            'id' => $section->id,
+                            'questionnaire_id' => $section->questionnaire_id,
+                            'title' => $section->title,
+                            'description' => $section->description,
+                            'order' => $section->order,
+                            'created_at' => $section->created_at,
+                            'updated_at' => $section->updated_at,
+                            'deleted_at' => $section->deleted_at,
+                            'conditional_logic' => $section->conditional_logic,
+                            'translations' => $section->translations,
+                            'questions' => $sectionQuestions,
+                        ];
                     }
 
                     $result[] = [
@@ -57,7 +96,7 @@ class EvaluationCustomQuestionnaireController extends Controller
                         'status' => $questionnaire->status,
                         'data' => [
                             'questions' => $questions,
-                            'sections' => $sections,
+                            'sections' => $sectionsData,
                         ],
                         'added_at' => $cq->created_at,
                     ];
@@ -87,17 +126,37 @@ class EvaluationCustomQuestionnaireController extends Controller
         try {
             $user = Auth::user();
             
-            if (!$user || !$user->organization_id) {
+            if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not authenticated or organization not found'
+                    'message' => 'User not authenticated'
                 ], 401);
             }
 
             $request->validate([
-                'questionnaire_id' => 'required|uuid',
+                'questionnaire_id' => 'required|integer',
                 'questionnaire_name' => 'required|string|max:255',
+                'organization_id' => 'nullable|integer',
+                'program_id' => 'nullable|uuid',
             ]);
+
+            // Determine organization_id and program_id based on user role
+            $organizationId = null;
+            $programId = null;
+            
+            if ($user->role === 'evaluation-admin') {
+                // Evaluation admin: use their program_id
+                $programId = $user->program_id;
+                $organizationId = $user->organization_id; // Still track org if available
+            } elseif ($user->role === 'super-admin') {
+                // Super admin can specify both
+                $organizationId = $request->organization_id;
+                $programId = $request->program_id;
+            } else {
+                // Other roles: use their organization
+                $organizationId = $user->organization_id;
+                $programId = $request->program_id; // Allow specifying program
+            }
 
             // Check if questionnaire exists
             $questionnaire = Questionnaire::find($request->questionnaire_id);
@@ -108,11 +167,17 @@ class EvaluationCustomQuestionnaireController extends Controller
                 ], 404);
             }
 
-            // Check if already added
-            $existing = EvaluationCustomQuestionnaire::where('organization_id', $user->organization_id)
-                ->where('questionnaire_id', $request->questionnaire_id)
-                ->where('is_active', true)
-                ->first();
+            // Check if already added (check both org and program if applicable)
+            $existingQuery = EvaluationCustomQuestionnaire::where('questionnaire_id', $request->questionnaire_id)
+                ->where('is_active', true);
+            
+            if ($programId) {
+                $existingQuery->where('program_id', $programId);
+            } else {
+                $existingQuery->where('organization_id', $organizationId);
+            }
+            
+            $existing = $existingQuery->first();
 
             if ($existing) {
                 return response()->json([
@@ -128,7 +193,8 @@ class EvaluationCustomQuestionnaireController extends Controller
 
             // Create new entry
             $customQuestionnaire = EvaluationCustomQuestionnaire::create([
-                'organization_id' => $user->organization_id,
+                'organization_id' => $organizationId,
+                'program_id' => $programId,
                 'questionnaire_id' => $request->questionnaire_id,
                 'questionnaire_name' => $request->questionnaire_name,
                 'added_by' => $user->id,
@@ -183,14 +249,26 @@ class EvaluationCustomQuestionnaireController extends Controller
         try {
             $user = Auth::user();
             
-            if (!$user || !$user->organization_id) {
+            if (!$user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'User not authenticated or organization not found'
+                    'message' => 'User not authenticated'
                 ], 401);
             }
 
-            $customQuestionnaire = EvaluationCustomQuestionnaire::where('organization_id', $user->organization_id)
+            // Super-admin can specify organization_id in query params, others use their own
+            $organizationId = $user->role === 'super-admin' && $request->has('organization_id') 
+                ? $request->query('organization_id') 
+                : $user->organization_id;
+            
+            if (!$organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Organization ID is required'
+                ], 400);
+            }
+
+            $customQuestionnaire = EvaluationCustomQuestionnaire::where('organization_id', $organizationId)
                 ->where('questionnaire_id', $questionnaireId)
                 ->where('is_active', true)
                 ->first();

@@ -266,6 +266,13 @@ class EvaluationDepartmentController extends Controller
                         ->toArray();
                     
                     if (count($staffIds) > 0) {
+                        // Get user IDs associated with these staff members
+                        $userIds = DB::table('evaluation_staff')
+                            ->whereIn('id', $staffIds)
+                            ->whereNotNull('user_id')
+                            ->pluck('user_id')
+                            ->toArray();
+                        
                         // Delete hierarchy mappings where staff is involved
                         DB::table('evaluation_hierarchy')
                             ->where(function($q) use ($staffIds) {
@@ -282,6 +289,12 @@ class EvaluationDepartmentController extends Controller
                             })
                             ->whereNull('deleted_at')
                             ->update(['deleted_at' => now()]);
+                        
+                        // Delete associated user accounts
+                        if (count($userIds) > 0) {
+                            DB::table('users')->whereIn('id', $userIds)->delete();
+                            \Log::info('Deleted associated user accounts during department cascade', ['count' => count($userIds)]);
+                        }
                         
                         // Delete staff
                         DB::table('evaluation_staff')

@@ -10,10 +10,32 @@ import {
   Download, Filter, Eye, FileText, ChevronUp, Award, Target, 
   ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart, FileQuestion
 } from 'lucide-react';
+import { 
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+} from 'recharts';
 import AppLayout from '@/components/app-layout';
 import { fetchWithAuth } from '@/lib/api';
 import { toast } from '@/components/ui/toast';
 import DeleteConfirmationModal from '@/components/delete-confirmation-modal';
+
+// Safe date formatter that prevents hydration mismatches
+const formatDate = (dateString: string | null | undefined): string => {
+  if (!dateString) return 'N/A';
+  try {
+    // Use consistent formatting that works server and client side
+    const date = new Date(dateString);
+    // Use UTC to ensure consistency across environments
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: 'UTC'
+    });
+  } catch (e) {
+    return 'N/A';
+  }
+};
 
 // Types
 interface Department {
@@ -84,7 +106,9 @@ interface TriggeredEvaluation {
   subordinates_count: number;
   status: 'pending' | 'in_progress' | 'completed';
   triggered_at: string;
+  scheduled_trigger_at?: string;
   completed_at?: string;
+  is_active: boolean;
 }
 
 interface ReportSummary {
@@ -235,18 +259,8 @@ function EvaluationNewPageContent() {
   const [user, setUser] = useState<any>(null);
   const [selectedProgramFilter, setSelectedProgramFilter] = useState<string>('all'); // For superadmin filter
   
-  // Set default active tab based on URL param (to prevent flash to setup)
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    // Check URL param on initial load
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tabParam = urlParams.get('tab');
-      if (tabParam === 'trigger' || tabParam === 'history' || tabParam === 'reports') {
-        return tabParam as TabType;
-      }
-    }
-    return 'setup';
-  });
+  // Set default active tab - will be updated in useEffect after mount
+  const [activeTab, setActiveTab] = useState<TabType>('setup');
   
   // Toast helper functions for uniform styling
   const showToast = {
@@ -375,7 +389,7 @@ function EvaluationNewPageContent() {
   const getSelectedCustomQuestionnaire = () => {
     if (!selectedTemplate?.startsWith('custom_')) return null;
     const questionnaireId = selectedTemplate.replace('custom_', '');
-    return customQuestionnaires.find(q => q.id === questionnaireId);
+    return customQuestionnaires.find(q => String(q.id) === questionnaireId);
   };
   
   // Selected state for cascading
@@ -396,7 +410,7 @@ function EvaluationNewPageContent() {
   // Delete confirmation states
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
-    type: 'department' | 'role' | 'staff' | null;
+    type: 'department' | 'role' | 'staff' | 'mapping' | null;
     id: string;
     name: string;
   }>({ isOpen: false, type: null, id: '', name: '' });
@@ -433,6 +447,13 @@ function EvaluationNewPageContent() {
     const loadCustomQuestionnaires = async () => {
       setLoadingCustomQuestionnaires(true);
       try {
+        // For evaluation-staff, tasks are loaded via fetchMyPerformance, skip here
+        if (user?.role === 'evaluation-staff' || user?.role === 'evaluation_staff') {
+          setLoadingCustomQuestionnaires(false);
+          return;
+        }
+        
+        // For other roles, load custom questionnaires
         const response = await fetchWithAuth('/evaluation-custom-questionnaires');
         if (response?.success && response?.data) {
           const questionnaires = response.data.map((q: any) => ({
@@ -445,14 +466,16 @@ function EvaluationNewPageContent() {
         }
       } catch (error) {
         console.error('Failed to load custom questionnaires from DB:', error);
-        // Fallback to sessionStorage if DB fails
-        const saved = sessionStorage.getItem('evaluation_custom_questionnaires');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            setCustomQuestionnaires(parsed);
-          } catch (e) {
-            console.error('Failed to parse saved questionnaires:', e);
+        // Fallback to sessionStorage if DB fails (only for non-evaluation-staff)
+        if (user?.role !== 'evaluation-staff' && user?.role !== 'evaluation_staff') {
+          const saved = sessionStorage.getItem('evaluation_custom_questionnaires');
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              setCustomQuestionnaires(parsed);
+            } catch (e) {
+              console.error('Failed to parse saved questionnaires:', e);
+            }
           }
         }
       } finally {
@@ -460,14 +483,17 @@ function EvaluationNewPageContent() {
       }
     };
     
-    loadCustomQuestionnaires();
+    // Only load questionnaires if user data is available
+    if (user) {
+      loadCustomQuestionnaires();
+    }
     
     // Also restore selected template from sessionStorage
     const savedSelection = sessionStorage.getItem('evaluation_selected_template');
     if (savedSelection) {
       setSelectedTemplate(savedSelection);
     }
-  }, []);
+  }, [user]);
   
   // Save custom questionnaires to sessionStorage as backup
   useEffect(() => {
@@ -505,6 +531,11 @@ function EvaluationNewPageContent() {
   const [reportViewMode, setReportViewMode] = useState<'staff' | 'evaluator' | 'analysis'>('staff');
   const [selectedStaffForAnalysis, setSelectedStaffForAnalysis] = useState<string | null>(null);
   
+  // Staff Performance Dashboard states (for evaluation-staff role)
+  const [myPerformanceData, setMyPerformanceData] = useState<any>(null);
+  const [teamPerformanceData, setTeamPerformanceData] = useState<any>(null);
+  const [staffDashboardLoading, setStaffDashboardLoading] = useState(false);
+  
   // Helper function to analyze staff performance
   const analyzeStaffPerformance = useMemo(() => {
     return (staffReport: StaffReport) => {
@@ -513,23 +544,50 @@ function EvaluationNewPageContent() {
       
       staffReport.evaluations.forEach(evaluation => {
         if (evaluation.responses) {
-          Object.entries(evaluation.responses).forEach(([question, answer]) => {
-            if (typeof answer === 'number') {
-              const existing = allScores.find(s => s.question === question);
-              if (existing) {
-                existing.score = (existing.score * existing.count + answer) / (existing.count + 1);
-                existing.count++;
-              } else {
-                allScores.push({ question, score: answer, count: 1 });
+          // Handle new API format where responses is an object with responses array
+          if (evaluation.responses.responses && Array.isArray(evaluation.responses.responses)) {
+            // Map array responses to template questions
+            const responsesArray = evaluation.responses.responses;
+            evaluation.template_questions?.forEach((questionObj: any, index: number) => {
+              const answer = responsesArray[index];
+              const questionText = questionObj.question;
+              
+              if (typeof answer === 'number') {
+                const existing = allScores.find(s => s.question === questionText);
+                if (existing) {
+                  existing.score = (existing.score * existing.count + answer) / (existing.count + 1);
+                  existing.count++;
+                } else {
+                  allScores.push({ question: questionText, score: answer, count: 1 });
+                }
+              } else if (typeof answer === 'string' && answer.trim()) {
+                textFeedback.push({ 
+                  question: questionText, 
+                  answer: String(answer), 
+                  evaluator: evaluation.evaluator_name 
+                });
               }
-            } else if (typeof answer === 'string' && answer.trim()) {
-              textFeedback.push({ 
-                question, 
-                answer: String(answer), 
-                evaluator: evaluation.evaluator_name 
-              });
-            }
-          });
+            });
+          } else {
+            // Handle old format where responses is an object with question keys
+            Object.entries(evaluation.responses).forEach(([question, answer]) => {
+              if (typeof answer === 'number') {
+                const existing = allScores.find(s => s.question === question);
+                if (existing) {
+                  existing.score = (existing.score * existing.count + answer) / (existing.count + 1);
+                  existing.count++;
+                } else {
+                  allScores.push({ question, score: answer, count: 1 });
+                }
+              } else if (typeof answer === 'string' && answer.trim()) {
+                textFeedback.push({ 
+                  question, 
+                  answer: String(answer), 
+                  evaluator: evaluation.evaluator_name 
+                });
+              }
+            });
+          }
         }
       });
       
@@ -574,15 +632,19 @@ function EvaluationNewPageContent() {
           
           // Set default tab based on role - BUT only if URL doesn't have a tab param
           // This prevents overwriting the tab when returning from questionnaires page
-          const urlParams = new URLSearchParams(window.location.search);
-          const tabFromUrl = urlParams.get('tab');
+          const tabFromUrl = searchParams.get('tab');
           
           if (!tabFromUrl) {
             // Only set default tab if no tab specified in URL
-            if (userData.role === 'program-moderator' || userData.role === 'program-manager') {
+            if (userData.role === 'program-moderator' || userData.role === 'program-manager' || userData.role === 'evaluation-staff' || userData.role === 'evaluation_staff') {
               setActiveTab('my-dashboard');
             } else {
               setActiveTab('setup');
+            }
+          } else {
+            // Apply tab from URL if present
+            if (tabFromUrl === 'trigger' || tabFromUrl === 'history' || tabFromUrl === 'reports' || tabFromUrl === 'my-dashboard') {
+              setActiveTab(tabFromUrl as TabType);
             }
           }
           
@@ -599,7 +661,7 @@ function EvaluationNewPageContent() {
       }
     };
     fetchProgramId();
-  }, []);
+  }, [searchParams]);
 
   // Fetch data - Derive departments from roles categories
   const fetchDepartments = useCallback(async (filterProgramId?: string) => {
@@ -790,6 +852,59 @@ function EvaluationNewPageContent() {
     }
   }, [programId, selectedProgramFilter, user]);
 
+  // Fetch staff performance data (for evaluation-staff, moderators, and managers)
+  const fetchMyPerformance = useCallback(async () => {
+    if (user?.role !== 'evaluation-staff' && user?.role !== 'evaluation_staff' && user?.role !== 'program-moderator' && user?.role !== 'program-manager') return;
+    try {
+      setStaffDashboardLoading(true);
+      
+      // Fetch performance data
+      const response = await fetchWithAuth('/evaluation/my-performance');
+      if (response.success) {
+        setMyPerformanceData(response);
+      }
+      
+      // Fetch pending evaluation tasks
+      const tasksResponse = await fetchWithAuth('/my-evaluations/pending');
+      if (tasksResponse?.data) {
+        // Transform to match TriggeredEvaluation format expected by the UI
+        const tasks = tasksResponse.data.map((task: any) => ({
+          id: task.triggered_id, // Use triggered_id for the URL
+          template_name: task.event_name,
+          evaluator_name: task.evaluator_name,
+          subordinates_count: task.subordinates_count || 1, // Use actual count from API with fallback
+          status: task.status,
+          triggered_at: task.sent_at,
+          start_date: task.sent_at,
+          end_date: task.due_date,
+          evaluatee_name: task.evaluatee_name,
+          access_token: task.access_token,
+          triggered_id: task.triggered_id
+        }));
+        setTriggeredEvaluations(tasks);
+      }
+    } catch (error) {
+      console.error('Failed to fetch my performance:', error);
+    } finally {
+      setStaffDashboardLoading(false);
+    }
+  }, [user]);
+
+  const fetchTeamPerformance = useCallback(async () => {
+    if (user?.role !== 'evaluation-staff' && user?.role !== 'evaluation_staff' && user?.role !== 'program-moderator' && user?.role !== 'program-manager') return;
+    try {
+      setStaffDashboardLoading(true);
+      const response = await fetchWithAuth('/evaluation/team-performance');
+      if (response.success) {
+        setTeamPerformanceData(response);
+      }
+    } catch (error) {
+      console.error('Failed to fetch team performance:', error);
+    } finally {
+      setStaffDashboardLoading(false);
+    }
+  }, [user]);
+
   const handleExportReport = async (format: 'json' | 'csv') => {
     try {
       const effectiveProgramId = selectedProgramFilter !== 'all' ? selectedProgramFilter : programId;
@@ -836,6 +951,11 @@ function EvaluationNewPageContent() {
   }, [programId, selectedProgramFilter, user, fetchMappings]);
 
   useEffect(() => {
+    // For evaluation-staff, moderators, and managers tasks are loaded via fetchMyPerformance
+    if (user?.role === 'evaluation-staff' || user?.role === 'evaluation_staff' || user?.role === 'program-moderator' || user?.role === 'program-manager') {
+      return; // Skip this hook - they use fetchMyPerformance instead
+    }
+    
     if ((programId || user?.role === 'super-admin') && (activeTab === 'history' || activeTab === 'my-dashboard')) {
       fetchTriggeredEvaluations();
     }
@@ -848,6 +968,20 @@ function EvaluationNewPageContent() {
       fetchEvaluatorReports();
     }
   }, [programId, activeTab, user, fetchReportSummary, fetchStaffReports, fetchEvaluatorReports]);
+
+  // Fetch team performance data for evaluation-staff, moderators, and managers on Reports tab
+  useEffect(() => {
+    if ((user?.role === 'evaluation-staff' || user?.role === 'evaluation_staff' || user?.role === 'program-moderator' || user?.role === 'program-manager') && activeTab === 'reports') {
+      fetchTeamPerformance();
+    }
+  }, [user, activeTab, fetchTeamPerformance]);
+
+  // Fetch my performance data for evaluation-staff, moderators, and managers on My Dashboard
+  useEffect(() => {
+    if ((user?.role === 'evaluation-staff' || user?.role === 'evaluation_staff' || user?.role === 'program-moderator' || user?.role === 'program-manager') && activeTab === 'my-dashboard') {
+      fetchMyPerformance();
+    }
+  }, [user, activeTab, fetchMyPerformance]);
 
   // Refetch staff reports when filters change
   useEffect(() => {
@@ -1205,10 +1339,18 @@ function EvaluationNewPageContent() {
     setShowMappingModal(true);
   };
 
-  const handleDeleteMapping = async (mappingId: string) => {
-    if (!confirm('Delete this hierarchy mapping? This will remove all subordinate relationships for this evaluator.')) {
-      return;
-    }
+  const handleDeleteMapping = async (mappingId: string, evaluatorName?: string) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'mapping',
+      id: mappingId,
+      name: evaluatorName || 'this mapping'
+    });
+  };
+
+  const confirmDeleteMapping = async () => {
+    const mappingId = deleteModal.id;
+    setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
     
     try {
       setLoading(true);
@@ -1589,12 +1731,13 @@ function EvaluationNewPageContent() {
   // Define tabs based on user role
   const getTabs = () => {
     const isModeratorOrManager = user?.role === 'program-moderator' || user?.role === 'program-manager';
+    const isEvaluationStaff = user?.role === 'evaluation-staff' || user?.role === 'evaluation_staff';
     
-    if (isModeratorOrManager) {
-      // Moderators and Managers only see My Dashboard and Reports
+    if (isModeratorOrManager || isEvaluationStaff) {
+      // Moderators, Managers, and Evaluation Staff only see My Dashboard and Reports
       return [
         { id: 'my-dashboard' as TabType, label: 'My Dashboard', icon: CheckCircle, description: 'View evaluations assigned to me' },
-        { id: 'reports' as TabType, label: 'Reports', icon: BarChart3, description: 'View my team reports' },
+        { id: 'reports' as TabType, label: 'Report Dashboard', icon: BarChart3, description: 'View my team reports' },
       ];
     }
     
@@ -1684,85 +1827,373 @@ function EvaluationNewPageContent() {
 
         {/* Content */}
         <div className="p-6">
-          {/* MY DASHBOARD TAB - For Moderators and Managers */}
+          {/* MY DASHBOARD TAB - For Moderators, Managers, and Evaluation Staff */}
           {activeTab === 'my-dashboard' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-sm border">
-                <div className="p-4 border-b bg-gray-50">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    My Evaluations
-                  </h3>
-                  <p className="text-sm text-gray-500 mt-1">Evaluations assigned to me for completion</p>
-                </div>
-                <div className="p-4">
-                  {triggeredEvaluations.length === 0 ? (
-                    <div className="text-center py-12 text-gray-500">
-                      <CheckCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                      <p>No evaluations assigned yet</p>
-                      <p className="text-sm">Evaluations will appear here when assigned by your administrator</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="text-left text-sm text-gray-500 border-b">
-                            <th className="pb-3 font-medium">Form</th>
-                            <th className="pb-3 font-medium">Subordinates to Evaluate</th>
-                            <th className="pb-3 font-medium">Status</th>
-                            <th className="pb-3 font-medium">Assigned</th>
-                            <th className="pb-3 font-medium text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {triggeredEvaluations.map((evaluation) => (
-                            <tr key={evaluation.id} className="text-sm">
-                              <td className="py-4 font-medium text-gray-900">
-                                {evaluation.template_name}
-                              </td>
-                              <td className="py-4 text-gray-600">
-                                {evaluation.subordinates_count} staff member(s)
-                              </td>
-                              <td className="py-4">
-                                {evaluation.status === 'completed' ? (
-                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                                    Completed
-                                  </span>
-                                ) : evaluation.status === 'in_progress' ? (
-                                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                                    In Progress
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
-                                    Pending
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-4 text-gray-500">
-                                {new Date(evaluation.triggered_at).toLocaleDateString()}
-                              </td>
-                              <td className="py-4 text-right">
-                                {evaluation.status !== 'completed' && (
-                                  <button
-                                    onClick={() => {
-                                      // TODO: Navigate to evaluation form
-                                      window.open(`/e/evaluate/${evaluation.id}`, '_blank');
-                                    }}
-                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium inline-flex items-center gap-1"
-                                  >
-                                    <Edit2 className="h-3 w-3" />
-                                    {evaluation.status === 'in_progress' ? 'Continue' : 'Start Evaluation'}
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+              {/* Evaluation Staff: Show Both Performance Received and Evaluation Tasks */}
+              {(user?.role === 'evaluation-staff' || user?.role === 'evaluation_staff') && (
+                <>
+                  {/* Section 1: My Performance - Ratings received from manager */}
+                  {myPerformanceData && (
+                    <div className="bg-white rounded-xl shadow-sm border">
+                      <div className="p-4 border-b bg-blue-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <Star className="h-5 w-5 text-yellow-600" />
+                          My Performance Reviews
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-1">Evaluation ratings I have received from my reporting manager</p>
+                      </div>
+                      <div className="p-6">
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm text-blue-600 font-medium">Overall Score</p>
+                                <p className="text-2xl font-bold text-blue-900 mt-1">{myPerformanceData.overallScore}/5</p>
+                              </div>
+                              <Star className="h-8 w-8 text-yellow-500" />
+                            </div>
+                          </div>
+                          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm text-green-600 font-medium">Total Reviews</p>
+                                <p className="text-2xl font-bold text-green-900 mt-1">{myPerformanceData.totalEvaluations}</p>
+                              </div>
+                              <FileText className="h-8 w-8 text-green-600" />
+                            </div>
+                          </div>
+                          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm text-purple-600 font-medium">Latest Review</p>
+                                <p className="text-sm font-bold text-purple-900 mt-1">
+                                  {formatDate(myPerformanceData.latestEvaluation)}
+                                </p>
+                              </div>
+                              <Calendar className="h-8 w-8 text-purple-600" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Recent Evaluations */}
+                        {myPerformanceData.evaluations && myPerformanceData.evaluations.length > 0 && (
+                          <div className="space-y-3">
+                            <h4 className="font-medium text-gray-900">Recent Evaluations</h4>
+                            {myPerformanceData.evaluations.slice(0, 3).map((evaluation: any, idx: number) => (
+                              <div key={idx} className="border rounded-lg p-4 bg-gray-50">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className="font-medium text-gray-900">{evaluation.template_name}</p>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                      Evaluated by: {evaluation.evaluator_name}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="flex items-center gap-1">
+                                      <Star className="h-4 w-4 text-yellow-500" />
+                                      <span className="font-bold text-gray-900">{evaluation.score || 'N/A'}</span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {formatDate(evaluation.completed_at)}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
-                </div>
-              </div>
+
+                  {/* Section 2: Evaluation Tasks - Forms assigned to evaluate subordinates */}
+                  <div className="bg-white rounded-xl shadow-sm border">
+                    <div className="p-4 border-b bg-green-50">
+                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        My Evaluation Tasks
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-1">Evaluation forms assigned to me to review and rate my subordinates</p>
+                    </div>
+                    <div className="p-4">
+                      {triggeredEvaluations.length === 0 ? (
+                        <div className="text-center py-12 text-gray-500">
+                          <CheckCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                          <p>No evaluation tasks assigned yet</p>
+                          <p className="text-sm">Evaluation forms will appear here when assigned by your administrator</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="text-left text-sm text-gray-500 border-b">
+                                <th className="pb-3 font-medium">Form Name</th>
+                                <th className="pb-3 font-medium">Subordinates to Evaluate</th>
+                                <th className="pb-3 font-medium">Start Date</th>
+                                <th className="pb-3 font-medium">End Date</th>
+                                <th className="pb-3 font-medium">Status</th>
+                                <th className="pb-3 font-medium text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {triggeredEvaluations.map((evaluation) => (
+                                <tr key={evaluation.id} className="text-sm">
+                                  <td className="py-4 font-medium text-gray-900">
+                                    {evaluation.template_name}
+                                  </td>
+                                  <td className="py-4 text-gray-600">
+                                    {evaluation.subordinates_count} staff member(s)
+                                  </td>
+                                  <td className="py-4 text-gray-500">
+                                    {formatDate(evaluation.start_date) !== 'N/A' ? formatDate(evaluation.start_date) : '-'}
+                                  </td>
+                                  <td className="py-4 text-gray-500">
+                                    {formatDate(evaluation.end_date) !== 'N/A' ? formatDate(evaluation.end_date) : '-'}
+                                  </td>
+                                  <td className="py-4">
+                                    {evaluation.status === 'completed' ? (
+                                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                        Completed
+                                      </span>
+                                    ) : evaluation.status === 'in_progress' ? (
+                                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
+                                        In Progress
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                                        Pending
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-4 text-right">
+                                    {evaluation.status !== 'completed' && (
+                                      <button
+                                        onClick={() => {
+                                          const url = (evaluation as any).access_token 
+                                            ? `/e/evaluate/${evaluation.id}?token=${(evaluation as any).access_token}`
+                                            : `/e/evaluate/${evaluation.id}`;
+                                          window.open(url, '_blank');
+                                        }}
+                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium inline-flex items-center gap-1"
+                                      >
+                                        <Edit2 className="h-3 w-3" />
+                                        {evaluation.status === 'in_progress' ? 'Continue' : 'Start Evaluation'}
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Moderator/Manager: Show Same as Evaluation Staff - Performance + Tasks */}
+              {(user?.role === 'program-moderator' || user?.role === 'program-manager') && (
+                <>
+                  {/* Summary Cards */}
+                  {myPerformanceData && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">Overall Score</p>
+                            <p className="text-3xl font-bold text-blue-900 mt-2">
+                              {myPerformanceData.overallScore || '0.0'}/5
+                            </p>
+                          </div>
+                          <div className="bg-blue-200 rounded-full p-3">
+                            <Star className="h-6 w-6 text-blue-700" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-green-600 font-medium">Evaluations Received</p>
+                            <p className="text-3xl font-bold text-green-900 mt-2">{myPerformanceData.totalEvaluations}</p>
+                          </div>
+                          <div className="bg-green-200 rounded-full p-3">
+                            <CheckCircle className="h-6 w-6 text-green-700" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-6 border border-amber-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-amber-600 font-medium">Tasks Assigned</p>
+                            <p className="text-3xl font-bold text-amber-900 mt-2">{triggeredEvaluations.length}</p>
+                          </div>
+                          <div className="bg-amber-200 rounded-full p-3">
+                            <Activity className="h-6 w-6 text-amber-700" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Section 1: My Performance - Ratings received from manager */}
+                  {myPerformanceData && (
+                    <div className="bg-white rounded-xl shadow-sm border">
+                      <div className="p-4 border-b bg-blue-50">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <Star className="h-5 w-5 text-yellow-600" />
+                          My Performance Reviews
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-1">Evaluation ratings I have received from my reporting manager</p>
+                      </div>
+                      <div className="p-6">
+                        {myPerformanceData.evaluations.length === 0 ? (
+                          <div className="text-center py-12 text-gray-500">
+                            <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                            <p>No performance reviews yet</p>
+                            <p className="text-sm">Your manager's evaluations will appear here</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {myPerformanceData.evaluations.map((evaluation: any, idx: number) => (
+                              <div key={idx} className="border rounded-lg p-4 bg-gray-50">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div>
+                                    <p className="font-semibold text-gray-900">{evaluation.template_name}</p>
+                                    <p className="text-sm text-gray-500">
+                                      Evaluated by {evaluation.evaluator_name} • {formatDate(evaluation.completed_at)}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border">
+                                    <Star className="h-5 w-5 text-amber-500" />
+                                    <span className="text-2xl font-bold text-gray-900">{evaluation.average_score.toFixed(1)}</span>
+                                    <span className="text-sm text-gray-500">/5.0</span>
+                                  </div>
+                                </div>
+                                {evaluation.responses && Object.keys(evaluation.responses).length > 0 && (
+                                  <div className="mt-3 pt-3 border-t">
+                                    <p className="text-sm font-medium text-gray-700 mb-2">Response Details:</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                      {Object.entries(evaluation.responses).map(([question, answer], qIdx) => (
+                                        <div key={qIdx} className="bg-white p-3 rounded border">
+                                          <p className="text-xs text-gray-500 mb-1">{question}</p>
+                                          <p className="font-medium text-gray-900">
+                                            {typeof answer === 'number' ? (
+                                              <span className="flex items-center gap-1">
+                                                <span className="text-yellow-500">{'★'.repeat(answer)}</span>
+                                                <span className="text-gray-300">{'★'.repeat(5 - answer)}</span>
+                                                <span className="text-sm text-gray-600 ml-2">({answer}/5)</span>
+                                              </span>
+                                            ) : (
+                                              String(answer)
+                                            )}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Section 2: My Evaluation Tasks */}
+                  <div className="bg-white rounded-xl shadow-sm border">
+                    <div className="p-4 border-b bg-purple-50">
+                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-purple-600" />
+                        My Evaluation Tasks
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-1">Evaluations assigned to me for completion</p>
+                    </div>
+                    <div className="p-4">
+                      {staffDashboardLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                        </div>
+                      ) : triggeredEvaluations.length === 0 ? (
+                        <div className="text-center py-12 text-gray-500">
+                          <CheckCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                          <p>No evaluations assigned yet</p>
+                          <p className="text-sm">Evaluations will appear here when assigned by your administrator</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="text-left text-sm text-gray-500 border-b">
+                                <th className="pb-3 font-medium">Form</th>
+                                <th className="pb-3 font-medium">Subordinates to Evaluate</th>
+                                <th className="pb-3 font-medium">Status</th>
+                                <th className="pb-3 font-medium">Start Date</th>
+                                <th className="pb-3 font-medium">End Date</th>
+                                <th className="pb-3 font-medium text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {triggeredEvaluations.map((evaluation) => (
+                                <tr key={evaluation.id} className="text-sm">
+                                  <td className="py-4 font-medium text-gray-900">
+                                    {evaluation.template_name}
+                                  </td>
+                                  <td className="py-4 text-gray-600">
+                                    {evaluation.subordinates_count} staff member(s)
+                                  </td>
+                                  <td className="py-4">
+                                    {evaluation.status === 'completed' ? (
+                                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                        Completed
+                                      </span>
+                                    ) : evaluation.status === 'in_progress' ? (
+                                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
+                                        In Progress
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                                        Pending
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-4 text-gray-500">
+                                    {formatDate(evaluation.start_date)}
+                                  </td>
+                                  <td className="py-4 text-gray-500">
+                                    {formatDate(evaluation.end_date)}
+                                  </td>
+                                  <td className="py-4 text-right">
+                                    {evaluation.status !== 'completed' && (
+                                      <button
+                                        onClick={() => {
+                                          const url = (evaluation as any).access_token 
+                                            ? `/e/evaluate/${evaluation.id}?token=${(evaluation as any).access_token}`
+                                            : `/e/evaluate/${evaluation.id}`;
+                                          window.open(url, '_blank');
+                                        }}
+                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium inline-flex items-center gap-1"
+                                      >
+                                        <Edit2 className="h-3 w-3" />
+                                        {evaluation.status === 'in_progress' ? 'Continue' : 'Start Evaluation'}
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -2086,7 +2517,7 @@ function EvaluationNewPageContent() {
                                   <Edit2 className="h-4 w-4" />
                                 </button>
                                 <button
-                                  onClick={() => handleDeleteMapping(mapping.id)}
+                                  onClick={() => handleDeleteMapping(mapping.id, mapping.evaluator_name)}
                                   className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded transition"
                                   title="Delete"
                                 >
@@ -2126,14 +2557,14 @@ function EvaluationNewPageContent() {
 
           {/* TRIGGER TAB */}
           {activeTab === 'trigger' && (
-            <div className="max-w-4xl mx-auto space-y-6">
+            <div className="space-y-6">
               {/* Step 1: Select Form */}
               <div className="bg-white rounded-xl shadow-sm border p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm">1</span>
                   Select Evaluation Form
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {evaluationTemplates.map((template) => {
                     const Icon = template.icon;
                     return (
@@ -2380,7 +2811,7 @@ function EvaluationNewPageContent() {
                   </div>
                   <button
                     onClick={handleTriggerEvaluation}
-                    disabled={!selectedTemplate || (selectedTemplate?.startsWith('custom_') && !getSelectedCustomQuestionnaire()) || selectedEvaluators.length === 0 || triggering}
+                    disabled={!selectedTemplate || selectedEvaluators.length === 0 || triggering}
                     className="px-6 py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {triggering ? (
@@ -2423,6 +2854,7 @@ function EvaluationNewPageContent() {
                             <th className="pb-3 font-medium">Evaluator</th>
                             <th className="pb-3 font-medium">Subordinates</th>
                             <th className="pb-3 font-medium">Status</th>
+                            <th className="pb-3 font-medium">Scheduled</th>
                             <th className="pb-3 font-medium">Triggered</th>
                             <th className="pb-3 font-medium text-right">Actions</th>
                           </tr>
@@ -2449,7 +2881,14 @@ function EvaluationNewPageContent() {
                                 )}
                               </td>
                               <td className="py-4 text-gray-500">
-                                {new Date(evaluation.triggered_at).toLocaleDateString()}
+                                {evaluation.scheduled_trigger_at ? (
+                                  <span className="text-blue-600">{formatDate(evaluation.scheduled_trigger_at)}</span>
+                                ) : (
+                                  <span className="text-gray-400">Immediate</span>
+                                )}
+                              </td>
+                              <td className="py-4 text-gray-500">
+                                {formatDate(evaluation.triggered_at)}
                               </td>
                               <td className="py-4">
                                 <div className="flex items-center justify-end gap-2">
@@ -2507,6 +2946,697 @@ function EvaluationNewPageContent() {
           {/* REPORTS TAB */}
           {activeTab === 'reports' && (
             <div className="space-y-6">
+              {/* Evaluation Staff, Moderator, Manager - Comprehensive Report Dashboard */}
+              {(user?.role === 'evaluation-staff' || user?.role === 'evaluation_staff' || user?.role === 'program-moderator' || user?.role === 'program-manager') && (
+                <>
+                  {/* Summary Cards for Staff */}
+                  {teamPerformanceData && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">Total Subordinates</p>
+                            <p className="text-3xl font-bold text-blue-900 mt-2">{teamPerformanceData.subordinates_count}</p>
+                          </div>
+                          <div className="bg-blue-200 rounded-full p-3">
+                            <Users className="h-6 w-6 text-blue-700" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-green-600 font-medium">Total Evaluations</p>
+                            <p className="text-3xl font-bold text-green-900 mt-2">
+                              {teamPerformanceData.staff_reports.reduce((sum: number, s: any) => sum + s.total_evaluations, 0)}
+                            </p>
+                          </div>
+                          <div className="bg-green-200 rounded-full p-3">
+                            <CheckCircle className="h-6 w-6 text-green-700" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-6 border border-amber-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-amber-600 font-medium">Team Avg Score</p>
+                            <p className="text-3xl font-bold text-amber-900 mt-2">
+                              {teamPerformanceData.staff_reports.length > 0 
+                                ? (teamPerformanceData.staff_reports.reduce((sum: number, s: any) => sum + s.overall_average, 0) / teamPerformanceData.staff_reports.length).toFixed(1)
+                                : '0.0'}/5
+                            </p>
+                          </div>
+                          <div className="bg-amber-200 rounded-full p-3">
+                            <Star className="h-6 w-6 text-amber-700" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* View Mode Toggle */}
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => setReportViewMode('staff')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        reportViewMode === 'staff' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border hover:bg-gray-50'
+                      }`}
+                    >
+                      <Users className="inline h-4 w-4 mr-2" />
+                      Staff-wise View
+                    </button>
+                    <button
+                      onClick={() => setReportViewMode('analysis')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        reportViewMode === 'analysis' ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 border hover:bg-gray-50'
+                      }`}
+                    >
+                      <PieChart className="inline h-4 w-4 mr-2" />
+                      Performance Analysis
+                    </button>
+                  </div>
+
+                  {/* Staff-wise Report View */}
+                  {reportViewMode === 'staff' && (
+                    <div className="bg-white rounded-xl shadow-sm border">
+                      <div className="p-4 border-b">
+                        <h3 className="font-semibold text-gray-900">My Team Evaluation Reports</h3>
+                        <p className="text-sm text-gray-500">Detailed performance evaluations for your direct reports</p>
+                      </div>
+                      <div className="p-4">
+                        {staffDashboardLoading ? (
+                          <div className="flex items-center justify-center py-12">
+                            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                          </div>
+                        ) : !teamPerformanceData || teamPerformanceData.staff_reports.length === 0 ? (
+                          <div className="text-center py-12 text-gray-500">
+                            <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                            <p>No evaluation data found</p>
+                            <p className="text-sm">Your team's evaluations will appear here</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {teamPerformanceData.staff_reports.map((staffReport: any) => {
+                              const analysis = analyzeStaffPerformance(staffReport);
+                              return (
+                                <div key={staffReport.staff_id} className="border rounded-lg overflow-hidden">
+                                  <button
+                                    onClick={() => {
+                                      if (expandedStaff.includes(staffReport.staff_id)) {
+                                        setExpandedStaff(expandedStaff.filter(id => id !== staffReport.staff_id));
+                                      } else {
+                                        setExpandedStaff([...expandedStaff, staffReport.staff_id]);
+                                      }
+                                    }}
+                                    className="w-full p-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition"
+                                  >
+                                    <div className="flex items-center gap-4 flex-1 text-left">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <p className="font-semibold text-gray-900">{staffReport.staff_name}</p>
+                                          {staffReport.role_name && (
+                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                              {staffReport.role_name}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                                          <span>{staffReport.staff_email}</span>
+                                          {staffReport.employee_id && (
+                                            <>
+                                              <span className="text-gray-300">•</span>
+                                              <span>ID: {staffReport.employee_id}</span>
+                                            </>
+                                          )}
+                                          {staffReport.department && (
+                                            <>
+                                              <span className="text-gray-300">•</span>
+                                              <span>{staffReport.department}</span>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-6">
+                                        <div className="text-center">
+                                          <p className="text-2xl font-bold text-blue-600">{staffReport.total_evaluations}</p>
+                                          <p className="text-xs text-gray-500">Evaluations</p>
+                                        </div>
+                                        <div className="text-center">
+                                          <div className="flex items-center gap-1">
+                                            <Star className="h-5 w-5 text-amber-500" />
+                                            <p className="text-2xl font-bold text-gray-900">{staffReport.overall_average.toFixed(1)}</p>
+                                          </div>
+                                          <p className="text-xs text-gray-500">Avg Score</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {expandedStaff.includes(staffReport.staff_id) ? (
+                                      <ChevronUp className="h-5 w-5 text-gray-400" />
+                                    ) : (
+                                      <ChevronDown className="h-5 w-5 text-gray-400" />
+                                    )}
+                                  </button>
+                                  
+                                  {expandedStaff.includes(staffReport.staff_id) && (
+                                    <div className="border-t bg-white p-4 space-y-6">
+                                      {/* Radar Chart - Skills Overview */}
+                                      {analysis.allScores.length > 0 && (
+                                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 border border-purple-200">
+                                          <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                            <Activity className="h-5 w-5 text-purple-600" />
+                                            Skills Performance Overview
+                                          </h4>
+                                          <div className="bg-white rounded-lg p-4">
+                                            <ResponsiveContainer width="100%" height={300}>
+                                              <RadarChart data={analysis.allScores.slice(0, 8).map((skill: any) => ({
+                                                skill: skill.question.length > 25 ? skill.question.substring(0, 25) + '...' : skill.question,
+                                                score: parseFloat(skill.score.toFixed(1)),
+                                                fullMark: 5
+                                              }))}>
+                                                <PolarGrid stroke="#e5e7eb" />
+                                                <PolarAngleAxis dataKey="skill" tick={{ fill: '#6b7280', fontSize: 12 }} />
+                                                <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fill: '#6b7280' }} />
+                                                <Radar name="Performance" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
+                                                <Tooltip 
+                                                  contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                                                  formatter={(value: any) => [`${value}/5`, 'Score']}
+                                                />
+                                              </RadarChart>
+                                            </ResponsiveContainer>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Bar Chart - Detailed Ratings */}
+                                      {analysis.allScores.length > 0 && (
+                                        <div className="bg-white rounded-xl border">
+                                          <div className="p-4 border-b bg-blue-50">
+                                            <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                              <BarChart3 className="h-5 w-5 text-blue-600" />
+                                              Detailed Skill Ratings
+                                            </h4>
+                                            <p className="text-sm text-gray-600 mt-1">Individual competency scores with visual breakdown</p>
+                                          </div>
+                                          <div className="p-4">
+                                            <ResponsiveContainer width="100%" height={Math.max(300, analysis.allScores.length * 40)}>
+                                              <BarChart 
+                                                data={analysis.allScores.map((skill: any) => ({
+                                                  name: skill.question.length > 30 ? skill.question.substring(0, 30) + '...' : skill.question,
+                                                  score: parseFloat(skill.score.toFixed(1)),
+                                                  fullName: skill.question
+                                                }))}
+                                                layout="vertical"
+                                                margin={{ top: 5, right: 30, left: 150, bottom: 5 }}
+                                              >
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                                <XAxis type="number" domain={[0, 5]} tick={{ fill: '#6b7280' }} />
+                                                <YAxis type="category" dataKey="name" tick={{ fill: '#374151', fontSize: 12 }} width={140} />
+                                                <Tooltip 
+                                                  contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                                                  formatter={(value: any, name: any, props: any) => [`${value}/5.0`, props.payload.fullName]}
+                                                />
+                                                <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                                                  {analysis.allScores.map((skill: any, index: number) => {
+                                                    const score = skill.score;
+                                                    let color = '#ef4444'; // red for low scores
+                                                    if (score >= 4) color = '#22c55e'; // green for high scores
+                                                    else if (score >= 3) color = '#3b82f6'; // blue for medium scores
+                                                    else if (score >= 2) color = '#f59e0b'; // amber for below average
+                                                    return <Cell key={`cell-${index}`} fill={color} />;
+                                                  })}
+                                                </Bar>
+                                              </BarChart>
+                                            </ResponsiveContainer>
+                                          </div>
+                                          {/* Legend */}
+                                          <div className="px-4 pb-4 flex items-center justify-center gap-6 text-sm">
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-3 h-3 rounded bg-green-500"></div>
+                                              <span className="text-gray-600">Excellent (4.0-5.0)</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-3 h-3 rounded bg-blue-500"></div>
+                                              <span className="text-gray-600">Good (3.0-3.9)</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-3 h-3 rounded bg-amber-500"></div>
+                                              <span className="text-gray-600">Average (2.0-2.9)</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-3 h-3 rounded bg-red-500"></div>
+                                              <span className="text-gray-600">Needs Improvement (&lt;2.0)</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Strengths & Improvements */}
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Strengths */}
+                                        {analysis.strengths.length > 0 && (
+                                          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                                            <h5 className="font-medium text-green-800 mb-2 flex items-center gap-2">
+                                              <Award className="h-4 w-4" />
+                                              Top Strengths
+                                            </h5>
+                                            <ul className="space-y-2">
+                                              {analysis.strengths.slice(0, 3).map((item: any, idx: number) => (
+                                                <li key={idx} className="text-sm text-green-700 flex items-start gap-2">
+                                                  <span className="text-green-500 mt-0.5">✓</span>
+                                                  <span>{item.question} ({item.score.toFixed(1)}/5)</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+
+                                        {/* Improvements */}
+                                        {analysis.improvements.length > 0 && (
+                                          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                                            <h5 className="font-medium text-orange-800 mb-2 flex items-center gap-2">
+                                              <Target className="h-4 w-4" />
+                                              Areas to Improve
+                                            </h5>
+                                            <ul className="space-y-2">
+                                              {analysis.improvements.slice(0, 3).map((item: any, idx: number) => (
+                                                <li key={idx} className="text-sm text-orange-700 flex items-start gap-2">
+                                                  <span className="text-orange-500 mt-0.5">•</span>
+                                                  <span>{item.question} ({item.score.toFixed(1)}/5)</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Text Feedback */}
+                                      {analysis.textFeedback.length > 0 && (
+                                        <div>
+                                          <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                            <MessageSquare className="h-5 w-5 text-purple-600" />
+                                            Qualitative Feedback
+                                          </h4>
+                                          <div className="space-y-2">
+                                            {analysis.textFeedback.map((feedback: any, idx: number) => (
+                                              <div key={idx} className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                                                <p className="text-xs text-purple-600 font-medium mb-1">{feedback.question}</p>
+                                                <p className="text-sm text-gray-800">{feedback.answer}</p>
+                                                <p className="text-xs text-gray-500 mt-1">— {feedback.evaluator}</p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Evaluation History */}
+                                      <div>
+                                        <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                          <Calendar className="h-5 w-5 text-gray-600" />
+                                          Evaluation History
+                                        </h4>
+                                        {staffReport.evaluations.length === 0 ? (
+                                          <p className="text-sm text-gray-500 italic">No evaluations completed yet</p>
+                                        ) : (
+                                          <div className="space-y-2">
+                                            {staffReport.evaluations.map((evaluation: any, evalIndex: number) => (
+                                              <div key={evalIndex} className="bg-gray-50 rounded-lg p-3 border">
+                                                <div className="flex items-center justify-between">
+                                                  <div>
+                                                    <p className="font-medium text-gray-900">{evaluation.template_name}</p>
+                                                    <p className="text-xs text-gray-500">
+                                                      Evaluated by {evaluation.evaluator_name} • {formatDate(evaluation.evaluated_at)}
+                                                    </p>
+                                                  </div>
+                                                  <div className="flex items-center gap-2">
+                                                    <Star className="h-4 w-4 text-amber-500" />
+                                                    <span className="font-bold text-lg text-gray-900">{evaluation.average_score.toFixed(1)}</span>
+                                                    <span className="text-sm text-gray-500">/5.0</span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Performance Analysis View */}
+                  {reportViewMode === 'analysis' && (
+                    <div className="space-y-6">
+                      {staffDashboardLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                          <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+                        </div>
+                      ) : !teamPerformanceData || teamPerformanceData.staff_reports.length === 0 ? (
+                        <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
+                          <BarChart3 className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                          <p className="text-gray-500 text-lg">No evaluation data available for analysis</p>
+                          <p className="text-sm text-gray-400 mt-2">Complete some evaluations to see performance insights</p>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Staff Selection for Detailed Analysis */}
+                          <div className="bg-white rounded-xl shadow-sm border p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                <Target className="h-5 w-5 text-purple-600" />
+                                Select Staff for Detailed Analysis
+                              </h3>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                              {teamPerformanceData.staff_reports.map((staff: any) => {
+                                const analysis = analyzeStaffPerformance(staff);
+                                return (
+                                  <button
+                                    key={staff.staff_id}
+                                    onClick={() => setSelectedStaffForAnalysis(
+                                      selectedStaffForAnalysis === staff.staff_id ? null : staff.staff_id
+                                    )}
+                                    className={`p-3 rounded-lg border-2 transition text-left ${
+                                      selectedStaffForAnalysis === staff.staff_id
+                                        ? 'border-purple-500 bg-purple-50'
+                                        : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    <p className="font-medium text-gray-900 truncate text-sm">{staff.staff_name}</p>
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <Star className="h-3 w-3 text-yellow-500" />
+                                      <span className="text-xs font-bold text-gray-700">{analysis.overallAverage}</span>
+                                      <span className="text-xs text-gray-400">/ 5</span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Detailed Analysis for Selected Staff */}
+                          {selectedStaffForAnalysis && (() => {
+                            const selectedStaff = teamPerformanceData.staff_reports.find((s: any) => s.staff_id === selectedStaffForAnalysis);
+                            if (!selectedStaff) return null;
+                            const analysis = analyzeStaffPerformance(selectedStaff);
+                            
+                            return (
+                              <div className="space-y-6">
+                                {/* Staff Header Card */}
+                                <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+                                        <Users className="h-8 w-8 text-white" />
+                                      </div>
+                                      <div>
+                                        <h2 className="text-2xl font-bold">{selectedStaff.staff_name}</h2>
+                                        <p className="text-purple-200">{selectedStaff.staff_email}</p>
+                                        {selectedStaff.employee_id && (
+                                          <p className="text-purple-300 text-sm">ID: {selectedStaff.employee_id}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-5xl font-bold">{analysis.overallAverage}</div>
+                                      <div className="text-purple-200">Overall Score</div>
+                                      <div className="text-sm text-purple-300 mt-1">{analysis.totalEvaluations} evaluation(s)</div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Quick Stats */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                  <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl p-5 border border-green-200">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-sm text-green-600 font-medium">Strengths</p>
+                                        <p className="text-3xl font-bold text-green-800 mt-2">{analysis.strengths.length}</p>
+                                      </div>
+                                      <div className="bg-white/80 rounded-xl p-3">
+                                        <ThumbsUp className="h-6 w-6 text-green-500" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="bg-gradient-to-br from-orange-50 to-amber-100 rounded-xl p-5 border border-orange-200">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-sm text-orange-600 font-medium">Areas to Improve</p>
+                                        <p className="text-3xl font-bold text-orange-800 mt-2">{analysis.improvements.length}</p>
+                                      </div>
+                                      <div className="bg-white/80 rounded-xl p-3">
+                                        <Target className="h-6 w-6 text-orange-500" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="bg-gradient-to-br from-blue-50 to-sky-100 rounded-xl p-5 border border-blue-200">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-sm text-blue-600 font-medium">Skills Rated</p>
+                                        <p className="text-3xl font-bold text-blue-800 mt-2">{analysis.allScores.length}</p>
+                                      </div>
+                                      <div className="bg-white/80 rounded-xl p-3">
+                                        <Activity className="h-6 w-6 text-blue-500" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="bg-gradient-to-br from-purple-50 to-violet-100 rounded-xl p-5 border border-purple-200">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-sm text-purple-600 font-medium">Feedback Received</p>
+                                        <p className="text-3xl font-bold text-purple-800 mt-2">{analysis.textFeedback.length}</p>
+                                      </div>
+                                      <div className="bg-white/80 rounded-xl p-3">
+                                        <MessageSquare className="h-6 w-6 text-purple-500" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Strengths & Improvements */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  {/* Strengths */}
+                                  <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                    <div className="p-4 bg-green-50 border-b border-green-100">
+                                      <h3 className="font-semibold text-green-800 flex items-center gap-2">
+                                        <Award className="h-5 w-5 text-green-600" />
+                                        Areas of Strength
+                                      </h3>
+                                      <p className="text-sm text-green-600 mt-1">Top performing competencies</p>
+                                    </div>
+                                    <div className="p-4 space-y-4">
+                                      {analysis.strengths.length === 0 ? (
+                                        <p className="text-gray-500 text-center py-4">No high-scoring areas yet</p>
+                                      ) : (
+                                        analysis.strengths.map((item: any, idx: number) => (
+                                          <div key={idx} className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-medium text-gray-900">{item.question}</span>
+                                              <span className="text-sm font-bold text-green-600 flex items-center gap-1">
+                                                <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                                                {Math.round(item.score * 10) / 10}
+                                              </span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 rounded-full h-3">
+                                              <div 
+                                                className="bg-gradient-to-r from-green-400 to-emerald-500 h-3 rounded-full transition-all duration-500"
+                                                style={{ width: `${(item.score / 5) * 100}%` }}
+                                              />
+                                            </div>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Areas of Improvement */}
+                                  <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                    <div className="p-4 bg-orange-50 border-b border-orange-100">
+                                      <h3 className="font-semibold text-orange-800 flex items-center gap-2">
+                                        <TrendingUp className="h-5 w-5 text-orange-600" />
+                                        Areas for Improvement
+                                      </h3>
+                                      <p className="text-sm text-orange-600 mt-1">Competencies to develop</p>
+                                    </div>
+                                    <div className="p-4 space-y-4">
+                                      {analysis.improvements.length === 0 ? (
+                                        <p className="text-gray-500 text-center py-4">No areas needing improvement</p>
+                                      ) : (
+                                        analysis.improvements.map((item: any, idx: number) => (
+                                          <div key={idx} className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-medium text-gray-900">{item.question}</span>
+                                              <span className="text-sm font-bold text-orange-600 flex items-center gap-1">
+                                                <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                                                {Math.round(item.score * 10) / 10}
+                                              </span>
+                                            </div>
+                                            <div className="w-full bg-gray-100 rounded-full h-3">
+                                              <div 
+                                                className="bg-gradient-to-r from-orange-400 to-amber-500 h-3 rounded-full transition-all duration-500"
+                                                style={{ width: `${(item.score / 5) * 100}%` }}
+                                              />
+                                            </div>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* All Skills Overview */}
+                                {analysis.allScores.length > 0 && (
+                                  <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                    <div className="p-4 border-b bg-gray-50">
+                                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                        <BarChart3 className="h-5 w-5 text-blue-600" />
+                                        Competency Scores Overview
+                                      </h3>
+                                      <p className="text-sm text-gray-500 mt-1">All rated skills and competencies</p>
+                                    </div>
+                                    <div className="p-6">
+                                      <div className="space-y-4">
+                                        {analysis.allScores.map((item: any, idx: number) => {
+                                          const percentage = (item.score / 5) * 100;
+                                          const getColor = (score: number) => {
+                                            if (score >= 4) return 'from-green-400 to-emerald-500';
+                                            if (score >= 3) return 'from-blue-400 to-cyan-500';
+                                            if (score >= 2) return 'from-yellow-400 to-amber-500';
+                                            return 'from-orange-400 to-red-500';
+                                          };
+                                          return (
+                                            <div key={idx} className="group">
+                                              <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-3">
+                                                  <span className="font-medium text-gray-900">{item.question}</span>
+                                                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                                                    {item.count} rating(s)
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-yellow-500 text-sm">
+                                                    {'★'.repeat(Math.round(item.score))}
+                                                    {'☆'.repeat(5 - Math.round(item.score))}
+                                                  </span>
+                                                  <span className="font-bold text-gray-700 w-12 text-right">
+                                                    {Math.round(item.score * 10) / 10}/5
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+                                                <div 
+                                                  className={`bg-gradient-to-r ${getColor(item.score)} h-4 rounded-full transition-all duration-700 group-hover:opacity-80`}
+                                                  style={{ width: `${percentage}%` }}
+                                                />
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Qualitative Feedback */}
+                                {analysis.textFeedback.length > 0 && (
+                                  <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                    <div className="p-4 border-b bg-gray-50">
+                                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                        <MessageSquare className="h-5 w-5 text-purple-600" />
+                                        Qualitative Feedback
+                                      </h3>
+                                      <p className="text-sm text-gray-500 mt-1">Written feedback from evaluators</p>
+                                    </div>
+                                    <div className="p-4">
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {analysis.textFeedback.map((feedback: any, idx: number) => (
+                                          <div key={idx} className="bg-gray-50 rounded-lg p-4 border">
+                                            <div className="flex items-start gap-3">
+                                              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                                                <MessageSquare className="h-4 w-4 text-purple-600" />
+                                              </div>
+                                              <div className="flex-1">
+                                                <p className="text-xs text-purple-600 font-medium mb-1">{feedback.question}</p>
+                                                <p className="text-gray-800">{feedback.answer}</p>
+                                                <p className="text-xs text-gray-400 mt-2">— {feedback.evaluator}</p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Overall Team Performance Overview */}
+                          {!selectedStaffForAnalysis && (
+                            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                              <div className="p-4 border-b bg-gray-50">
+                                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                  <PieChart className="h-5 w-5 text-purple-600" />
+                                  Team Performance Overview
+                                </h3>
+                                <p className="text-sm text-gray-500 mt-1">Quick comparison of all evaluated staff</p>
+                              </div>
+                              <div className="p-4">
+                                <div className="space-y-3">
+                                  {teamPerformanceData.staff_reports.map((staff: any) => {
+                                    const analysis = analyzeStaffPerformance(staff);
+                                    const percentage = (analysis.overallAverage / 5) * 100;
+                                    return (
+                                      <div 
+                                        key={staff.staff_id} 
+                                        className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition"
+                                        onClick={() => setSelectedStaffForAnalysis(staff.staff_id)}
+                                      >
+                                        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                          <Users className="h-5 w-5 text-purple-600" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium text-gray-900 truncate">{staff.staff_name}</p>
+                                          <div className="w-full bg-gray-100 rounded-full h-2 mt-2">
+                                            <div 
+                                              className={`h-2 rounded-full transition-all duration-500 ${
+                                                analysis.overallAverage >= 4 ? 'bg-green-500' :
+                                                analysis.overallAverage >= 3 ? 'bg-blue-500' :
+                                                analysis.overallAverage >= 2 ? 'bg-yellow-500' : 'bg-orange-500'
+                                              }`}
+                                              style={{ width: `${percentage}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="text-right flex-shrink-0">
+                                          <p className="text-lg font-bold text-gray-900">{analysis.overallAverage}</p>
+                                          <p className="text-xs text-gray-500">{analysis.totalEvaluations} eval(s)</p>
+                                        </div>
+                                        <ChevronRight className="h-5 w-5 text-gray-400" />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Admin Reports View */}
+              {user?.role !== 'evaluation-staff' && user?.role !== 'evaluation_staff' && user?.role !== 'program-moderator' && user?.role !== 'program-manager' && (
+                <>
               {/* Summary Cards */}
               {reportSummary && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2701,88 +3831,222 @@ function EvaluationNewPageContent() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {staffReports.map((staffReport) => (
-                          <div key={staffReport.staff_id} className="border rounded-lg overflow-hidden">
-                            <button
-                              onClick={() => {
-                                if (expandedStaff.includes(staffReport.staff_id)) {
-                                  setExpandedStaff(expandedStaff.filter(id => id !== staffReport.staff_id));
-                                } else {
-                                  setExpandedStaff([...expandedStaff, staffReport.staff_id]);
-                                }
-                              }}
-                              className="w-full p-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition"
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                  <Users className="h-5 w-5 text-blue-600" />
-                                </div>
-                                <div className="text-left">
-                                  <p className="font-medium text-gray-900">{staffReport.staff_name}</p>
-                                  <p className="text-sm text-gray-500">{staffReport.staff_email}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <div className="text-right">
-                                  <p className="text-lg font-bold text-blue-600">{staffReport.evaluations.length}</p>
-                                  <p className="text-xs text-gray-500">evaluation(s)</p>
+                        {staffReports.map((staffReport) => {
+                          const analysis = analyzeStaffPerformance(staffReport);
+                          return (
+                            <div key={staffReport.staff_id} className="border rounded-lg overflow-hidden">
+                              <button
+                                onClick={() => {
+                                  if (expandedStaff.includes(staffReport.staff_id)) {
+                                    setExpandedStaff(expandedStaff.filter(id => id !== staffReport.staff_id));
+                                  } else {
+                                    setExpandedStaff([...expandedStaff, staffReport.staff_id]);
+                                  }
+                                }}
+                                className="w-full p-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition"
+                              >
+                                <div className="flex items-center gap-4 flex-1 text-left">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-semibold text-gray-900">{staffReport.staff_name}</p>
+                                      {staffReport.role_name && (
+                                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                          {staffReport.role_name}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                                      <span>{staffReport.staff_email}</span>
+                                      {staffReport.employee_id && (
+                                        <>
+                                          <span className="text-gray-300">•</span>
+                                          <span>ID: {staffReport.employee_id}</span>
+                                        </>
+                                      )}
+                                      {staffReport.department && (
+                                        <>
+                                          <span className="text-gray-300">•</span>
+                                          <span>{staffReport.department}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-6">
+                                    <div className="text-center">
+                                      <p className="text-2xl font-bold text-blue-600">{staffReport.evaluations.length}</p>
+                                      <p className="text-xs text-gray-500">Evaluations</p>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="flex items-center gap-1">
+                                        <Star className="h-5 w-5 text-amber-500" />
+                                        <p className="text-2xl font-bold text-gray-900">{analysis.overallAverage}</p>
+                                      </div>
+                                      <p className="text-xs text-gray-500">Avg Score</p>
+                                    </div>
+                                  </div>
                                 </div>
                                 {expandedStaff.includes(staffReport.staff_id) ? (
                                   <ChevronUp className="h-5 w-5 text-gray-400" />
                                 ) : (
                                   <ChevronDown className="h-5 w-5 text-gray-400" />
                                 )}
-                              </div>
-                            </button>
-                            
-                            {expandedStaff.includes(staffReport.staff_id) && (
-                              <div className="p-4 bg-white border-t space-y-4">
-                                {staffReport.evaluations.map((evaluation, idx) => (
-                                  <div key={idx} className="border rounded-lg p-4 bg-gray-50">
-                                    <div className="flex justify-between items-start mb-3">
-                                      <div>
-                                        <p className="font-medium text-gray-900">{evaluation.template_name}</p>
-                                        <p className="text-sm text-gray-500">
-                                          Evaluated by: {evaluation.evaluator_name} ({evaluation.evaluator_role || 'N/A'})
-                                        </p>
-                                        {evaluation.department && (
-                                          <p className="text-xs text-gray-400">Department: {evaluation.department}</p>
-                                        )}
+                              </button>
+                              
+                              {expandedStaff.includes(staffReport.staff_id) && (
+                                <div className="border-t bg-white p-4 space-y-6">
+                                  {/* Radar Chart - Skills Overview */}
+                                  {analysis.allScores.length > 0 && (
+                                    <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 border border-purple-200">
+                                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                        <Activity className="h-5 w-5 text-purple-600" />
+                                        Skills Performance Overview
+                                      </h4>
+                                      <div className="bg-white rounded-lg p-4">
+                                        <ResponsiveContainer width="100%" height={300}>
+                                          <RadarChart data={analysis.allScores.slice(0, 8).map((skill: any) => ({
+                                            skill: skill.question.length > 25 ? skill.question.substring(0, 25) + '...' : skill.question,
+                                            score: parseFloat(skill.score.toFixed(1)),
+                                            fullMark: 5
+                                          }))}>
+                                            <PolarGrid stroke="#e5e7eb" />
+                                            <PolarAngleAxis dataKey="skill" tick={{ fill: '#6b7280', fontSize: 12 }} />
+                                            <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fill: '#6b7280' }} />
+                                            <Radar name="Performance" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
+                                            <Tooltip 
+                                              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                                              formatter={(value: any) => [`${value}/5`, 'Score']}
+                                            />
+                                          </RadarChart>
+                                        </ResponsiveContainer>
                                       </div>
-                                      <span className="text-xs text-gray-500">
-                                        {evaluation.completed_at ? new Date(evaluation.completed_at).toLocaleDateString() : 'N/A'}
-                                      </span>
                                     </div>
-                                    
-                                    {evaluation.responses && (
-                                      <div className="space-y-2 mt-3 pt-3 border-t">
-                                        <p className="text-sm font-medium text-gray-700">Responses:</p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                          {Object.entries(evaluation.responses).map(([question, answer], qIdx) => (
-                                            <div key={qIdx} className="bg-white p-3 rounded border">
-                                              <p className="text-xs text-gray-500 mb-1">{question}</p>
-                                              <p className="font-medium text-gray-900">
-                                                {typeof answer === 'number' ? (
-                                                  <span className="flex items-center gap-1">
-                                                    <span className="text-yellow-500">{'★'.repeat(answer)}</span>
-                                                    <span className="text-gray-300">{'★'.repeat(5 - answer)}</span>
-                                                    <span className="text-sm text-gray-600 ml-2">({answer}/5)</span>
-                                                  </span>
-                                                ) : (
-                                                  String(answer)
-                                                )}
-                                              </p>
-                                            </div>
-                                          ))}
+                                  )}
+
+                                  {/* Bar Chart - Detailed Ratings */}
+                                  {analysis.allScores.length > 0 && (
+                                    <div className="bg-white rounded-xl border">
+                                      <div className="p-4 border-b bg-blue-50">
+                                        <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                          <BarChart3 className="h-5 w-5 text-blue-600" />
+                                          Detailed Skill Ratings
+                                        </h4>
+                                        <p className="text-sm text-gray-600 mt-1">Individual competency scores with visual breakdown</p>
+                                      </div>
+                                      <div className="p-4">
+                                        <ResponsiveContainer width="100%" height={Math.max(300, analysis.allScores.length * 40)}>
+                                          <BarChart 
+                                            data={analysis.allScores.map((skill: any) => ({
+                                              name: skill.question.length > 30 ? skill.question.substring(0, 30) + '...' : skill.question,
+                                              score: parseFloat(skill.score.toFixed(1)),
+                                              fullName: skill.question
+                                            }))}
+                                            layout="vertical"
+                                            margin={{ top: 5, right: 30, left: 150, bottom: 5 }}
+                                          >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                            <XAxis type="number" domain={[0, 5]} tick={{ fill: '#6b7280' }} />
+                                            <YAxis type="category" dataKey="name" tick={{ fill: '#374151', fontSize: 12 }} width={140} />
+                                            <Tooltip 
+                                              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                                              formatter={(value: any, name: any, props: any) => [`${value}/5.0`, props.payload.fullName]}
+                                            />
+                                            <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                                              {analysis.allScores.map((skill: any, index: number) => {
+                                                const score = skill.score;
+                                                let color = '#ef4444'; // red for low scores
+                                                if (score >= 4) color = '#22c55e'; // green for high scores
+                                                else if (score >= 3) color = '#3b82f6'; // blue for medium scores
+                                                else if (score >= 2) color = '#f59e0b'; // amber for below average
+                                                return <Cell key={`cell-${index}`} fill={color} />;
+                                              })}
+                                            </Bar>
+                                          </BarChart>
+                                        </ResponsiveContainer>
+                                      </div>
+                                      {/* Legend */}
+                                      <div className="px-4 pb-4 flex items-center justify-center gap-6 text-sm">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-3 h-3 rounded bg-green-500"></div>
+                                          <span className="text-gray-600">Excellent (4.0-5.0)</span>
                                         </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-3 h-3 rounded bg-blue-500"></div>
+                                          <span className="text-gray-600">Good (3.0-3.9)</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-3 h-3 rounded bg-amber-500"></div>
+                                          <span className="text-gray-600">Average (2.0-2.9)</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-3 h-3 rounded bg-red-500"></div>
+                                          <span className="text-gray-600">Needs Improvement (&lt;2.0)</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Strengths & Improvements */}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Strengths */}
+                                    {analysis.strengths.length > 0 && (
+                                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                                        <h5 className="font-medium text-green-800 mb-2 flex items-center gap-2">
+                                          <Award className="h-4 w-4" />
+                                          Top Strengths
+                                        </h5>
+                                        <ul className="space-y-2">
+                                          {analysis.strengths.slice(0, 3).map((item: any, idx: number) => (
+                                            <li key={idx} className="text-sm text-green-700 flex items-start gap-2">
+                                              <span className="text-green-500 mt-0.5">✓</span>
+                                              <span>{item.question} ({item.score.toFixed(1)}/5)</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+
+                                    {/* Improvements */}
+                                    {analysis.improvements.length > 0 && (
+                                      <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                                        <h5 className="font-medium text-orange-800 mb-2 flex items-center gap-2">
+                                          <Target className="h-4 w-4" />
+                                          Areas to Improve
+                                        </h5>
+                                        <ul className="space-y-2">
+                                          {analysis.improvements.slice(0, 3).map((item: any, idx: number) => (
+                                            <li key={idx} className="text-sm text-orange-700 flex items-start gap-2">
+                                              <span className="text-orange-500 mt-0.5">•</span>
+                                              <span>{item.question} ({item.score.toFixed(1)}/5)</span>
+                                            </li>
+                                          ))}
+                                        </ul>
                                       </div>
                                     )}
                                   </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+
+                                  {/* Text Feedback */}
+                                  {analysis.textFeedback.length > 0 && (
+                                    <div>
+                                      <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                        <MessageSquare className="h-5 w-5 text-blue-600" />
+                                        Qualitative Feedback
+                                      </h4>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {analysis.textFeedback.map((feedback: any, idx: number) => (
+                                          <div key={idx} className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                                            <p className="text-xs text-blue-600 font-medium mb-1">{feedback.question}</p>
+                                            <p className="text-gray-800 text-sm">{feedback.answer}</p>
+                                            <p className="text-xs text-gray-500 mt-2">— {feedback.evaluator}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -2791,69 +4055,246 @@ function EvaluationNewPageContent() {
 
               {/* Evaluator-wise Report */}
               {reportViewMode === 'evaluator' && (
-                <div className="bg-white rounded-xl shadow-sm border">
-                  <div className="p-4 border-b">
-                    <h3 className="font-semibold text-gray-900">Evaluator Performance Report</h3>
-                    <p className="text-sm text-gray-500">Summary of evaluations conducted by each manager</p>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Evaluator</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Completed</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pending</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Staff Evaluated</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {evaluatorReports.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
-                              <UserCheck className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                              <p>No evaluator data available</p>
-                            </td>
-                          </tr>
-                        ) : (
-                          evaluatorReports.map((evaluator) => (
-                            <tr key={evaluator.evaluator_id} className="hover:bg-gray-50">
-                              <td className="px-4 py-4">
-                                <div>
-                                  <p className="font-medium text-gray-900">{evaluator.evaluator_name}</p>
-                                  <p className="text-sm text-gray-500">{evaluator.evaluator_email}</p>
+                <div className="space-y-4">
+                  {evaluatorReports.length === 0 ? (
+                    <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
+                      <UserCheck className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                      <p className="text-gray-500 text-lg">No evaluator data available</p>
+                      <p className="text-sm text-gray-400 mt-2">Evaluations will appear here once evaluators are assigned</p>
+                    </div>
+                  ) : (
+                    evaluatorReports.map((evaluator) => {
+                      // Calculate evaluator performance metrics
+                      const completionRate = evaluator.total_evaluations > 0 
+                        ? Math.round((evaluator.completed_evaluations / evaluator.total_evaluations) * 100) 
+                        : 0;
+                      const pendingRate = 100 - completionRate;
+                      
+                      return (
+                        <div key={evaluator.evaluator_id} className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                          {/* Evaluator Header */}
+                          <div className="p-6 bg-gradient-to-r from-indigo-50 to-purple-50 border-b">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xl">
+                                  {evaluator.evaluator_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                 </div>
-                              </td>
-                              <td className="px-4 py-4 text-sm text-gray-600">{evaluator.role || '-'}</td>
-                              <td className="px-4 py-4 text-sm text-gray-600">{evaluator.department || '-'}</td>
-                              <td className="px-4 py-4 text-center">
-                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                                  {evaluator.total_evaluations}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4 text-center">
-                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                                  {evaluator.completed_evaluations}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4 text-center">
-                                <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
-                                  {evaluator.pending_evaluations}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4 text-center">
-                                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                                  {evaluator.total_subordinates_evaluated || 0}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                                <div>
+                                  <h3 className="font-bold text-gray-900 text-lg">{evaluator.evaluator_name}</h3>
+                                  <p className="text-sm text-gray-600">{evaluator.evaluator_email}</p>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {evaluator.role && (
+                                      <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full font-medium">
+                                        {evaluator.role}
+                                      </span>
+                                    )}
+                                    {evaluator.department && (
+                                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">
+                                        {evaluator.department}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-4xl font-bold text-indigo-600">{completionRate}%</div>
+                                <div className="text-sm text-gray-500 font-medium">Completion Rate</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Stats Grid */}
+                          <div className="p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                              {/* Total Evaluations */}
+                              <div className="bg-gradient-to-br from-blue-50 to-cyan-100 rounded-lg p-4 border border-blue-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm text-blue-600 font-medium">Total Assigned</p>
+                                    <p className="text-3xl font-bold text-blue-800 mt-1">
+                                      {evaluator.total_evaluations}
+                                    </p>
+                                  </div>
+                                  <div className="bg-white/70 rounded-lg p-2">
+                                    <ClipboardList className="h-6 w-6 text-blue-500" />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Completed */}
+                              <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-lg p-4 border border-green-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm text-green-600 font-medium">Completed</p>
+                                    <p className="text-3xl font-bold text-green-800 mt-1">
+                                      {evaluator.completed_evaluations}
+                                    </p>
+                                  </div>
+                                  <div className="bg-white/70 rounded-lg p-2">
+                                    <CheckCircle className="h-6 w-6 text-green-500" />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Pending */}
+                              <div className="bg-gradient-to-br from-yellow-50 to-amber-100 rounded-lg p-4 border border-yellow-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm text-yellow-600 font-medium">Pending</p>
+                                    <p className="text-3xl font-bold text-yellow-800 mt-1">
+                                      {evaluator.pending_evaluations}
+                                    </p>
+                                  </div>
+                                  <div className="bg-white/70 rounded-lg p-2">
+                                    <Clock className="h-6 w-6 text-yellow-500" />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Staff Evaluated */}
+                              <div className="bg-gradient-to-br from-purple-50 to-violet-100 rounded-lg p-4 border border-purple-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm text-purple-600 font-medium">Staff Evaluated</p>
+                                    <p className="text-3xl font-bold text-purple-800 mt-1">
+                                      {evaluator.total_subordinates_evaluated || 0}
+                                    </p>
+                                  </div>
+                                  <div className="bg-white/70 rounded-lg p-2">
+                                    <Users className="h-6 w-6 text-purple-500" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Progress Visualization */}
+                            <div className="space-y-4">
+                              {/* Completion Progress Bar */}
+                              <div className="bg-gray-50 rounded-lg p-4 border">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                    <BarChart3 className="h-5 w-5 text-indigo-600" />
+                                    Evaluation Progress
+                                  </h4>
+                                  <span className="text-sm text-gray-500">
+                                    {evaluator.completed_evaluations} of {evaluator.total_evaluations} completed
+                                  </span>
+                                </div>
+                                <div className="space-y-3">
+                                  {/* Completed Progress */}
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-medium text-green-700 flex items-center gap-1">
+                                        <CheckCircle className="h-4 w-4" />
+                                        Completed Evaluations
+                                      </span>
+                                      <span className="text-sm font-bold text-green-700">{completionRate}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                                      <div 
+                                        className="bg-gradient-to-r from-green-400 to-emerald-500 h-4 rounded-full transition-all duration-700"
+                                        style={{ width: `${completionRate}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Pending Progress */}
+                                  {evaluator.pending_evaluations > 0 && (
+                                    <div>
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm font-medium text-yellow-700 flex items-center gap-1">
+                                          <Clock className="h-4 w-4" />
+                                          Pending Evaluations
+                                        </span>
+                                        <span className="text-sm font-bold text-yellow-700">{pendingRate}%</span>
+                                      </div>
+                                      <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                                        <div 
+                                          className="bg-gradient-to-r from-yellow-400 to-amber-500 h-4 rounded-full transition-all duration-700"
+                                          style={{ width: `${pendingRate}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Performance Indicator */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Completion Status Badge */}
+                                <div className={`rounded-lg p-4 border ${
+                                  completionRate === 100 
+                                    ? 'bg-green-50 border-green-200' 
+                                    : completionRate >= 50 
+                                    ? 'bg-blue-50 border-blue-200' 
+                                    : 'bg-orange-50 border-orange-200'
+                                }`}>
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                      completionRate === 100 
+                                        ? 'bg-green-500' 
+                                        : completionRate >= 50 
+                                        ? 'bg-blue-500' 
+                                        : 'bg-orange-500'
+                                    }`}>
+                                      {completionRate === 100 ? (
+                                        <Award className="h-5 w-5 text-white" />
+                                      ) : (
+                                        <TrendingUp className="h-5 w-5 text-white" />
+                                      )}
+                                    </div>
+                                    <div>
+                                      <p className={`text-sm font-medium ${
+                                        completionRate === 100 
+                                          ? 'text-green-700' 
+                                          : completionRate >= 50 
+                                          ? 'text-blue-700' 
+                                          : 'text-orange-700'
+                                      }`}>
+                                        {completionRate === 100 
+                                          ? 'All Evaluations Complete!' 
+                                          : completionRate >= 50 
+                                          ? 'Good Progress' 
+                                          : 'Needs Attention'}
+                                      </p>
+                                      <p className={`text-xs ${
+                                        completionRate === 100 
+                                          ? 'text-green-600' 
+                                          : completionRate >= 50 
+                                          ? 'text-blue-600' 
+                                          : 'text-orange-600'
+                                      }`}>
+                                        {completionRate === 100 
+                                          ? 'Outstanding performance' 
+                                          : completionRate >= 50 
+                                          ? 'On track to complete' 
+                                          : `${evaluator.pending_evaluations} pending`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Staff Coverage */}
+                                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
+                                      <Users className="h-5 w-5 text-white" />
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-purple-700">Team Coverage</p>
+                                      <p className="text-xs text-purple-600">
+                                        Evaluating {evaluator.total_subordinates_evaluated || 0} team member{(evaluator.total_subordinates_evaluated || 0) !== 1 ? 's' : ''}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               )}
 
@@ -3198,8 +4639,8 @@ function EvaluationNewPageContent() {
                 </div>
               )}
 
-              {/* Template Breakdown */}
-              {reportSummary && reportSummary.template_breakdown.length > 0 && (
+              {/* Template Breakdown - For Admin/Manager only */}
+              {reportSummary && reportSummary.template_breakdown.length > 0 && user?.role !== 'evaluation-staff' && user?.role !== 'evaluation_staff' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-white rounded-xl shadow-sm border p-4">
                     <h3 className="font-semibold text-gray-900 mb-4">By Form Type</h3>
@@ -3231,6 +4672,8 @@ function EvaluationNewPageContent() {
                     </div>
                   )}
                 </div>
+              )}
+              </>
               )}
             </div>
           )}
@@ -3603,11 +5046,17 @@ function EvaluationNewPageContent() {
             await handleDeleteStaff();
           } else if (deleteModal.type === 'triggered') {
             await confirmDeleteTriggered();
+          } else if (deleteModal.type === 'mapping') {
+            await confirmDeleteMapping();
           }
           setDeleteModal({ isOpen: false, type: null, id: '', name: '' });
         }}
-        title={`Delete ${deleteModal.type ? deleteModal.type.charAt(0).toUpperCase() + deleteModal.type.slice(1) : ''}`}
-        message={`Are you sure you want to delete "${deleteModal.name}"? This action cannot be undone.`}
+        title={`Delete ${deleteModal.type === 'mapping' ? 'Hierarchy Mapping' : deleteModal.type ? deleteModal.type.charAt(0).toUpperCase() + deleteModal.type.slice(1) : ''}`}
+        itemName={deleteModal.name}
+        itemType={deleteModal.type === 'mapping' ? 'hierarchy mapping' : deleteModal.type || 'item'}
+        message={deleteModal.type === 'mapping' 
+          ? `This will remove all subordinate relationships for this evaluator. This action cannot be undone.`
+          : `Are you sure you want to delete "${deleteModal.name}"? This action cannot be undone.`}
       />
 
       {/* Trigger Evaluation Modal with Email Preview */}

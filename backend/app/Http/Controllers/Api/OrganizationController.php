@@ -14,6 +14,17 @@ class OrganizationController extends Controller
      */
     public function index(Request $request)
     {
+        // Auto-filter by organization_id for program-scoped roles
+        $user = $request->user();
+        if ($user && in_array($user->role, ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin']) && $user->program_id) {
+            // Get user's program to find organization_id
+            $program = \App\Models\Program::find($user->program_id);
+            if ($program && $program->organization_id) {
+                // Force filter to user's program's organization
+                $request->merge(['organization_id' => $program->organization_id]);
+            }
+        }
+        
         $query = Organization::query();
         
         // Only exclude soft-deleted organizations (include both active and inactive)
@@ -55,7 +66,21 @@ class OrganizationController extends Controller
                 $query->where('participants.is_guest', true)
                       ->whereNull('participants.deleted_at');
             }
-        ]);
+        ])
+        // Add evaluation_staff count for each organization (via program_id)
+        ->addSelect(['evaluation_staff_count' => function($query) {
+            $query->selectRaw('COUNT(DISTINCT evaluation_staff.id)')
+                  ->from('evaluation_staff')
+                  ->join('programs', 'evaluation_staff.program_id', '=', 'programs.id')
+                  ->whereColumn('programs.organization_id', 'organizations.id')
+                  ->whereNull('evaluation_staff.deleted_at')
+                  ->whereNull('programs.deleted_at');
+        }]);
+        
+        // Filter by organization_id (for program-scoped roles)
+        if ($request->has('organization_id')) {
+            $query->where('id', $request->organization_id);
+        }
         
         // Search
         if ($request->has('search')) {

@@ -8,7 +8,8 @@ export type UserRole =
   | 'program-manager'
   | 'program-moderator'
   | 'group-head'
-  | 'participant';
+  | 'participant'
+  | 'evaluation-staff';
 
 export interface Permission {
   resource: string;
@@ -183,6 +184,7 @@ export function getDefaultDashboard(role: UserRole): string {
     'program-moderator': '/program-moderator',
     'group-head': '/group-heads',
     'participant': '/participant',
+    'evaluation-staff': '/evaluation-new',
   };
   
   return dashboards[role] || '/dashboard';

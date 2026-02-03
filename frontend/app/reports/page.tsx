@@ -21,7 +21,8 @@ import {
   organizationsApi, 
   programsApi, 
   activitiesApi, 
-  participantsApi 
+  participantsApi,
+  evaluationEventsApi
 } from "@/lib/api";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
 
@@ -37,7 +38,7 @@ export default function ReportsPage() {
 
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
@@ -74,25 +75,54 @@ export default function ReportsPage() {
       const userResponse = await fetch('/api/auth/me', {
         credentials: 'include'
       });
-      let user = null;
+      let fetchedUser = null;
       if (userResponse.ok) {
         const userData = await userResponse.json();
-        user = userData.user;
-        setCurrentUser(user);
+        fetchedUser = userData.user;
+        setUser(fetchedUser);
       }
       
-      // If user is program-admin, program-manager, or program-moderator, filter by their program
-      if (user && user.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(user.role)) {
-        const [orgsData, progsData, actsData, partsData] = await Promise.all([
-          organizationsApi.getAll().catch(() => []),
-          programsApi.getAll({ program_id: user.programId }).catch(() => []),
-          activitiesApi.getAll({ program_id: user.programId }).catch(() => []),
-          participantsApi.getAll({ program_id: user.programId }).catch(() => []),
-        ]);
-        setOrganizations(orgsData);
-        setPrograms(progsData);
-        setActivities(actsData);
-        setParticipants(partsData);
+      // If user is program-admin, program-manager, program-moderator, or evaluation-admin, filter by their program
+      if (fetchedUser && fetchedUser.programId && ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin'].includes(fetchedUser.role)) {
+        // For evaluation-admin, load evaluation events instead of activities
+        if (fetchedUser.role === 'evaluation-admin') {
+          const [orgsData, progsData, evalEventsData, partsData] = await Promise.all([
+            organizationsApi.getAll().catch(() => []),
+            programsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            evaluationEventsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            participantsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+          ]);
+          setOrganizations(orgsData);
+          setPrograms(progsData);
+          // Convert evaluation events to activity-like format for consistency
+          const evaluationActivities = (evalEventsData || []).map((event: any) => ({
+            ...event,
+            type: 'evaluation',
+            code: event.code || String(event.id).slice(0, 8),
+            // Map evaluation event fields to activity fields
+            participants_count: 0, // Evaluation events don't have direct participant count
+            active_participants_count: 0,
+            anonymous_participants_count: 0,
+            participants_responded_count: 0,
+            responses_count: 0,
+            authenticated_responses_count: 0,
+            guest_responses_count: 0,
+          }));
+          setActivities(evaluationActivities);
+          setParticipants(partsData);
+        } else {
+          // For other program-scoped roles, load regular activities
+          const [orgsData, progsData, actsData, partsData] = await Promise.all([
+            organizationsApi.getAll().catch(() => []),
+            programsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            activitiesApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            participantsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+          ]);
+          setOrganizations(orgsData);
+          setPrograms(progsData);
+          setActivities(actsData);
+          setParticipants(partsData);
+        }
       } else {
         // Super-admin, admin, or other roles see all data
         const [orgsData, progsData, actsData, partsData] = await Promise.all([
@@ -371,7 +401,7 @@ export default function ReportsPage() {
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Organization Filter - Only show for super-admin and admin */}
-              {currentUser && !['program-admin', 'program-manager', 'program-moderator'].includes(currentUser.role) && (
+              {user && !['program-admin', 'program-manager', 'program-moderator'].includes(user.role) && (
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <Building2 className="w-4 h-4 text-gray-500" />

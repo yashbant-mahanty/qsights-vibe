@@ -34,7 +34,6 @@ const sidebarItems = [
   { icon: FileText, label: "Questionnaires", href: "/questionnaires" },
   { icon: Activity, label: "Events", href: "/activities" },
   { icon: BarChart3, label: "Reports & Analytics", href: "/analytics" },
-  { icon: ClipboardCheck, label: "Evaluation", href: "/evaluation-new" },
 ];
 
 export default function ProgramManagerLayout({ children }: ProgramManagerLayoutProps) {
@@ -142,8 +141,12 @@ export default function ProgramManagerLayout({ children }: ProgramManagerLayoutP
         {/* Navigation */}
         <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100%-4rem)]">
           {sidebarItems.map((item, index) => {
-            // FIXED: Exact match only to prevent wrong tab highlighting
-            const isActive = pathname === item.href;
+            // FIXED: Exact match OR child routes - this keeps parent tab highlighted when on child pages like /programs/create
+            // Special case: dashboard and program-manager routes should only match exactly to prevent conflicts
+            const isDashboardOrProgramManager = item.href === '/dashboard' || item.href === '/program-manager';
+            const isActive = isDashboardOrProgramManager 
+              ? pathname === item.href
+              : (pathname === item.href || pathname.startsWith(item.href + '/'));
             return (
               <a
                 key={index}

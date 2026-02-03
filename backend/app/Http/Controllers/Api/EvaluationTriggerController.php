@@ -31,6 +31,7 @@ class EvaluationTriggerController extends Controller
                 'email_body' => 'nullable|string',
                 'start_date' => 'nullable|date',
                 'end_date' => 'nullable|date',
+                'scheduled_trigger_at' => 'nullable|date',
             ]);
             
             $triggeredCount = 0;
@@ -90,6 +91,10 @@ class EvaluationTriggerController extends Controller
                 $triggeredId = Str::uuid()->toString();
                 $accessToken = Str::random(64);
                 
+                // Check if scheduled for future
+                $scheduledAt = $validated['scheduled_trigger_at'] ?? null;
+                $shouldSendNow = !$scheduledAt || \Carbon\Carbon::parse($scheduledAt)->isPast();
+                
                 DB::table('evaluation_triggered')->insert([
                     'id' => $triggeredId,
                     'program_id' => $validated['program_id'],
@@ -107,6 +112,7 @@ class EvaluationTriggerController extends Controller
                     'end_date' => $validated['end_date'] ?? null,
                     'email_subject' => $validated['email_subject'] ?? null,
                     'email_body' => $validated['email_body'] ?? null,
+                    'scheduled_trigger_at' => $scheduledAt,
                     'is_active' => true,
                     'triggered_by' => $user->id,
                     'triggered_at' => now(),
@@ -116,7 +122,15 @@ class EvaluationTriggerController extends Controller
                 
                 $triggeredCount++;
                 
-                // Send email to evaluator
+                // Send email to evaluator only if not scheduled for future
+                if (!$shouldSendNow) {
+                    \Log::info("Evaluation scheduled for future", [
+                        'triggered_id' => $triggeredId,
+                        'scheduled_at' => $scheduledAt,
+                        'evaluator' => $evaluator->email
+                    ]);
+                    continue; // Skip sending email now
+                }
                 try {
                     $evaluationUrl = config('app.frontend_url', 'https://prod.qsights.com') . 
                         '/e/evaluate/' . $triggeredId . '?token=' . $accessToken;
@@ -283,20 +297,46 @@ class EvaluationTriggerController extends Controller
             $user = $request->user();
             $programId = $request->query('program_id', $user->program_id ?? null);
             
+            // Check if user is evaluation_staff - then filter by evaluator_id
+            $isEvaluationStaff = $user->role === 'evaluation_staff' || $user->role === 'evaluation-staff';
+            
             $query = DB::table('evaluation_triggered')
+                ->whereNull('deleted_at')
                 ->orderBy('triggered_at', 'desc');
+            
+            if ($isEvaluationStaff) {
+                // For evaluation staff, find their staff record and filter by evaluator_id
+                $staffMember = DB::table('evaluation_staff')
+                    ->where('email', $user->email)
+                    ->orWhere('user_id', $user->id)
+                    ->whereNull('deleted_at')
+                    ->first();
                 
-            if ($programId) {
-                $query->where('program_id', $programId);
+                if ($staffMember) {
+                    $query->where('evaluator_id', $staffMember->id);
+                } else {
+                    // No staff record found - return empty
+                    return response()->json([
+                        'success' => true,
+                        'evaluations' => []
+                    ]);
+                }
+            } else {
+                // For admins/managers, filter by program if provided
+                if ($programId) {
+                    $query->where('program_id', $programId);
+                }
             }
                 
-            $evaluations = $query->select(
+            $allEvaluations = $query->select(
                     'id', 
                     'template_name', 
                     'evaluator_name', 
                     'subordinates_count', 
+                    'subordinates',
                     'status', 
                     'triggered_at', 
+                    'scheduled_trigger_at',
                     'completed_at',
                     'email_sent_at',
                     'start_date',
@@ -306,6 +346,39 @@ class EvaluationTriggerController extends Controller
                     'email_body'
                 )
                 ->get();
+            
+            // Filter evaluations to only include those with at least one active staff member
+            $evaluations = [];
+            foreach ($allEvaluations as $eval) {
+                $subordinates = json_decode($eval->subordinates, true) ?? [];
+                $hasActiveStaff = false;
+                $activeCount = 0;
+                
+                foreach ($subordinates as $sub) {
+                    $subId = $sub['id'] ?? null;
+                    if (!$subId) continue;
+                    
+                    // Check if staff still exists and is not deleted
+                    $staffExists = DB::table('evaluation_staff')
+                        ->where('id', $subId)
+                        ->whereNull('deleted_at')
+                        ->exists();
+                    
+                    if ($staffExists) {
+                        $hasActiveStaff = true;
+                        $activeCount++;
+                    }
+                }
+                
+                // Only include evaluation if it has at least one active staff member
+                if ($hasActiveStaff) {
+                    // Update subordinates_count to reflect only active staff
+                    $eval->subordinates_count = $activeCount;
+                    // Remove subordinates field from response (not needed in frontend)
+                    unset($eval->subordinates);
+                    $evaluations[] = $eval;
+                }
+            }
             
             return response()->json([
                 'success' => true,
@@ -391,30 +464,70 @@ class EvaluationTriggerController extends Controller
                 ], 403);
             }
             
-            if ($evaluation->status === 'completed') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Evaluation already completed'
-                ], 422);
+            $validated = $request->validate([
+                'responses' => 'required|array',
+                'subordinate_id' => 'nullable|string' // Optional - if not provided, treat as multi-subordinate submission
+            ]);
+            
+            // Get existing responses array (stores per subordinate)
+            $allResponses = json_decode($evaluation->responses, true) ?? [];
+            $inputResponses = $validated['responses'];
+            
+            // Handle single subordinate submission (new format)
+            if (isset($validated['subordinate_id'])) {
+                $subordinateId = $validated['subordinate_id'];
+                
+                // Check if this subordinate was already evaluated
+                if (isset($allResponses[$subordinateId])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This subordinate evaluation has already been submitted'
+                    ], 422);
+                }
+                
+                // Add this subordinate's responses
+                $allResponses[$subordinateId] = [
+                    'responses' => $inputResponses,
+                    'completed_at' => now()->toDateTimeString()
+                ];
+            } 
+            // Handle multi-subordinate submission (old format from form)
+            else {
+                // Input responses are keyed by subordinate_id already
+                foreach ($inputResponses as $subordinateId => $subResponses) {
+                    if (!isset($allResponses[$subordinateId])) {
+                        $allResponses[$subordinateId] = [
+                            'responses' => $subResponses,
+                            'completed_at' => now()->toDateTimeString()
+                        ];
+                    }
+                }
             }
             
-            $validated = $request->validate([
-                'responses' => 'required|array'
-            ]);
+            // Get subordinates list to check if all are done
+            $subordinates = json_decode($evaluation->subordinates, true) ?? [];
+            $totalSubordinates = count($subordinates);
+            $completedCount = count($allResponses);
+            
+            // Determine overall status
+            $newStatus = $completedCount >= $totalSubordinates ? 'completed' : 'in_progress';
             
             // Store responses
             DB::table('evaluation_triggered')
                 ->where('id', $id)
                 ->update([
-                    'responses' => json_encode($validated['responses']),
-                    'status' => 'completed',
-                    'completed_at' => now(),
+                    'responses' => json_encode($allResponses),
+                    'status' => $newStatus,
+                    'completed_at' => $newStatus === 'completed' ? now() : null,
                     'updated_at' => now()
                 ]);
             
             return response()->json([
                 'success' => true,
-                'message' => 'Evaluation submitted successfully'
+                'message' => 'Evaluation submitted successfully',
+                'completed_count' => $completedCount,
+                'total_count' => $totalSubordinates,
+                'all_complete' => $newStatus === 'completed'
             ]);
             
         } catch (\Exception $e) {
@@ -716,15 +829,19 @@ class EvaluationTriggerController extends Controller
             $dateTo = $request->query('date_to');
             
             // Build query for triggered evaluations with responses
+            // JOIN with programs table to filter out deleted programs
             $query = DB::table('evaluation_triggered as et')
+                ->join('programs as p', 'et.program_id', '=', 'p.id')
                 ->leftJoin('evaluation_staff as es', 'et.evaluator_id', '=', 'es.id')
                 ->leftJoin('evaluation_roles as er', 'es.role_id', '=', 'er.id')
                 ->where('et.status', 'completed')
                 ->whereNull('et.deleted_at')
+                ->whereNull('p.deleted_at')  // Filter out deleted programs
                 ->select(
                     'et.id',
                     'et.template_id',
                     'et.template_name',
+                    'et.template_questions',
                     'et.evaluator_id',
                     'et.evaluator_name',
                     'et.evaluator_email',
@@ -737,7 +854,8 @@ class EvaluationTriggerController extends Controller
                     'et.start_date',
                     'et.end_date',
                     'er.category as department',
-                    'er.name as evaluator_role'
+                    'er.name as evaluator_role',
+                    'p.name as program_name'
                 );
             
             if ($programId) {
@@ -777,6 +895,17 @@ class EvaluationTriggerController extends Controller
                 foreach ($subordinates as $subordinate) {
                     $subId = $subordinate['id'];
                     
+                    // Check if staff still exists in evaluation_staff table (not deleted)
+                    $staffExists = DB::table('evaluation_staff')
+                        ->where('id', $subId)
+                        ->whereNull('deleted_at')
+                        ->exists();
+                    
+                    // Skip deleted staff
+                    if (!$staffExists) {
+                        continue;
+                    }
+                    
                     // Apply staff filter if provided
                     if ($staffId && $subId !== $staffId) {
                         continue;
@@ -798,6 +927,7 @@ class EvaluationTriggerController extends Controller
                         'evaluation_id' => $eval->id,
                         'template_id' => $eval->template_id,
                         'template_name' => $eval->template_name,
+                        'template_questions' => json_decode($eval->template_questions, true),
                         'evaluator_id' => $eval->evaluator_id,
                         'evaluator_name' => $eval->evaluator_name,
                         'evaluator_role' => $eval->evaluator_role,
@@ -833,51 +963,140 @@ class EvaluationTriggerController extends Controller
             $user = $request->user();
             $programId = $request->query('program_id', $user->program_id ?? null);
             
+            // Get all evaluations from active programs
             $query = DB::table('evaluation_triggered')
-                ->whereNull('deleted_at');
+                ->join('programs as p', 'evaluation_triggered.program_id', '=', 'p.id')
+                ->whereNull('evaluation_triggered.deleted_at')
+                ->whereNull('p.deleted_at')
+                ->select('evaluation_triggered.*'); // Explicitly select only evaluation_triggered columns
             
             if ($programId) {
-                $query->where('program_id', $programId);
+                $query->where('evaluation_triggered.program_id', $programId);
             }
             
-            $totalTriggered = (clone $query)->count();
-            $completed = (clone $query)->where('status', 'completed')->count();
-            $pending = (clone $query)->where('status', 'pending')->count();
-            $inProgress = (clone $query)->where('status', 'in_progress')->count();
+            // Get all evaluations and filter by active staff
+            $allEvaluations = $query->get();
             
-            // Get total subordinates evaluated (sum of subordinates_count where completed)
-            $totalSubordinatesEvaluated = (clone $query)
-                ->where('status', 'completed')
-                ->sum('subordinates_count');
+            $totalTriggered = 0;
+            $completed = 0;
+            $pending = 0;
+            $inProgress = 0;
+            $totalSubordinatesEvaluated = 0;
+            $uniqueEvaluators = [];
+            $templateCounts = [];
+            $departmentCounts = [];
             
-            // Get unique evaluators
-            $uniqueEvaluators = (clone $query)
-                ->where('status', 'completed')
-                ->distinct()
-                ->count('evaluator_id');
+            foreach ($allEvaluations as $eval) {
+                // Always count the evaluation in total triggered if it exists
+                $totalTriggered++;
+                
+                $subordinates = json_decode($eval->subordinates, true) ?? [];
+                
+                // Check if evaluation has at least one active staff
+                $hasActiveStaff = false;
+                $activeSubordinatesCount = 0;
+                
+                foreach ($subordinates as $sub) {
+                    $subId = $sub['id'] ?? null;
+                    if (!$subId) continue;
+                    
+                    $staffExists = DB::table('evaluation_staff')
+                        ->where('id', $subId)
+                        ->whereNull('deleted_at')
+                        ->exists();
+                    
+                    if ($staffExists) {
+                        $hasActiveStaff = true;
+                        $activeSubordinatesCount++;
+                    }
+                }
+                
+                // For completed status, count even if staff were deleted later
+                // (evaluation was completed when they were active)
+                
+                if ($eval->status === 'completed') {
+                    $completed++;
+                    $totalSubordinatesEvaluated += $activeSubordinatesCount;
+                    
+                    // Track unique evaluators
+                    if (!in_array($eval->evaluator_id, $uniqueEvaluators)) {
+                        $uniqueEvaluators[] = $eval->evaluator_id;
+                    }
+                    
+                    // Count by template
+                    $templateKey = $eval->template_id;
+                    if (!isset($templateCounts[$templateKey])) {
+                        $templateCounts[$templateKey] = [
+                            'template_id' => $eval->template_id,
+                            'template_name' => $eval->template_name,
+                            'count' => 0
+                        ];
+                    }
+                    $templateCounts[$templateKey]['count']++;
+                }
+                
+                if ($eval->status === 'pending') {
+                    $pending++;
+                }
+                
+                if ($eval->status === 'in_progress') {
+                    $inProgress++;
+                }
+            }
             
             // Get completion rate
             $completionRate = $totalTriggered > 0 ? round(($completed / $totalTriggered) * 100, 1) : 0;
             
-            // Get templates breakdown
-            $templateBreakdown = (clone $query)
-                ->where('status', 'completed')
-                ->groupBy('template_id', 'template_name')
-                ->select('template_id', 'template_name', DB::raw('COUNT(*) as count'))
-                ->get();
-            
-            // Get department-wise breakdown
+            // Get department-wise breakdown (only for completed with active staff)
             $departmentBreakdown = DB::table('evaluation_triggered as et')
+                ->join('programs as p', 'et.program_id', '=', 'p.id')
                 ->join('evaluation_staff as es', 'et.evaluator_id', '=', 'es.id')
                 ->join('evaluation_roles as er', 'es.role_id', '=', 'er.id')
                 ->where('et.status', 'completed')
                 ->whereNull('et.deleted_at')
+                ->whereNull('p.deleted_at')
+                ->whereNull('es.deleted_at')
+                ->whereNull('er.deleted_at')
                 ->when($programId, function($q) use ($programId) {
                     $q->where('et.program_id', $programId);
                 })
-                ->groupBy('er.category')
-                ->select('er.category as department', DB::raw('COUNT(*) as count'))
+                ->select('et.id', 'et.subordinates', 'er.category as department')
                 ->get();
+            
+            // Filter departments by active staff
+            $deptCounts = [];
+            foreach ($departmentBreakdown as $eval) {
+                $subordinates = json_decode($eval->subordinates, true) ?? [];
+                $hasActiveStaff = false;
+                
+                foreach ($subordinates as $sub) {
+                    $staffExists = DB::table('evaluation_staff')
+                        ->where('id', $sub['id'])
+                        ->whereNull('deleted_at')
+                        ->exists();
+                    
+                    if ($staffExists) {
+                        $hasActiveStaff = true;
+                        break;
+                    }
+                }
+                
+                if ($hasActiveStaff) {
+                    if (!isset($deptCounts[$eval->department])) {
+                        $deptCounts[$eval->department] = 0;
+                    }
+                    $deptCounts[$eval->department]++;
+                }
+            }
+            
+            // Convert to array format
+            $finalDeptBreakdown = [];
+            foreach ($deptCounts as $dept => $count) {
+                $finalDeptBreakdown[] = [
+                    'department' => $dept,
+                    'count' => $count
+                ];
+            }
             
             return response()->json([
                 'success' => true,
@@ -888,9 +1107,9 @@ class EvaluationTriggerController extends Controller
                     'in_progress' => $inProgress,
                     'completion_rate' => $completionRate,
                     'total_subordinates_evaluated' => $totalSubordinatesEvaluated,
-                    'unique_evaluators' => $uniqueEvaluators,
-                    'template_breakdown' => $templateBreakdown,
-                    'department_breakdown' => $departmentBreakdown
+                    'unique_evaluators' => count($uniqueEvaluators),
+                    'template_breakdown' => array_values($templateCounts),
+                    'department_breakdown' => $finalDeptBreakdown
                 ]
             ]);
             
@@ -926,13 +1145,16 @@ class EvaluationTriggerController extends Controller
             }
             
             // Get all evaluations where this staff was a subordinate
+            // JOIN with programs table to filter out deleted programs
             $query = DB::table('evaluation_triggered')
-                ->where('status', 'completed')
-                ->whereNull('deleted_at')
+                ->join('programs as p', 'evaluation_triggered.program_id', '=', 'p.id')
+                ->where('evaluation_triggered.status', 'completed')
+                ->whereNull('evaluation_triggered.deleted_at')
+                ->whereNull('p.deleted_at')  // Filter out deleted programs
                 ->whereRaw("subordinates::text LIKE ?", ['%' . $staffId . '%']);
             
             if ($programId) {
-                $query->where('program_id', $programId);
+                $query->where('evaluation_triggered.program_id', $programId);
             }
             
             $evaluations = $query->orderBy('completed_at', 'desc')->get();
@@ -1017,9 +1239,11 @@ class EvaluationTriggerController extends Controller
             $programId = $request->query('program_id', $user->program_id ?? null);
             
             $query = DB::table('evaluation_triggered as et')
+                ->join('programs as p', 'et.program_id', '=', 'p.id')
                 ->join('evaluation_staff as es', 'et.evaluator_id', '=', 'es.id')
                 ->leftJoin('evaluation_roles as er', 'es.role_id', '=', 'er.id')
                 ->whereNull('et.deleted_at')
+                ->whereNull('p.deleted_at')
                 ->whereNull('es.deleted_at')
                 ->groupBy('et.evaluator_id', 'et.evaluator_name', 'et.evaluator_email', 'er.category', 'er.name')
                 ->select(
@@ -1065,15 +1289,17 @@ class EvaluationTriggerController extends Controller
             $evaluatorId = $request->query('evaluator_id');
             
             $query = DB::table('evaluation_triggered')
-                ->where('status', 'completed')
-                ->whereNull('deleted_at');
+                ->join('programs as p', 'evaluation_triggered.program_id', '=', 'p.id')
+                ->where('evaluation_triggered.status', 'completed')
+                ->whereNull('evaluation_triggered.deleted_at')
+                ->whereNull('p.deleted_at');
             
             if ($programId) {
-                $query->where('program_id', $programId);
+                $query->where('evaluation_triggered.program_id', $programId);
             }
             
             if ($evaluatorId) {
-                $query->where('evaluator_id', $evaluatorId);
+                $query->where('evaluation_triggered.evaluator_id', $evaluatorId);
             }
             
             $evaluations = $query->get();
@@ -1085,6 +1311,18 @@ class EvaluationTriggerController extends Controller
                 
                 foreach ($subordinates as $sub) {
                     $subId = $sub['id'];
+                    
+                    // Check if staff still exists in evaluation_staff table (not deleted)
+                    $staffExists = DB::table('evaluation_staff')
+                        ->where('id', $subId)
+                        ->whereNull('deleted_at')
+                        ->exists();
+                    
+                    // Skip deleted staff
+                    if (!$staffExists) {
+                        continue;
+                    }
+                    
                     if (!isset($staffList[$subId])) {
                         $staffList[$subId] = [
                             'id' => $subId,
@@ -1129,11 +1367,13 @@ class EvaluationTriggerController extends Controller
             
             // Get all completed evaluations
             $query = DB::table('evaluation_triggered')
-                ->where('status', 'completed')
-                ->whereNull('deleted_at');
+                ->join('programs as p', 'evaluation_triggered.program_id', '=', 'p.id')
+                ->where('evaluation_triggered.status', 'completed')
+                ->whereNull('evaluation_triggered.deleted_at')
+                ->whereNull('p.deleted_at');
             
             if ($programId) {
-                $query->where('program_id', $programId);
+                $query->where('evaluation_triggered.program_id', $programId);
             }
             
             $evaluations = $query->orderBy('completed_at', 'desc')->get();
@@ -1147,6 +1387,18 @@ class EvaluationTriggerController extends Controller
                 
                 foreach ($subordinates as $sub) {
                     $subId = $sub['id'];
+                    
+                    // Check if staff still exists in evaluation_staff table (not deleted)
+                    $staffExists = DB::table('evaluation_staff')
+                        ->where('id', $subId)
+                        ->whereNull('deleted_at')
+                        ->exists();
+                    
+                    // Skip deleted staff
+                    if (!$staffExists) {
+                        continue;
+                    }
+                    
                     $staffResponses = $responses[$subId] ?? [];
                     
                     $row = [

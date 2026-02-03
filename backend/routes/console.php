@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Schedule activity reminders to run daily at 9 AM
 Schedule::command('qsights:send-activity-reminders')->dailyAt('09:00');
+
+// Schedule evaluation emails - check every minute for scheduled evaluations
+Schedule::command('evaluations:send-scheduled')->everyMinute();
