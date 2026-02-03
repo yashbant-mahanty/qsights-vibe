@@ -35,7 +35,8 @@ import {
   programsApi, 
   activitiesApi, 
   participantsApi,
-  notificationsApi
+  notificationsApi,
+  evaluationEventsApi
 } from "@/lib/api";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
 
@@ -69,7 +70,7 @@ export default function AdvancedAnalyticsPage() {
   });
 
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [groupHeads, setGroupHeads] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
@@ -111,30 +112,59 @@ export default function AdvancedAnalyticsPage() {
       const userResponse = await fetch('/api/auth/me', {
         credentials: 'include'
       });
-      let user = null;
+      let fetchedUser = null;
       if (userResponse.ok) {
         const userData = await userResponse.json();
-        user = userData.user;
-        setCurrentUser(user);
+        fetchedUser = userData.user;
+        setUser(fetchedUser);
       }
       
       let actsData: any[] = [];
       let partsData: any[] = [];
       
       // Load data based on user role
-      if (user && user.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(user.role)) {
-        const [orgsData, progsData, acts, parts] = await Promise.all([
-          organizationsApi.getAll().catch(() => []),
-          programsApi.getAll({ program_id: user.programId }).catch(() => []),
-          activitiesApi.getAll({ program_id: user.programId }).catch(() => []),
-          participantsApi.getAll({ program_id: user.programId }).catch(() => []),
-        ]);
-        setOrganizations(orgsData);
-        setPrograms(progsData);
-        setActivities(acts);
-        setParticipants(parts);
-        actsData = acts;
-        partsData = parts;
+      if (fetchedUser && fetchedUser.programId && ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin'].includes(fetchedUser.role)) {
+        // For evaluation-admin, load evaluation events instead of activities
+        if (fetchedUser.role === 'evaluation-admin') {
+          const [orgsData, progsData, evalEventsData, parts] = await Promise.all([
+            organizationsApi.getAll().catch(() => []),
+            programsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            evaluationEventsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            participantsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+          ]);
+          setOrganizations(orgsData);
+          setPrograms(progsData);
+          // Convert evaluation events to activity-like format
+          const evaluationActivities = (evalEventsData || []).map((event: any) => ({
+            ...event,
+            type: 'evaluation',
+            code: event.code || String(event.id).slice(0, 8),
+            participants_count: 0,
+            active_participants_count: 0,
+            anonymous_participants_count: 0,
+            participants_responded_count: 0,
+            responses_count: 0,
+            authenticated_responses_count: 0,
+            guest_responses_count: 0,
+          }));
+          setActivities(evaluationActivities);
+          setParticipants(parts);
+          actsData = evaluationActivities;
+          partsData = parts;
+        } else {
+          const [orgsData, progsData, acts, parts] = await Promise.all([
+            organizationsApi.getAll().catch(() => []),
+            programsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            activitiesApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            participantsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+          ]);
+          setOrganizations(orgsData);
+          setPrograms(progsData);
+          setActivities(acts);
+          setParticipants(parts);
+          actsData = acts;
+          partsData = parts;
+        }
       } else {
         const [orgsData, progsData, acts, parts] = await Promise.all([
           organizationsApi.getAll().catch(() => []),

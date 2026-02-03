@@ -1817,7 +1817,8 @@ export interface EvaluationAssignment {
 export const evaluationEventsApi = {
   // Get all evaluation events
   async getAll(params?: { organization_id?: string; program_id?: string; status?: string }): Promise<EvaluationEvent[]> {
-    return await fetchWithAuth(`/evaluation-events${buildQueryString(params || {})}`);
+    const data = await fetchWithAuth(`/evaluation-events${buildQueryString(params || {})}`);
+    return data.data || data;
   },
 
   // Get single evaluation event
@@ -2180,5 +2181,191 @@ export const generatedLinksApi = {
     return await response.json();
   },
 };
+
+// =====================================================
+// AI-BASED REPORT BUILDER API
+// =====================================================
+
+export interface ReportTemplate {
+  id: string;
+  activity_id?: string;
+  program_id?: string;
+  organization_id: string;
+  created_by: string;
+  name: string;
+  description?: string;
+  type: 'custom' | 'executive_summary' | 'question_analysis' | 'participation_report' | 'sentiment_dashboard' | 'comparison_report' | 'delphi_consensus';
+  config?: any;
+  filters?: any;
+  ai_insights_config?: any;
+  is_public: boolean;
+  is_default: boolean;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportSnapshot {
+  id: string;
+  report_template_id: string;
+  activity_id: string;
+  generated_by: string;
+  name: string;
+  snapshot_date: string;
+  data?: any;
+  ai_insights?: any;
+  total_responses: number;
+  filters_applied?: any;
+  export_format?: string;
+  file_path?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIInsight {
+  id?: string;
+  insight_type: 'trend' | 'sentiment' | 'anomaly' | 'completion_pattern' | 'correlation' | 'segment_comparison' | 'summary';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  confidence_score: number;
+  title: string;
+  description: string;
+  data?: any;
+  question_id?: string;
+  computed_at?: string;
+}
+
+export interface QuestionAnalytics {
+  question_id: string;
+  question_title: string;
+  question_type: string;
+  answer_count: number;
+  response_rate: number;
+  suggested_chart_type: string;
+  chart_data: any[];
+  statistics?: {
+    average?: number;
+    median?: number;
+    min?: number;
+    max?: number;
+  };
+  nps_score?: number;
+  total_answers?: number;
+  response_samples?: string[];
+}
+
+export const reportBuilderApi = {
+  // Report Templates
+  async getTemplates(params?: {
+    activity_id?: string;
+    program_id?: string;
+    organization_id?: string;
+    type?: string;
+    is_public?: boolean;
+  }): Promise<ReportTemplate[]> {
+    const data = await fetchWithAuth(`/report-builder/templates${buildQueryString(params || {})}`);
+    return data.data;
+  },
+
+  async getTemplate(id: string): Promise<ReportTemplate> {
+    const data = await fetchWithAuth(`/report-builder/templates/${id}`);
+    return data.data;
+  },
+
+  async createTemplate(template: Partial<ReportTemplate>): Promise<ReportTemplate> {
+    const data = await fetchWithAuth('/report-builder/templates', {
+      method: 'POST',
+      body: JSON.stringify(template),
+    });
+    return data.data;
+  },
+
+  async updateTemplate(id: string, template: Partial<ReportTemplate>): Promise<ReportTemplate> {
+    const data = await fetchWithAuth(`/report-builder/templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(template),
+    });
+    return data.data;
+  },
+
+  async deleteTemplate(id: string): Promise<void> {
+    await fetchWithAuth(`/report-builder/templates/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async cloneTemplate(id: string, name: string): Promise<ReportTemplate> {
+    const data = await fetchWithAuth(`/report-builder/templates/${id}/clone`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+    return data.data;
+  },
+
+  // Default Templates
+  async getDefaultTemplates(): Promise<any[]> {
+    const data = await fetchWithAuth('/report-builder/default-templates');
+    return data.data;
+  },
+
+  // Generate Reports
+  async generateReport(templateId: string, activityId: string, filters?: any, includeAIInsights: boolean = true): Promise<any> {
+    const data = await fetchWithAuth(`/report-builder/templates/${templateId}/generate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        activity_id: activityId,
+        filters,
+        include_ai_insights: includeAIInsights,
+      }),
+    });
+    return data.data;
+  },
+
+  async getAnalytics(activityId: string, filters?: any, includeAIInsights: boolean = false): Promise<any> {
+    const data = await fetchWithAuth('/report-builder/analytics', {
+      method: 'POST',
+      body: JSON.stringify({
+        activity_id: activityId,
+        filters,
+        include_ai_insights: includeAIInsights,
+      }),
+    });
+    return data.data;
+  },
+
+  async getQuestionAnalytics(activityId: string, questionId: string, filters?: any): Promise<QuestionAnalytics> {
+    const data = await fetchWithAuth('/report-builder/question-analytics', {
+      method: 'POST',
+      body: JSON.stringify({
+        activity_id: activityId,
+        question_id: questionId,
+        filters,
+      }),
+    });
+    return data.data;
+  },
+
+  // Report Snapshots
+  async createSnapshot(snapshotData: {
+    report_template_id: string;
+    activity_id: string;
+    name: string;
+    filters?: any;
+  }): Promise<ReportSnapshot> {
+    const data = await fetchWithAuth('/report-builder/snapshots', {
+      method: 'POST',
+      body: JSON.stringify(snapshotData),
+    });
+    return data.data;
+  },
+
+  async getSnapshots(params?: {
+    report_template_id?: string;
+    activity_id?: string;
+  }): Promise<ReportSnapshot[]> {
+    const data = await fetchWithAuth(`/report-builder/snapshots${buildQueryString(params || {})}`);
+    return data.data;
+  },
+};
+
 
 

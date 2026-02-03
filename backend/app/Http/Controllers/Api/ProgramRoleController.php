@@ -381,6 +381,13 @@ class ProgramRoleController extends Controller
             ['id' => 'filter_report', 'name' => 'Filter Report', 'category' => 'Reports', 'description' => 'Filter reports'],
             ['id' => 'view_report', 'name' => 'View Report', 'category' => 'Reports', 'description' => 'View reports'],
             
+            // Evaluation
+            ['id' => 'list_evaluation', 'name' => 'List Evaluation', 'category' => 'Evaluation', 'description' => 'View evaluation list'],
+            ['id' => 'add_evaluation', 'name' => 'Add Evaluation', 'category' => 'Evaluation', 'description' => 'Create evaluations'],
+            ['id' => 'edit_evaluation', 'name' => 'Edit Evaluation', 'category' => 'Evaluation', 'description' => 'Modify evaluations'],
+            ['id' => 'disable_evaluation', 'name' => 'Disable Evaluation', 'category' => 'Evaluation', 'description' => 'Disable evaluations'],
+            ['id' => 'view_evaluation_results', 'name' => 'View Evaluation Results', 'category' => 'Evaluation', 'description' => 'View evaluation results'],
+            
             // Users & Roles
             ['id' => 'edit_read', 'name' => 'Edit Read', 'category' => 'Permissions', 'description' => 'Edit read permissions'],
             ['id' => 'login', 'name' => 'Login', 'category' => 'Authentication', 'description' => 'Login access'],

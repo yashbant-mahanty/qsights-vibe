@@ -78,6 +78,9 @@ export function getRedirectUrl(role?: string): string {
     'program-manager': '/program-manager',
     'program-moderator': '/program-moderator',
     'participant': '/participant',
+    'evaluation-admin': '/evaluation-admin',
+    'evaluation-staff': '/evaluation-new',
+    'evaluation_staff': '/evaluation-new',
   };
 
   return role ? roleRedirects[role] || '/dashboard' : '/dashboard';

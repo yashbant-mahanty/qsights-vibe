@@ -17,6 +17,13 @@ class ProgramController extends Controller
      */
     public function index(Request $request)
     {
+        // Auto-filter by program_id for program-scoped roles
+        $user = $request->user();
+        if ($user && in_array($user->role, ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin']) && $user->program_id) {
+            // Force filter to user's program for these roles
+            $request->merge(['program_id' => $user->program_id]);
+        }
+        
         $query = Program::with(['organization', 'groupHead', 'groupHead.user'])
             ->withCount([
                 'participants as participants_count' => function($q) {
@@ -189,6 +196,11 @@ class ProgramController extends Controller
         if ($request->boolean('generate_moderator', true)) {
             $generatedUsers['moderator'] = $this->generateProgramUser($program, 'program-moderator');
         }
+        
+        // Also generate evaluation-admin by default (new role)
+        if ($request->boolean('generate_evaluation_admin', true)) {
+            $generatedUsers['evaluation-admin'] = $this->generateProgramUser($program, 'evaluation-admin');
+        }
 
         $program->load(['organization', 'groupHead']);
 
@@ -209,6 +221,7 @@ class ProgramController extends Controller
             'program-admin' => 'admin',
             'program-manager' => 'manager',
             'program-moderator' => 'moderator',
+            'evaluation-admin' => 'evaladmin',
         ];
 
         $roleShortName = $roleNames[$role] ?? 'user';
@@ -299,9 +312,8 @@ class ProgramController extends Controller
                 'reports-view',
                 'reports-export',
                 
-                // Evaluation - Full access (like Super Admin, program-scoped)
-                'evaluation-view',
-                'evaluation-manage',
+                // Evaluation - NO ACCESS (only evaluation-admin has access)
+                // Removed: evaluation-view, evaluation-manage
             ],
             'program-manager' => [
                 // Dashboard
@@ -318,8 +330,9 @@ class ProgramController extends Controller
                 'questionnaires-view',
                 'questionnaires-edit',
                 
-                // Activities/Events - View and Edit only (NO create, NO delete)
+                // Activities/Events - Create and Manage
                 'activities-view',
+                'activities-create',
                 'activities-edit',
                 'activities-send-notification',
                 'activities-landing-config',
@@ -328,22 +341,46 @@ class ProgramController extends Controller
                 'reports-view',
                 'reports-export',
                 
-                // Evaluation - Full access (like Super Admin, program-scoped)
-                'evaluation-view',
-                'evaluation-manage',
+                // Evaluation - NO ACCESS (only evaluation-admin has access)
+                // Removed: evaluation-view, evaluation-manage
             ],
             'program-moderator' => [
                 // Dashboard
                 'dashboard',
                 
-                // Activities/Events - View only
+                // Activities/Events - Run only (view to run them)
                 'activities-view',
                 
-                // Reports - View and Export
+                // Reports - Limited (view and export)
                 'reports-view',
                 'reports-export',
                 
-                // Evaluation - Full access (like Super Admin, program-scoped)
+                // Evaluation - NO ACCESS (only evaluation-admin has access)
+                // Removed: evaluation-view, evaluation-manage
+            ],
+            'evaluation-admin' => [
+                // Dashboard
+                'dashboard',
+                
+                // Organizations - View only (using dash-based service keys to match other roles)
+                'list_organization',
+                
+                // Programs - NO ACCESS (hidden from evaluation-admin navigation)
+                // Removed: programs-view
+                
+                // Questionnaires - Full access (dash-based)
+                'questionnaires-view',
+                'questionnaires-create',
+                'questionnaires-edit',
+                'questionnaires-delete',
+                
+                // Activities/Events - NO ACCESS (evaluation-admin doesn't see Events)
+                // Removed: activities-view, activities-create, etc.
+                
+                // Reports/Analytics - NO ACCESS (evaluation-admin doesn't see Reports & Analytics)
+                // Removed: reports-view, reports-export
+                
+                // Evaluation - Full access (program-scoped, ownership-based)
                 'evaluation-view',
                 'evaluation-manage',
             ],

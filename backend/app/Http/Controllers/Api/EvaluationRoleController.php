@@ -104,9 +104,27 @@ class EvaluationRoleController extends Controller
                 'is_active' => 'boolean'
             ]);
             
-            // Determine program_id based on user role
+            // Determine program_id based on user role and department
             if ($user->role === 'super-admin') {
                 $programId = $validated['program_id'] ?? null;
+                
+                // If no program_id provided but category (department) is specified,
+                // inherit program_id from the department
+                if (!$programId && !empty($validated['category'])) {
+                    $department = DB::table('evaluation_departments')
+                        ->where('name', $validated['category'])
+                        ->whereNull('deleted_at')
+                        ->first();
+                    
+                    if ($department && $department->program_id) {
+                        $programId = $department->program_id;
+                        \Log::info('Role inheriting program_id from department', [
+                            'role_name' => $validated['name'],
+                            'department' => $validated['category'],
+                            'program_id' => $programId
+                        ]);
+                    }
+                }
             } else {
                 $programId = $user->program_id;
                 
@@ -305,6 +323,15 @@ class EvaluationRoleController extends Controller
                         'staff_ids' => $staffIds
                     ]);
                     
+                    // Get user IDs associated with these staff members
+                    $userIds = DB::table('evaluation_staff')
+                        ->whereIn('id', $staffIds)
+                        ->whereNotNull('user_id')
+                        ->pluck('user_id')
+                        ->toArray();
+                    
+                    \Log::info('[DELETE ROLE CASCADE] Found user accounts to delete', ['count' => count($userIds)]);
+                    
                     // Delete hierarchy mappings where staff is involved
                     $hierarchyDeleted = DB::table('evaluation_hierarchy')
                         ->where(function($q) use ($staffIds) {
@@ -325,6 +352,12 @@ class EvaluationRoleController extends Controller
                         ->update(['deleted_at' => now()]);
                     
                     \Log::info('[DELETE ROLE CASCADE] Assignments deleted', ['count' => $assignmentsDeleted]);
+                    
+                    // Delete associated user accounts
+                    if (count($userIds) > 0) {
+                        DB::table('users')->whereIn('id', $userIds)->delete();
+                        \Log::info('[DELETE ROLE CASCADE] User accounts deleted', ['count' => count($userIds)]);
+                    }
                     
                     // Delete staff
                     $staffDeleted = DB::table('evaluation_staff')

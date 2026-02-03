@@ -1175,13 +1175,16 @@ export default function ActivitiesPage() {
                               >
                                 <Copy className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => handleDelete(activity.id.toString(), activity.title)}
-                                className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              {/* Hide delete for program-manager - they cannot delete events */}
+                              {currentUser?.role !== 'program-manager' && (
+                                <button
+                                  onClick={() => handleDelete(activity.id.toString(), activity.title)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
                             </>
                           )}
                             </>

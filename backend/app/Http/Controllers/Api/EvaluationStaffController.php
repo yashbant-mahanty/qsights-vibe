@@ -153,10 +153,36 @@ class EvaluationStaffController extends Controller
         try {
             $user = $request->user();
             
+            // Check if email already exists in evaluation_staff table (only non-deleted records)
+            $existingStaff = DB::table('evaluation_staff')
+                ->where('email', $request->input('email'))
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if ($existingStaff) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A staff member with this email already exists. Please use a different email address.'
+                ], 422);
+            }
+            
+            // Check if email exists but was deleted - we'll permanently delete it to allow reuse
+            $deletedStaff = DB::table('evaluation_staff')
+                ->where('email', $request->input('email'))
+                ->whereNotNull('deleted_at')
+                ->first();
+            
+            if ($deletedStaff) {
+                // Permanently delete the old soft-deleted record to avoid unique constraint violation
+                DB::table('evaluation_staff')
+                    ->where('id', $deletedStaff->id)
+                    ->delete();
+            }
+            
             $validated = $request->validate([
                 'employee_id' => 'nullable|string|max:255',
                 'name' => 'required|string|max:255',
-                'email' => 'required|email|unique:evaluation_staff,email',
+                'email' => 'required|email',
                 'role_id' => 'required|uuid|exists:evaluation_roles,id',
                 'program_id' => 'nullable|uuid|exists:programs,id',
                 'user_id' => 'nullable|uuid|exists:users,id',
@@ -173,9 +199,27 @@ class EvaluationStaffController extends Controller
                 'create_account' => 'nullable|boolean'
             ]);
             
-            // Determine program_id based on user role
+            // Determine program_id based on user role and associated role
             if ($user->role === 'super-admin') {
                 $programId = $validated['program_id'] ?? null;
+                
+                // If no program_id provided but role_id is specified,
+                // inherit program_id from the role
+                if (!$programId && !empty($validated['role_id'])) {
+                    $role = DB::table('evaluation_roles')
+                        ->where('id', $validated['role_id'])
+                        ->whereNull('deleted_at')
+                        ->first();
+                    
+                    if ($role && $role->program_id) {
+                        $programId = $role->program_id;
+                        \Log::info('Staff inheriting program_id from role', [
+                            'staff_name' => $validated['name'],
+                            'role_id' => $validated['role_id'],
+                            'program_id' => $programId
+                        ]);
+                    }
+                }
             } else {
                 $programId = $user->program_id;
                 
@@ -193,26 +237,46 @@ class EvaluationStaffController extends Controller
             
             // If create_account is true, create a user account
             if (!empty($validated['create_account'])) {
-                // Check if user with this email already exists
-                $existingUser = User::where('email', $validated['email'])->first();
+                // Generate unique login email by adding '.staff' suffix before @
+                // e.g., john.doe@company.com becomes john.doe.staff@company.com
+                $emailParts = explode('@', $validated['email']);
+                $uniqueLoginEmail = $emailParts[0] . '.staff@' . $emailParts[1];
+                
+                // Check if this unique login email already exists (only consider active/non-deleted users)
+                $existingUser = User::where('email', $uniqueLoginEmail)->whereNull('deleted_at')->first();
+                
+                // If deleted user exists with this email, permanently remove it
+                $deletedUser = User::where('email', $uniqueLoginEmail)->whereNotNull('deleted_at')->first();
+                if ($deletedUser) {
+                    \Log::info('Removing deleted user to allow email reuse', ['email' => $uniqueLoginEmail]);
+                    $deletedUser->forceDelete();
+                }
                 
                 if ($existingUser) {
+                    // Active user exists, link to existing account
                     $createdUserId = $existingUser->id;
+                    \Log::info('Linked to existing staff account', ['login_email' => $uniqueLoginEmail]);
                 } else {
                     // Generate random password
                     $generatedPassword = Str::random(10);
                     
-                    // Create user
+                    // Create user with unique login email, but use original email as communication_email
                     $newUser = User::create([
                         'name' => $validated['name'],
-                        'email' => $validated['email'],
+                        'email' => $uniqueLoginEmail,  // Unique login email
+                        'communication_email' => $validated['email'],  // Actual email for communications
                         'password' => Hash::make($generatedPassword),
                         'role' => 'evaluation_staff',
                         'program_id' => $programId,
-                        'is_active' => true
+                        'status' => 'active'
                     ]);
                     
                     $createdUserId = $newUser->id;
+                    
+                    \Log::info('Created new staff user account', [
+                        'login_email' => $uniqueLoginEmail,
+                        'communication_email' => $validated['email']
+                    ]);
                 }
             }
             
@@ -240,9 +304,28 @@ class EvaluationStaffController extends Controller
                 'updated_at' => now()
             ]);
             
-            // Send welcome email if account was created
+            // Send welcome email if account was created with new password
             if ($generatedPassword && $createdUserId) {
-                $this->sendWelcomeEmail($validated['name'], $validated['email'], $generatedPassword, $programId);
+                \Log::info('Sending welcome email', [
+                    'communication_email' => $validated['email'],
+                    'login_email' => $uniqueLoginEmail,
+                    'name' => $validated['name'],
+                    'has_password' => !empty($generatedPassword)
+                ]);
+                $this->sendWelcomeEmail(
+                    $validated['name'], 
+                    $validated['email'],  // communication email (actual email)
+                    $uniqueLoginEmail,    // login email (with .staff suffix)
+                    $generatedPassword, 
+                    $programId
+                );
+            } else {
+                \Log::info('Welcome email not sent', [
+                    'create_account' => !empty($validated['create_account']),
+                    'has_password' => !empty($generatedPassword),
+                    'has_user_id' => !empty($createdUserId),
+                    'email' => $validated['email']
+                ]);
             }
             
             $this->logAudit('evaluation_staff', $staffId, 'created', 'Staff member created', $user, $programId);
@@ -393,6 +476,12 @@ class EvaluationStaffController extends Controller
                         ->whereNull('deleted_at')
                         ->update(['deleted_at' => now()]);
                     
+                    // Delete associated user account if exists
+                    if ($staff->user_id) {
+                        DB::table('users')->where('id', $staff->user_id)->delete();
+                        \Log::info('Deleted associated user account', ['staff_id' => $id, 'user_id' => $staff->user_id]);
+                    }
+                    
                     // Delete staff
                     DB::table('evaluation_staff')->where('id', $id)->update(['deleted_at' => now()]);
                     
@@ -410,10 +499,26 @@ class EvaluationStaffController extends Controller
                 }
             }
             
-            // Simple delete (no dependencies)
-            DB::table('evaluation_staff')->where('id', $id)->update(['deleted_at' => now()]);
+            // Simple delete (no dependencies) - also delete user account
+            DB::beginTransaction();
             
-            $this->logAudit('evaluation_staff', $id, 'deleted', 'Staff member deleted', $user, $staff->program_id);
+            try {
+                // Delete associated user account if exists
+                if ($staff->user_id) {
+                    DB::table('users')->where('id', $staff->user_id)->delete();
+                    \Log::info('Deleted associated user account', ['staff_id' => $id, 'user_id' => $staff->user_id]);
+                }
+                
+                // Delete staff
+                DB::table('evaluation_staff')->where('id', $id)->update(['deleted_at' => now()]);
+                
+                $this->logAudit('evaluation_staff', $id, 'deleted', 'Staff member deleted', $user, $staff->program_id);
+                
+                DB::commit();
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
             
             return response()->json([
                 'success' => true,
@@ -455,8 +560,12 @@ class EvaluationStaffController extends Controller
     
     /**
      * Send welcome email to staff with login credentials
+     * @param string $name - Staff member's name
+     * @param string $communicationEmail - Email where the welcome message is sent
+     * @param string $loginEmail - Email used for login (may have .staff suffix)
+     * @param string $password - Generated password
      */
-    private function sendWelcomeEmail($name, $email, $password, $programId = null)
+    private function sendWelcomeEmail($name, $communicationEmail, $loginEmail, $password, $programId = null)
     {
         try {
             $sendGridApiKey = SystemSetting::getValue('email_sendgrid_api_key') ?: env('SENDGRID_API_KEY');
@@ -482,7 +591,7 @@ class EvaluationStaffController extends Controller
                         
                         <div style='background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;'>
                             <h3 style='color: #374151; margin-top: 0;'>Your Login Credentials</h3>
-                            <p style='margin: 10px 0;'><strong>Username (Email):</strong> {$email}</p>
+                            <p style='margin: 10px 0;'><strong>Login Email:</strong> {$loginEmail}</p>
                             <p style='margin: 10px 0;'><strong>Password:</strong> {$password}</p>
                         </div>
                         
@@ -494,6 +603,7 @@ class EvaluationStaffController extends Controller
                     </div>
                     <div style='padding: 20px; text-align: center; color: #9ca3af; font-size: 12px;'>
                         <p>This is an automated message from QSights Performance Evaluation System.</p>
+                        <p>This email was sent to {$communicationEmail}</p>
                     </div>
                 </div>
             ";
@@ -503,7 +613,7 @@ class EvaluationStaffController extends Controller
                 'Content-Type' => 'application/json'
             ])->post('https://api.sendgrid.com/v3/mail/send', [
                 'personalizations' => [[
-                    'to' => [['email' => $email, 'name' => $name]]
+                    'to' => [['email' => $communicationEmail, 'name' => $name]]
                 ]],
                 'from' => ['email' => $from, 'name' => $fromName],
                 'subject' => 'Welcome to QSights - Your Account Details',
@@ -513,7 +623,10 @@ class EvaluationStaffController extends Controller
             ]);
             
             if ($response->successful()) {
-                \Log::info("Welcome email sent to {$email}");
+                \Log::info("Welcome email sent", [
+                    'communication_email' => $communicationEmail,
+                    'login_email' => $loginEmail
+                ]);
             } else {
                 \Log::error('Failed to send welcome email: ' . $response->body());
             }
@@ -544,109 +657,95 @@ class EvaluationStaffController extends Controller
                 ], 404);
             }
             
-            // Get all evaluations where this staff member was evaluated
-            $evaluations = DB::table('evaluation_results as er')
-                ->join('evaluation_triggered as et', 'er.triggered_id', '=', 'et.id')
-                ->join('evaluation_staff as evaluator', 'et.evaluator_id', '=', 'evaluator.id')
-                ->where('er.staff_id', $staffMember->id)
-                ->whereNull('er.deleted_at')
-                ->select(
-                    'er.*',
-                    'et.template_name',
-                    'et.evaluator_id',
-                    'evaluator.name as evaluator_name',
-                    'evaluator.email as evaluator_email'
-                )
-                ->orderBy('er.evaluated_at', 'desc')
+            // Get all completed evaluations from evaluation_triggered where this staff member is a subordinate
+            $evaluations = DB::table('evaluation_triggered')
+                ->where('is_active', true)
+                ->where('status', 'completed')
+                ->whereNull('deleted_at')
+                ->whereRaw("subordinates::text ILIKE '%\" . $staffMember->id . \"%'")
+                ->orderBy('completed_at', 'desc')
                 ->get();
             
-            // Process evaluations to extract scores
+            // Process evaluations - extract responses for this staff member
             $processedEvaluations = [];
             $allScores = [];
-            $strengths = [];
-            $improvements = [];
             
             foreach ($evaluations as $eval) {
+                $subordinates = json_decode($eval->subordinates, true) ?? [];
                 $responses = json_decode($eval->responses, true) ?? [];
-                $evalScores = [];
                 
-                foreach ($responses as $questionId => $response) {
-                    if (isset($response['score']) && is_numeric($response['score'])) {
-                        $evalScores[] = [
-                            'question' => $response['question'] ?? $questionId,
-                            'score' => (float) $response['score']
-                        ];
-                        $allScores[] = [
-                            'question' => $response['question'] ?? $questionId,
-                            'score' => (float) $response['score']
-                        ];
+                // Check if this staff member is in subordinates
+                $isSubordinate = false;
+                foreach ($subordinates as $sub) {
+                    if (($sub['id'] ?? '') === $staffMember->id) {
+                        $isSubordinate = true;
+                        break;
                     }
                 }
                 
-                $avgScore = count($evalScores) > 0 
-                    ? round(array_sum(array_column($evalScores, 'score')) / count($evalScores), 2) 
+                if (!$isSubordinate) {
+                    continue;
+                }
+                
+                // Get this staff member's responses
+                $staffResponses = $responses[$staffMember->id] ?? null;
+                
+                if (!$staffResponses) {
+                    continue;
+                }
+                
+                // Calculate score from responses if available
+                $responseData = $staffResponses['responses'] ?? [];
+                $scores = [];
+                
+                if (is_array($responseData)) {
+                    foreach ($responseData as $answer) {
+                        if (is_numeric($answer)) {
+                            $scores[] = (float) $answer;
+                        }
+                    }
+                }
+                
+                $avgScore = count($scores) > 0 
+                    ? round(array_sum($scores) / count($scores), 2) 
                     : 0;
                 
                 $processedEvaluations[] = [
                     'id' => $eval->id,
-                    'template_name' => $eval->template_name,
-                    'evaluator_name' => $eval->evaluator_name,
-                    'evaluated_at' => $eval->evaluated_at,
-                    'scores' => $evalScores,
-                    'average_score' => $avgScore,
-                    'feedback' => $eval->feedback ?? null
+                    'template_name' => $eval->template_name ?? 'Evaluation',
+                    'evaluator_name' => $eval->evaluator_name ?? 'Manager',
+                    'completed_at' => $staffResponses['completed_at'] ?? $eval->completed_at,
+                    'score' => $avgScore,
+                    'status' => 'completed',
+                    'responses' => $responseData
                 ];
-            }
-            
-            // Calculate aggregated scores by question
-            $aggregatedScores = [];
-            foreach ($allScores as $score) {
-                $key = $score['question'];
-                if (!isset($aggregatedScores[$key])) {
-                    $aggregatedScores[$key] = ['question' => $key, 'scores' => [], 'total' => 0, 'count' => 0];
+                
+                if ($avgScore > 0) {
+                    $allScores[] = $avgScore;
                 }
-                $aggregatedScores[$key]['scores'][] = $score['score'];
-                $aggregatedScores[$key]['total'] += $score['score'];
-                $aggregatedScores[$key]['count']++;
             }
             
-            // Calculate averages and identify strengths/improvements
-            $skillScores = [];
-            foreach ($aggregatedScores as $key => $data) {
-                $avg = round($data['total'] / $data['count'], 2);
-                $skillScores[] = [
-                    'question' => $data['question'],
-                    'average' => $avg,
-                    'count' => $data['count']
-                ];
-            }
-            
-            // Sort to find top and bottom
-            usort($skillScores, fn($a, $b) => $b['average'] <=> $a['average']);
-            $strengths = array_slice(array_filter($skillScores, fn($s) => $s['average'] >= 4), 0, 3);
-            $improvements = array_slice(array_filter($skillScores, fn($s) => $s['average'] < 4), 0, 3);
-            
-            $overallAverage = count($skillScores) > 0 
-                ? round(array_sum(array_column($skillScores, 'average')) / count($skillScores), 2) 
+            // Calculate overall average score
+            $overallAverage = count($allScores) > 0 
+                ? round(array_sum($allScores) / count($allScores), 2) 
                 : 0;
+            
+            $latestEvaluation = count($processedEvaluations) > 0 
+                ? $processedEvaluations[0]['completed_at'] 
+                : null;
             
             return response()->json([
                 'success' => true,
+                'overallScore' => $overallAverage,
+                'totalEvaluations' => count($processedEvaluations),
+                'latestEvaluation' => $latestEvaluation,
+                'evaluations' => $processedEvaluations,
                 'staff' => [
                     'id' => $staffMember->id,
                     'name' => $staffMember->name,
                     'email' => $staffMember->email,
-                    'employee_id' => $staffMember->employee_id,
-                    'department' => $staffMember->department
-                ],
-                'summary' => [
-                    'total_evaluations' => count($processedEvaluations),
-                    'overall_average' => $overallAverage,
-                    'strengths' => $strengths,
-                    'improvements' => $improvements
-                ],
-                'skill_scores' => $skillScores,
-                'evaluations' => $processedEvaluations
+                    'employee_id' => $staffMember->employee_id
+                ]
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -705,54 +804,75 @@ class EvaluationStaffController extends Controller
                 ]);
             }
             
-            // Get performance data for each subordinate
+            // Get performance data for each subordinate from evaluation_triggered
             $staffReports = [];
             foreach ($subordinates as $sub) {
-                $evaluations = DB::table('evaluation_results as er')
-                    ->join('evaluation_triggered as et', 'er.triggered_id', '=', 'et.id')
-                    ->join('evaluation_staff as evaluator', 'et.evaluator_id', '=', 'evaluator.id')
-                    ->where('er.staff_id', $sub->staff_id)
-                    ->whereNull('er.deleted_at')
-                    ->select('er.*', 'et.template_name', 'evaluator.name as evaluator_name')
-                    ->orderBy('er.evaluated_at', 'desc')
+                // Get all completed evaluations by this evaluator
+                $evaluations = DB::table('evaluation_triggered')
+                    ->where('evaluator_id', $staffMember->id)
+                    ->where('status', 'completed')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at')
+                    ->orderBy('completed_at', 'desc')
                     ->get();
                 
                 $allScores = [];
                 $processedEvals = [];
                 
                 foreach ($evaluations as $eval) {
+                    $subordinatesJson = json_decode($eval->subordinates, true) ?? [];
                     $responses = json_decode($eval->responses, true) ?? [];
-                    $evalScores = [];
                     
-                    foreach ($responses as $questionId => $response) {
-                        if (isset($response['score']) && is_numeric($response['score'])) {
-                            $evalScores[] = [
-                                'question' => $response['question'] ?? $questionId,
-                                'score' => (float) $response['score']
-                            ];
-                            $allScores[] = [
-                                'question' => $response['question'] ?? $questionId,
-                                'score' => (float) $response['score']
-                            ];
+                    // Check if this subordinate is in the evaluation
+                    $isInEval = false;
+                    foreach ($subordinatesJson as $evalSub) {
+                        if (($evalSub['id'] ?? '') === $sub->staff_id) {
+                            $isInEval = true;
+                            break;
                         }
                     }
                     
-                    $avgScore = count($evalScores) > 0 
-                        ? round(array_sum(array_column($evalScores, 'score')) / count($evalScores), 2) 
+                    if (!$isInEval) {
+                        continue;
+                    }
+                    
+                    // Get this subordinate's responses
+                    $subResponses = $responses[$sub->staff_id] ?? null;
+                    
+                    if (!$subResponses) {
+                        continue;
+                    }
+                    
+                    // Calculate score from responses
+                    $responseData = $subResponses['responses'] ?? [];
+                    $scores = [];
+                    
+                    if (is_array($responseData)) {
+                        foreach ($responseData as $answer) {
+                            if (is_numeric($answer)) {
+                                $scores[] = (float) $answer;
+                                $allScores[] = (float) $answer;
+                            }
+                        }
+                    }
+                    
+                    $avgScore = count($scores) > 0 
+                        ? round(array_sum($scores) / count($scores), 2) 
                         : 0;
                     
                     $processedEvals[] = [
                         'id' => $eval->id,
                         'template_name' => $eval->template_name,
                         'evaluator_name' => $eval->evaluator_name,
-                        'evaluated_at' => $eval->evaluated_at,
-                        'average_score' => $avgScore
+                        'evaluated_at' => $subResponses['completed_at'] ?? $eval->completed_at,
+                        'average_score' => $avgScore,
+                        'responses' => $responseData
                     ];
                 }
                 
                 // Calculate overall average for this subordinate
                 $overallAvg = count($allScores) > 0
-                    ? round(array_sum(array_column($allScores, 'score')) / count($allScores), 2)
+                    ? round(array_sum($allScores) / count($allScores), 2)
                     : 0;
                 
                 $staffReports[] = [

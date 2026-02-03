@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
+            'permission' => \App\Http\Middleware\CheckPermission::class,
             // Override default auth middleware to avoid redirect-to-login for API requests
             'auth' => \App\Http\Middleware\ApiAuthenticate::class,
             // Phase 6: Security middleware

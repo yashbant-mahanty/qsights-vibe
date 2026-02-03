@@ -89,9 +89,41 @@ class EvaluationHierarchyController extends Controller
                 'evaluation_weight' => 'nullable|integer|min:0|max:100'
             ]);
             
-            // Determine program_id based on user role
+            // Determine program_id based on user role and staff members
             if ($user->role === 'super-admin') {
                 $programId = $validated['program_id'] ?? null;
+                
+                // If no program_id provided, inherit from staff or manager
+                if (!$programId) {
+                    $staff = DB::table('evaluation_staff')
+                        ->where('id', $validated['staff_id'])
+                        ->whereNull('deleted_at')
+                        ->first();
+                    
+                    if ($staff && $staff->program_id) {
+                        $programId = $staff->program_id;
+                        \Log::info('Hierarchy inheriting program_id from staff', [
+                            'staff_id' => $validated['staff_id'],
+                            'reports_to_id' => $validated['reports_to_id'],
+                            'program_id' => $programId
+                        ]);
+                    } else {
+                        // Try to get from manager
+                        $manager = DB::table('evaluation_staff')
+                            ->where('id', $validated['reports_to_id'])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        
+                        if ($manager && $manager->program_id) {
+                            $programId = $manager->program_id;
+                            \Log::info('Hierarchy inheriting program_id from manager', [
+                                'staff_id' => $validated['staff_id'],
+                                'reports_to_id' => $validated['reports_to_id'],
+                                'program_id' => $programId
+                            ]);
+                        }
+                    }
+                }
             } else {
                 $programId = $user->program_id;
                 
@@ -229,9 +261,58 @@ class EvaluationHierarchyController extends Controller
     
     public function destroy(Request $request, $id)
     {
+        // IMMEDIATE LOG - FIRST LINE
+        file_put_contents('/tmp/hierarchy_delete.log', date('Y-m-d H:i:s') . " DESTROY ENTERED id=$id\n", FILE_APPEND);
+        \Log::emergency('HIERARCHY DESTROY METHOD ENTERED', ['id' => $id, 'uri' => $request->getRequestUri()]);
+        
         try {
             $user = $request->user();
+            $cascadeParam = $request->query('cascade');
+            $cascade = $cascadeParam === 'true' || $cascadeParam === true || $cascadeParam === '1' || $cascadeParam === 1;
             
+            file_put_contents('/tmp/hierarchy_delete.log', date('Y-m-d H:i:s') . " cascade_param=$cascadeParam cascade_bool=" . ($cascade ? 'true' : 'false') . "\n", FILE_APPEND);
+            \Log::emergency('HIERARCHY DESTROY CASCADE CHECK', [
+                'id' => $id,
+                'cascade_param' => $cascadeParam,
+                'cascade_param_type' => gettype($cascadeParam),
+                'cascade_bool' => $cascade,
+                'all_query' => $request->query(),
+                'full_url' => $request->fullUrl()
+            ]);
+            
+            // If cascade=true, the $id is the evaluator_id (reports_to_id), delete all their subordinate relationships
+            if ($cascade) {
+                // First check if any relationships exist for this evaluator
+                $relationships = DB::table('evaluation_hierarchy')
+                    ->where('reports_to_id', $id)
+                    ->whereNull('deleted_at')
+                    ->get();
+                
+                if ($relationships->isEmpty()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'No hierarchy relationships found for this evaluator'
+                    ], 404);
+                }
+                
+                $programId = $relationships->first()->program_id;
+                $count = $relationships->count();
+                
+                // Soft delete all relationships for this evaluator
+                DB::table('evaluation_hierarchy')
+                    ->where('reports_to_id', $id)
+                    ->whereNull('deleted_at')
+                    ->update(['deleted_at' => now()]);
+                
+                $this->logAudit('evaluation_hierarchy', $id, 'bulk_deleted', "Deleted {$count} hierarchy relationships for evaluator", $user, $programId);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => "Successfully deleted {$count} hierarchy relationship(s)"
+                ]);
+            }
+            
+            // Regular single hierarchy delete by ID
             $hierarchy = DB::table('evaluation_hierarchy')->where('id', $id)->whereNull('deleted_at')->first();
             
             if (!$hierarchy) {

@@ -190,8 +190,12 @@ export default function ProgramAdminLayout({ children }: ProgramAdminLayoutProps
         {/* Navigation */}
         <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100%-4rem)]">
           {sidebarItems.map((item, index) => {
-            // FIXED: Exact match only - no substring matching to prevent dashboard being active when on /program-admin/roles
-            const isActive = pathname === item.href;
+            // FIXED: Exact match OR child routes - this keeps Programs tab highlighted when on /programs/create
+            // Special case: dashboard and program-admin routes should only match exactly to prevent conflicts
+            const isDashboardOrProgramAdmin = item.href === '/dashboard' || item.href === '/program-admin';
+            const isActive = isDashboardOrProgramAdmin 
+              ? pathname === item.href
+              : (pathname === item.href || pathname.startsWith(item.href + '/'));
             return (
               <a
                 key={index}

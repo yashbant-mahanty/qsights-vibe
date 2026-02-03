@@ -46,8 +46,8 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-// Dashboard Routes (Super Admin only)
-Route::middleware(['auth:sanctum', 'role:super-admin'])->prefix('dashboard')->group(function () {
+// Dashboard Routes (Super Admin, Admin, and Evaluation Admin)
+Route::middleware(['auth:sanctum', 'role:super-admin,admin,evaluation-admin'])->prefix('dashboard')->group(function () {
     Route::get('/global-statistics', [DashboardController::class, 'globalStatistics']);
     Route::get('/organization-performance', [DashboardController::class, 'organizationPerformance']);
     Route::get('/subscription-metrics', [DashboardController::class, 'subscriptionMetrics']);
@@ -247,8 +247,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/questionnaires', [QuestionnaireController::class, 'index']);
     Route::get('/questionnaires/{id}', [QuestionnaireController::class, 'show']);
     
-    // Admin and Program roles can manage questionnaires
-    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
+    // Admin and Program roles can manage questionnaires (including evaluation-admin for custom evaluation forms)
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager,evaluation-admin'])->group(function () {
         Route::post('/questionnaires', [QuestionnaireController::class, 'store']);
         Route::put('/questionnaires/{id}', [QuestionnaireController::class, 'update']);
         Route::patch('/questionnaires/{id}', [QuestionnaireController::class, 'update']);
@@ -343,10 +343,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
         
         // Export routes
         Route::get('/activities/{id}/export', [App\Http\Controllers\Api\ExportController::class, 'exportActivityResults']);
-        
+    });
+    
+    // Activity delete - program-manager CANNOT delete (only super-admin, admin, group-head, program-admin)
+    Route::middleware(['role:super-admin,admin,group-head,program-admin'])->group(function () {
         Route::delete('/activities/{id}', [ActivityController::class, 'destroy']);
-        
-        // Questionnaire assignment
+    });
+    
+    // Questionnaire assignment - program-manager can still do these
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
         Route::post('/activities/{id}/assign-questionnaire', [ActivityController::class, 'assignQuestionnaire']);
         Route::delete('/activities/{id}/unassign-questionnaire', [ActivityController::class, 'unassignQuestionnaire']);
         
@@ -398,6 +403,29 @@ Route::middleware(['auth:sanctum'])->prefix('reports')->group(function () {
     
     // Program-level reports
     Route::get('/program/{programId}', [App\Http\Controllers\Api\ReportController::class, 'programOverview']);
+});
+
+// AI-Based Report Builder Routes
+Route::middleware(['auth:sanctum'])->prefix('report-builder')->group(function () {
+    // Report Templates
+    Route::get('/templates', [App\Http\Controllers\Api\ReportBuilderController::class, 'index']);
+    Route::get('/templates/{id}', [App\Http\Controllers\Api\ReportBuilderController::class, 'show']);
+    Route::post('/templates', [App\Http\Controllers\Api\ReportBuilderController::class, 'store']);
+    Route::put('/templates/{id}', [App\Http\Controllers\Api\ReportBuilderController::class, 'update']);
+    Route::delete('/templates/{id}', [App\Http\Controllers\Api\ReportBuilderController::class, 'destroy']);
+    Route::post('/templates/{id}/clone', [App\Http\Controllers\Api\ReportBuilderController::class, 'clone']);
+    
+    // Default Templates
+    Route::get('/default-templates', [App\Http\Controllers\Api\ReportBuilderController::class, 'getDefaultTemplates']);
+    
+    // Generate Reports
+    Route::post('/templates/{templateId}/generate', [App\Http\Controllers\Api\ReportBuilderController::class, 'generate']);
+    Route::post('/analytics', [App\Http\Controllers\Api\ReportBuilderController::class, 'getAnalytics']);
+    Route::post('/question-analytics', [App\Http\Controllers\Api\ReportBuilderController::class, 'getQuestionAnalytics']);
+    
+    // Report Snapshots
+    Route::post('/snapshots', [App\Http\Controllers\Api\ReportBuilderController::class, 'createSnapshot']);
+    Route::get('/snapshots', [App\Http\Controllers\Api\ReportBuilderController::class, 'getSnapshots']);
     
     // Export endpoints
     Route::get('/export/{activityId}/{format}', [App\Http\Controllers\Api\ReportController::class, 'exportReport'])->where('format', 'csv|excel|pdf');
@@ -774,16 +802,18 @@ Route::middleware(['auth:sanctum', 'log.manager.actions', 'validate.data.scope']
 
 Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     
-    // Trigger Evaluations (Admin-only)
-    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+    // Trigger Evaluations (Admin + Evaluation Admin)
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin'])->group(function () {
         Route::post('/trigger', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'trigger']);
         Route::get('/triggered', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'index']);
         Route::put('/triggered/{id}', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'update']);
         Route::delete('/triggered/{id}', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'destroy']);
         Route::patch('/triggered/{id}/toggle-active', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'toggleActive']);
         Route::post('/triggered/{id}/resend', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'resend']);
-        
-        // Evaluation Reports (Admin only)
+    });
+    
+    // Evaluation Reports (Admin + Evaluation Admin + Managers/Staff with subordinates)
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin,moderator,evaluation_staff'])->group(function () {
         Route::get('/reports', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'reports']);
         Route::get('/reports/summary', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'reportsSummary']);
         Route::get('/reports/evaluators', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'evaluatorsList']);
@@ -800,7 +830,7 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     Route::get('/departments', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'index']);
     Route::get('/departments/{id}', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'show']);
     
-    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin'])->group(function () {
         Route::post('/departments', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'store']);
         Route::put('/departments/{id}', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'update']);
         Route::delete('/departments/{id}', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'destroy']);
@@ -810,7 +840,7 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     Route::get('/roles', [App\Http\Controllers\Api\EvaluationRoleController::class, 'index']);
     Route::get('/roles/{id}', [App\Http\Controllers\Api\EvaluationRoleController::class, 'show']);
     
-    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin'])->group(function () {
         Route::post('/roles', [App\Http\Controllers\Api\EvaluationRoleController::class, 'store']);
         Route::put('/roles/{id}', [App\Http\Controllers\Api\EvaluationRoleController::class, 'update']);
         Route::delete('/roles/{id}', [App\Http\Controllers\Api\EvaluationRoleController::class, 'destroy']);
@@ -824,7 +854,7 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     Route::get('/my-performance', [App\Http\Controllers\Api\EvaluationStaffController::class, 'myPerformance']);
     Route::get('/team-performance', [App\Http\Controllers\Api\EvaluationStaffController::class, 'teamPerformance']);
     
-    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin'])->group(function () {
         Route::post('/staff', [App\Http\Controllers\Api\EvaluationStaffController::class, 'store']);
         Route::put('/staff/{id}', [App\Http\Controllers\Api\EvaluationStaffController::class, 'update']);
         Route::delete('/staff/{id}', [App\Http\Controllers\Api\EvaluationStaffController::class, 'destroy']);
@@ -834,7 +864,7 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     Route::get('/hierarchy', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'index']);
     Route::get('/hierarchy/tree', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'getTree']);
     
-    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin'])->group(function () {
         Route::post('/hierarchy', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'store']);
         Route::put('/hierarchy/{id}', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'update']);
         Route::delete('/hierarchy/{id}', [App\Http\Controllers\Api\EvaluationHierarchyController::class, 'destroy']);
@@ -852,7 +882,7 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     Route::post('/assignments/{id}/save-progress', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'saveProgress']);
     Route::post('/assignments/{id}/submit', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'submitEvaluation']);
     
-    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin'])->group(function () {
         Route::post('/assignments', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'store']);
         Route::post('/assignments/auto-assign', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'autoAssign']);
         Route::put('/assignments/{id}', [App\Http\Controllers\Api\EvaluationAssignmentController::class, 'update']);
@@ -863,7 +893,7 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     Route::get('/results', [App\Http\Controllers\Api\EvaluationResultsController::class, 'index']);
     Route::get('/results/{id}', [App\Http\Controllers\Api\EvaluationResultsController::class, 'show']);
     
-    Route::middleware(['role:super-admin,admin,program-admin'])->group(function () {
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin'])->group(function () {
         Route::post('/results/calculate', [App\Http\Controllers\Api\EvaluationResultsController::class, 'calculate']);
         Route::post('/results/{id}/publish', [App\Http\Controllers\Api\EvaluationResultsController::class, 'publish']);
         Route::delete('/results/{id}', [App\Http\Controllers\Api\EvaluationResultsController::class, 'destroy']);

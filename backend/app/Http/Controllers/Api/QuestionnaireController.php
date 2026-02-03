@@ -17,6 +17,13 @@ class QuestionnaireController extends Controller
      */
     public function index(Request $request)
     {
+        // Auto-filter by program_id for program-scoped roles
+        $user = $request->user();
+        if ($user && in_array($user->role, ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin']) && $user->program_id) {
+            // Force filter to user's program for these roles
+            $request->merge(['program_id' => $user->program_id]);
+        }
+        
         $query = Questionnaire::with(['program', 'sections.questions'])->withCount([
             'responses' => function($query) {
                 $query->whereHas('participant', function($q) {

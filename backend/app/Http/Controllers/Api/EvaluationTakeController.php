@@ -196,39 +196,77 @@ class EvaluationTakeController extends Controller
     {
         $currentUser = Auth::user();
 
-        // Get assignments where current user is the evaluatee
-        $assignments = EvaluationAssignment::with([
-            'evaluationEvent',
-            'evaluatorUser',
-        ])
-        ->where(function ($query) use ($currentUser) {
-            $query->where(function ($q) use ($currentUser) {
-                $q->where('evaluatee_type', 'user')
-                  ->where('evaluatee_id', $currentUser->id);
+        // Find the staff member record for this user
+        $staffMember = DB::table('evaluation_staff')
+            ->where('email', $currentUser->email)
+            ->orWhere('user_id', $currentUser->id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$staffMember) {
+            return response()->json([
+                'data' => [],
+                'count' => 0,
+                'message' => 'No staff profile found'
+            ]);
+        }
+
+        // Query evaluation_triggered table for pending/in-progress evaluations where this staff is the evaluator
+        $triggeredEvaluations = DB::table('evaluation_triggered')
+            ->where('evaluator_id', $staffMember->id)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->orderBy('triggered_at', 'desc')
+            ->get()
+            ->map(function ($triggered) use ($staffMember) {
+                // Decode subordinates JSON and responses
+                $subordinates = json_decode($triggered->subordinates, true) ?? [];
+                $responses = json_decode($triggered->responses, true) ?? [];
+                
+                // Count completed vs total subordinates
+                $totalSubordinates = count($subordinates);
+                $completedSubordinates = 0;
+                
+                foreach ($subordinates as $subordinate) {
+                    $subordinateId = $subordinate['id'] ?? 'unknown';
+                    if (isset($responses[$subordinateId])) {
+                        $completedSubordinates++;
+                    }
+                }
+                
+                // Determine overall status
+                // All completed -> 'completed'
+                // Some completed -> 'in_progress'  
+                // None completed -> 'pending'
+                $taskStatus = $triggered->status;
+                if ($completedSubordinates === $totalSubordinates) {
+                    $taskStatus = 'completed';
+                } elseif ($completedSubordinates > 0) {
+                    $taskStatus = 'in_progress';
+                }
+                
+                // Return one task per evaluation (not per subordinate)
+                return [
+                    'id' => $triggered->id,
+                    'access_token' => $triggered->access_token,
+                    'event_name' => $triggered->template_name,
+                    'event_description' => 'Evaluate ' . $totalSubordinates . ' team member(s)',
+                    'evaluator_name' => $triggered->evaluator_name,
+                    'is_my_task' => true,
+                    'status' => $taskStatus,
+                    'due_date' => $triggered->end_date,
+                    'sent_at' => $triggered->triggered_at,
+                    'triggered_id' => $triggered->id,
+                    'subordinates_count' => $totalSubordinates,
+                    'completed_count' => $completedSubordinates,
+                    'subordinates' => $subordinates,
+                    'completed_at' => $taskStatus === 'completed' ? $triggered->completed_at : null
+                ];
             });
-        })
-        ->whereIn('status', ['pending', 'in_progress'])
-        ->whereHas('evaluationEvent', function ($q) {
-            $q->where('status', 'active')
-              ->where('end_date', '>=', now());
-        })
-        ->get()
-        ->map(function ($assignment) {
-            return [
-                'id' => $assignment->id,
-                'access_token' => $assignment->access_token,
-                'event_name' => $assignment->evaluationEvent->name,
-                'event_description' => $assignment->evaluationEvent->description,
-                'evaluator_name' => $assignment->evaluatorUser ? $assignment->evaluatorUser->name : 'Manager',
-                'status' => $assignment->status,
-                'due_date' => $assignment->evaluationEvent->end_date,
-                'sent_at' => $assignment->sent_at,
-            ];
-        });
 
         return response()->json([
-            'data' => $assignments,
-            'count' => $assignments->count(),
+            'data' => $triggeredEvaluations->values(),
+            'count' => $triggeredEvaluations->count(),
         ]);
     }
 

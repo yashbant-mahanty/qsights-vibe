@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
@@ -28,6 +29,7 @@ import { toast } from "@/components/ui/toast";
 
 export default function OrganizationsPage() {
   const router = useRouter();
+  const { currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -62,7 +64,8 @@ export default function OrganizationsPage() {
         if (response.ok) {
           const data = await response.json();
           const userRole = data.user?.role as UserRole;
-          if (!hasFullAccess(userRole)) {
+          // Allow super-admin, admin, and evaluation-admin (view-only) to access
+          if (!hasFullAccess(userRole) && userRole !== 'evaluation-admin') {
             router.push('/dashboard');
           }
         }
@@ -234,6 +237,10 @@ export default function OrganizationsPage() {
   const activeOrgsCount = organizations_display.filter((o) => o.status === "active").length;
   const inactiveOrgsCount = organizations_display.filter((o) => o.status === "inactive").length;
 
+  // Role-based stats - evaluation-admin sees Staff, others see Participants
+  const isEvaluationAdmin = currentUser?.role === 'evaluation-admin';
+  const staffCount = organizations.reduce((sum, o) => sum + (o.evaluation_staff_count || 0), 0);
+
   const stats = [
     {
       title: "Total Organizations",
@@ -256,7 +263,13 @@ export default function OrganizationsPage() {
       icon: XCircle,
       variant: 'red' as const,
     },
-    {
+    isEvaluationAdmin ? {
+      title: "Total Staff",
+      value: staffCount.toLocaleString(),
+      subtitle: "Staff in evaluation system",
+      icon: Users,
+      variant: 'purple' as const,
+    } : {
       title: "Total Participants",
       value: `${grandTotal.toLocaleString()} (${totalAuthenticated.toLocaleString()}/${totalGuest.toLocaleString()})`,
       subtitle: "(Participant/Anonymous)",
@@ -334,13 +347,15 @@ export default function OrganizationsPage() {
               Manage and monitor all organizations
             </p>
           </div>
-          <a
-            href="/organizations/create"
-            className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Create Organization
-          </a>
+          {currentUser?.role === 'super-admin' && (
+            <a
+              href="/organizations/create"
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create Organization
+            </a>
+          )}
         </div>
 
         {/* Stats Grid */}
@@ -495,38 +510,35 @@ export default function OrganizationsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => router.push(`/organizations/${org.id}`)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="View"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(organizations.find(o => o.id === org.id)!)}
-                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleToggleStatus(organizations.find(o => o.id === org.id)!)}
-                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded transition-colors"
-                            title={org.status === "active" ? "Deactivate" : "Activate"}
-                          >
-                            {org.status === "active" ? (
-                              <XCircle className="w-4 h-4" />
-                            ) : (
-                              <CheckCircle className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(organizations.find(o => o.id === org.id)!)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {currentUser?.role !== 'evaluation-admin' && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(organizations.find(o => o.id === org.id)!)}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleToggleStatus(organizations.find(o => o.id === org.id)!)}
+                                className="p-1.5 text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                                title={org.status === "active" ? "Deactivate" : "Activate"}
+                              >
+                                {org.status === "active" ? (
+                                  <XCircle className="w-4 h-4" />
+                                ) : (
+                                  <CheckCircle className="w-4 h-4" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleDelete(organizations.find(o => o.id === org.id)!)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
