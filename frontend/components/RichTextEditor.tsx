@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { Bold, Italic, Underline, List, ListOrdered, Superscript, Subscript, Type } from 'lucide-react';
+import { Bold, Italic, Underline, List, ListOrdered, Superscript, Subscript, Type, Link2, X, ExternalLink } from 'lucide-react';
 
 interface RichTextEditorProps {
   value: string;
@@ -9,6 +9,15 @@ interface RichTextEditorProps {
   placeholder?: string;
   minHeight?: string;
   showToolbar?: boolean;
+}
+
+interface LinkModalData {
+  isOpen: boolean;
+  url: string;
+  text: string;
+  target: '_self' | '_blank';
+  selectedText: string;
+  selectionRange: Range | null;
 }
 
 export default function RichTextEditor({
@@ -21,6 +30,14 @@ export default function RichTextEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [localContent, setLocalContent] = useState(value);
+  const [linkModal, setLinkModal] = useState<LinkModalData>({
+    isOpen: false,
+    url: '',
+    text: '',
+    target: '_blank',
+    selectedText: '',
+    selectionRange: null
+  });
 
   // Sync external value changes only when not focused
   useEffect(() => {
@@ -44,11 +61,16 @@ export default function RichTextEditor({
     if (editorRef.current) {
       const newContent = editorRef.current.innerHTML;
       setLocalContent(newContent);
-      // Don't call onChange on every keystroke - wait for blur
+      // Call onChange on every input to ensure state is synchronized
+      // This is important for save operations that don't trigger blur
+      onChange(newContent);
     }
-  }, []);
+  }, [onChange]);
 
-  const handleBlur = useCallback(() => {
+  const handleBlur = useCallback((e: React.FocusEvent) => {
+    // Don't blur if link modal is open
+    if (linkModal.isOpen) return;
+    
     setIsFocused(false);
     if (editorRef.current) {
       const content = editorRef.current.innerHTML;
@@ -56,11 +78,101 @@ export default function RichTextEditor({
         onChange(content);
       }
     }
-  }, [onChange, value]);
+  }, [onChange, value, linkModal.isOpen]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
   }, []);
+
+  const openLinkModal = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Get current selection before opening modal
+    const selection = window.getSelection();
+    const selectedText = selection?.toString() || '';
+    let selectionRange: Range | null = null;
+    
+    if (selection && selection.rangeCount > 0) {
+      selectionRange = selection.getRangeAt(0).cloneRange();
+    }
+    
+    setLinkModal({
+      isOpen: true,
+      url: '',
+      text: selectedText || '',
+      target: '_blank',
+      selectedText,
+      selectionRange
+    });
+  }, []);
+
+  const closeLinkModal = useCallback(() => {
+    setLinkModal({
+      isOpen: false,
+      url: '',
+      text: '',
+      target: '_blank',
+      selectedText: '',
+      selectionRange: null
+    });
+    // Refocus editor
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+  }, []);
+
+  const insertLinkFromModal = useCallback(() => {
+    const { url, text, target, selectedText, selectionRange } = linkModal;
+    
+    if (!url.trim()) {
+      closeLinkModal();
+      return;
+    }
+
+    // Ensure URL has protocol
+    let finalUrl = url.trim();
+    if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://') && !finalUrl.startsWith('mailto:')) {
+      finalUrl = 'https://' + finalUrl;
+    }
+
+    const linkText = text.trim() || finalUrl;
+    const targetAttr = target === '_blank' ? ' target="_blank" rel="noopener noreferrer"' : '';
+    const linkHtml = `<a href="${finalUrl}"${targetAttr} class="text-blue-600 underline hover:text-blue-800">${linkText}</a>`;
+
+    if (editorRef.current) {
+      editorRef.current.focus();
+      
+      // If there was a selection, restore it and replace
+      if (selectionRange && selectedText) {
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(selectionRange);
+          document.execCommand('insertHTML', false, linkHtml);
+        }
+      } else {
+        // Insert at cursor or at end
+        document.execCommand('insertHTML', false, linkHtml);
+      }
+
+      // Update content
+      const newContent = editorRef.current.innerHTML;
+      setLocalContent(newContent);
+      onChange(newContent);
+    }
+
+    closeLinkModal();
+  }, [linkModal, closeLinkModal, onChange]);
+
+  const handleModalKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      insertLinkFromModal();
+    } else if (e.key === 'Escape') {
+      closeLinkModal();
+    }
+  }, [insertLinkFromModal, closeLinkModal]);
 
   const toolbarButtons = [
     { command: 'bold', icon: Bold, label: 'Bold', shortcut: 'Ctrl+B' },
@@ -92,6 +204,20 @@ export default function RichTextEditor({
             </button>
           ))}
           
+          {/* Insert Link Button */}
+          <button
+            type="button"
+            onClick={openLinkModal}
+            className="p-2 hover:bg-gray-200 rounded transition-colors group relative border-l border-gray-300 ml-1"
+            title="Insert Link"
+            aria-label="Insert Link"
+          >
+            <Link2 className="w-4 h-4 text-gray-700" />
+            <span className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-900 rounded whitespace-nowrap z-10">
+              Insert Link
+            </span>
+          </button>
+
           {/* Font Size */}
           <div className="border-l border-gray-300 pl-2 ml-1">
             <select
@@ -131,6 +257,124 @@ export default function RichTextEditor({
         data-placeholder={placeholder}
         suppressContentEditableWarning
       />
+
+      {/* Link Modal */}
+      {linkModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={closeLinkModal}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6 z-10">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Link2 className="w-5 h-5 text-blue-600" />
+                Insert Link
+              </h3>
+              <button
+                type="button"
+                onClick={closeLinkModal}
+                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-4">
+              {/* URL Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  URL <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={linkModal.url}
+                  onChange={(e) => setLinkModal(prev => ({ ...prev, url: e.target.value }))}
+                  onKeyDown={handleModalKeyDown}
+                  placeholder="https://example.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  autoFocus
+                />
+              </div>
+
+              {/* Link Text Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Display Text
+                </label>
+                <input
+                  type="text"
+                  value={linkModal.text}
+                  onChange={(e) => setLinkModal(prev => ({ ...prev, text: e.target.value }))}
+                  onKeyDown={handleModalKeyDown}
+                  placeholder="Enter link text (optional)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                />
+                <p className="text-xs text-gray-500 mt-1">Leave empty to use URL as text</p>
+              </div>
+
+              {/* Target Option */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Open Link In
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="linkTarget"
+                      value="_blank"
+                      checked={linkModal.target === '_blank'}
+                      onChange={() => setLinkModal(prev => ({ ...prev, target: '_blank' }))}
+                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700 flex items-center gap-1">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      New Tab/Window
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="linkTarget"
+                      value="_self"
+                      checked={linkModal.target === '_self'}
+                      onChange={() => setLinkModal(prev => ({ ...prev, target: '_self' }))}
+                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Same Window</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={closeLinkModal}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={insertLinkFromModal}
+                disabled={!linkModal.url.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Link2 className="w-4 h-4" />
+                Insert Link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <style jsx>{`
         [contentEditable=true]:empty:before {
@@ -166,6 +410,13 @@ export default function RichTextEditor({
         [contentEditable=true] sub {
           vertical-align: sub;
           font-size: 0.75em;
+        }
+        [contentEditable=true] a {
+          color: #2563eb;
+          text-decoration: underline;
+        }
+        [contentEditable=true] a:hover {
+          color: #1d4ed8;
         }
       `}</style>
     </div>

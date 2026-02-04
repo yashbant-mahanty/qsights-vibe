@@ -80,34 +80,35 @@ function SortableItem({
       ref={setNodeRef}
       style={style}
       className={`
-        flex items-center gap-2 p-3 rounded-lg border-2 transition-all
-        ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-move hover:shadow-md'}
-        ${isDragging ? 'shadow-lg scale-105 z-50' : ''}
-        ${isCorrect ? 'border-green-500 bg-green-50' : ''}
-        ${isIncorrect ? 'border-red-500 bg-red-50' : ''}
-        ${!isCorrect && !isIncorrect ? 'border-gray-300 bg-white hover:border-qsights-blue' : ''}
+        flex flex-col items-center gap-1 p-2 rounded-lg transition-all min-w-[80px]
+        ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-move hover:bg-gray-50'}
+        ${isDragging ? 'scale-105 z-50 bg-white shadow-lg' : ''}
+        ${isCorrect ? 'bg-green-50' : ''}
+        ${isIncorrect ? 'bg-red-50' : ''}
       `}
       {...attributes}
       {...listeners}
     >
-      <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
-      
-      {item.imageUrl && (
+      {item.imageUrl ? (
         <img 
           src={item.imageUrl} 
           alt={item.text}
-          className="w-12 h-12 object-cover rounded"
+          className="w-14 h-14 object-cover rounded-lg"
           onLoad={() => console.log('✅ [DRAG_DROP_ITEM] Image loaded:', item.id)}
           onError={(e) => console.error('❌ [DRAG_DROP_ITEM] Image error:', item.id, item.imageUrl, e)}
         />
+      ) : (
+        <div className="w-14 h-14 flex items-center justify-center bg-gray-100 rounded-lg">
+          <GripVertical className="w-6 h-6 text-gray-400" />
+        </div>
       )}
       
-      <span className="flex-1 text-sm font-medium text-gray-700">
+      <span className="text-xs font-medium text-gray-700 text-center line-clamp-2 max-w-[80px]">
         {item.text}
       </span>
 
-      {isCorrect && <CheckCircle className="w-5 h-5 text-green-600" />}
-      {isIncorrect && <XCircle className="w-5 h-5 text-red-600" />}
+      {isCorrect && <CheckCircle className="w-4 h-4 text-green-600" />}
+      {isIncorrect && <XCircle className="w-4 h-4 text-red-600" />}
       
       {inBucket && onRemove && !disabled && (
         <button
@@ -115,10 +116,10 @@ function SortableItem({
             e.stopPropagation();
             onRemove();
           }}
-          className="p-1 hover:bg-gray-100 rounded transition-colors"
+          className="absolute -top-1 -right-1 p-0.5 bg-white rounded-full shadow hover:bg-gray-100 transition-colors"
           type="button"
         >
-          <X className="w-4 h-4 text-gray-500" />
+          <X className="w-3 h-3 text-gray-500" />
         </button>
       )}
     </div>
@@ -156,35 +157,38 @@ function DroppableBucket({
     <div 
       ref={setNodeRef}
       className={`
-        flex-1 min-w-0 p-4 rounded-xl border-2 border-dashed transition-all
-        ${disabled ? 'bg-gray-50' : 'bg-white hover:border-qsights-blue'}
-        ${isOver ? 'border-qsights-blue bg-blue-50 scale-105' : ''}
+        flex-1 min-w-0 p-3 rounded-xl transition-all
+        ${disabled ? 'bg-gray-50/50' : 'hover:bg-gray-50/50'}
+        ${isOver ? 'bg-blue-50/70 scale-102' : ''}
       `}
-      style={{ 
-        borderColor: isOver ? '#3b82f6' : (bucket.color || '#e5e7eb'),
-        backgroundColor: items.length > 0 && !disabled ? `${bucket.color}10` : undefined 
-      }}
     >
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b-2" style={{ borderColor: bucket.color || '#d1d5db' }}>
-        {bucket.imageUrl && (
+      <div className="flex flex-col items-center gap-1 mb-3">
+        {bucket.imageUrl ? (
           <img 
             src={bucket.imageUrl} 
             alt={bucket.label}
-            className="w-8 h-8 object-cover rounded"
+            className="w-12 h-12 object-cover rounded-lg"
             onLoad={() => console.log('✅ [DRAG_DROP_BUCKET] Image loaded:', bucket.id)}
             onError={(e) => console.error('❌ [DRAG_DROP_BUCKET] Image error:', bucket.id, bucket.imageUrl, e)}
           />
+        ) : (
+          <div 
+            className="w-12 h-12 rounded-lg flex items-center justify-center"
+            style={{ backgroundColor: bucket.color || '#e5e7eb' }}
+          >
+            <span className="text-white text-lg font-bold">{bucket.label.charAt(0)}</span>
+          </div>
         )}
-        <h4 className="font-semibold text-sm flex-1">
+        <h4 className="font-semibold text-sm text-center" style={{ color: bucket.color || '#374151' }}>
           {bucket.label}
         </h4>
       </div>
       
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2 min-h-[100px]">
+        <div className="flex flex-wrap gap-2 min-h-[80px] justify-center">
           {items.length === 0 ? (
-            <div className="flex items-center justify-center h-24 text-gray-400 text-sm">
-              Drop items here
+            <div className="flex items-center justify-center w-full h-16 text-gray-400 text-xs border border-dashed border-gray-300 rounded-lg">
+              Drop here
             </div>
           ) : (
             items.map((item) => {
@@ -232,9 +236,8 @@ function SourceItems({
 
   return (
     <div className="flex-1 min-w-0">
-      <h4 className="font-semibold mb-3 text-sm text-gray-700">
-        Available Items {required && <span className="text-red-500">*</span>}
-      </h4>
+      {/* Hidden: Available Items text */}
+      {required && <span className="sr-only">Required</span>}
       
       <SortableContext 
         items={items.map(item => item.id)} 
@@ -242,12 +245,12 @@ function SourceItems({
       >
         <div 
           ref={setNodeRef}
-          className={`space-y-2 p-4 rounded-xl border-2 border-dashed min-h-[150px] transition-all
-            ${isOver ? 'border-qsights-blue bg-blue-50 scale-105' : 'border-gray-300 bg-gray-50'}
+          className={`flex flex-wrap gap-3 min-h-[80px] transition-all p-2
+            ${isOver ? 'bg-blue-50/50 rounded-lg' : ''}
           `}
         >
           {items.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+            <div className="flex items-center justify-center w-full h-20 text-gray-400 text-sm">
               All items placed
             </div>
           ) : (
