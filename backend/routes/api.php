@@ -22,6 +22,7 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 
 // Password Reset Routes (Public)
 Route::post('/auth/forgot-password', [App\Http\Controllers\Api\PasswordResetController::class, 'requestOTP']);
+Route::post('/auth/find-accounts', [App\Http\Controllers\Api\PasswordResetController::class, 'findAccounts']);
 Route::post('/auth/verify-otp', [App\Http\Controllers\Api\PasswordResetController::class, 'verifyOTP']);
 Route::post('/auth/reset-password', [App\Http\Controllers\Api\PasswordResetController::class, 'resetPassword']);
 
