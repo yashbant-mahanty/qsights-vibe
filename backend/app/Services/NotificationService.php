@@ -408,9 +408,13 @@ class NotificationService
         // Send email to support@qsights.com
         $this->emailService->sendDemoRequestToSupport($demoRequest);
 
+        // Send confirmation email to the user who submitted the demo request
+        $this->emailService->sendDemoRequestConfirmation($demoRequest);
+
         Log::info('Demo request notifications sent', [
             'demo_request_id' => $demoRequest->id,
-            'recipients' => $superAdmins->count() + 1, // +1 for support email
+            'super_admins_notified' => $superAdmins->count(),
+            'user_confirmation_sent' => true,
         ]);
     }
 
@@ -442,9 +446,13 @@ class NotificationService
         // Send emails to support@qsights.com and info@qsights.com
         $this->emailService->sendContactSalesToSupport($contactSales);
 
+        // Send confirmation email to the user who submitted the contact sales request
+        $this->emailService->sendContactSalesConfirmation($contactSales);
+
         Log::info('Contact sales notifications sent', [
             'contact_sales_id' => $contactSales->id,
-            'recipients' => $superAdmins->count() + 2, // +2 for support and info emails
+            'super_admins_notified' => $superAdmins->count(),
+            'user_confirmation_sent' => true,
         ]);
     }
 
