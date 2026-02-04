@@ -8,12 +8,21 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use App\Services\EmailService;
+use App\Services\NotificationLogService;
 use Illuminate\Support\Str;
 use App\Models\User;
 use Carbon\Carbon;
 
 class PasswordResetController extends Controller
 {
+    protected $emailService;
+
+    public function __construct()
+    {
+        // Initialize EmailService with NotificationLogService for proper SendGrid integration
+        $this->emailService = new EmailService(new NotificationLogService());
+    }
+
     /**
      * Request OTP for password reset
      */
@@ -218,15 +227,24 @@ class PasswordResetController extends Controller
     {
         $htmlContent = $this->getOTPEmailTemplate($otp);
 
-        $emailService = new EmailService();
-        $emailService->send(
-            $email,
-            'Password Reset OTP - QSights',
-            $htmlContent,
-            [
-                'event' => 'password_reset_otp',
-            ]
-        );
+        try {
+            $this->emailService->send(
+                $email,
+                'Password Reset OTP - QSights',
+                $htmlContent,
+                [
+                    'event' => 'password_reset_otp',
+                ]
+            );
+            
+            \Log::info('OTP email sent successfully', ['email' => $email]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to send OTP email', [
+                'email' => $email,
+                'error' => $e->getMessage()
+            ]);
+            // Don't throw the error to prevent email enumeration
+        }
     }
 
     /**

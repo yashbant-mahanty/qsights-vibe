@@ -241,10 +241,10 @@ export default function RequestDemoPage() {
           {/* Right Column - Form */}
           <div>
             <Card className="shadow-2xl border-2 border-gray-200">
-              <div className="bg-gradient-to-br bg-qsights-dark p-6 text-white">
-                <Calendar className="w-8 h-8 mb-3" />
-                <h2 className="text-2xl font-bold mb-2">Schedule Your Demo</h2>
-                <p className="text-blue-100 text-sm">
+              <div className="bg-qsights-dark p-6">
+                <Calendar className="w-8 h-8 mb-3 text-white" />
+                <h2 className="text-2xl font-bold mb-2 text-white">Schedule Your Demo</h2>
+                <p className="text-blue-200 text-sm">
                   Fill out the form below and we&apos;ll be in touch shortly
                 </p>
               </div>

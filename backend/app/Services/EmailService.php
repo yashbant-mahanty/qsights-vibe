@@ -833,4 +833,100 @@ HTML;
         
         return $results;
     }
+
+    /**
+     * Send confirmation email to user who submitted demo request
+     */
+    public function sendDemoRequestConfirmation($demoRequest)
+    {
+        $subject = "Thank You for Your Demo Request - QSights";
+        
+        $message = "
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+            <h2 style='color: #4F46E5;'>Thank You for Your Interest in QSights!</h2>
+            
+            <p>Dear {$demoRequest->name},</p>
+            
+            <p>Thank you for requesting a personalized demo of QSights. We've received your request and our team will reach out to you shortly to schedule a convenient time.</p>
+            
+            <div style='background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4F46E5;'>
+                <h3 style='margin-top: 0; color: #4F46E5;'>What to Expect</h3>
+                <ul style='color: #333; line-height: 1.8;'>
+                    <li>A 30-minute personalized walkthrough</li>
+                    <li>Live Q&A with our product experts</li>
+                    <li>Custom use case demonstrations</li>
+                    <li>Pricing and plan recommendations</li>
+                </ul>
+            </div>
+            
+            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                <p style='margin: 0;'><strong>Your Request Details:</strong></p>
+                <p style='margin: 5px 0;'>Name: {$demoRequest->name}</p>
+                <p style='margin: 5px 0;'>Email: {$demoRequest->email}</p>
+                <p style='margin: 5px 0;'>Location: {$demoRequest->city}, {$demoRequest->country}</p>
+            </div>
+            
+            <p>If you have any immediate questions, feel free to reach out to us at <a href='mailto:support@qsights.com'>support@qsights.com</a>.</p>
+            
+            <p>We look forward to speaking with you soon!</p>
+            
+            <p>Best regards,<br>
+            <strong>The QSights Team</strong></p>
+            
+            <hr style='border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;'>
+            
+            <p style='color: #666; font-size: 12px;'>
+                This is an automated confirmation email. Please do not reply directly to this message.
+            </p>
+        </div>
+        ";
+        
+        return $this->send($demoRequest->email, $subject, $message, [
+            'event' => 'demo_request_confirmation',
+            'demo_request_id' => $demoRequest->id,
+        ]);
+    }
+
+    /**
+     * Send confirmation email to user who submitted contact sales request
+     */
+    public function sendContactSalesConfirmation($contactSales)
+    {
+        $subject = "Thank You for Contacting QSights Sales";
+        
+        $message = "
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+            <h2 style='color: #4F46E5;'>Thank You for Reaching Out!</h2>
+            
+            <p>Dear {$contactSales->first_name},</p>
+            
+            <p>Thank you for your interest in QSights. We've received your inquiry and a member of our sales team will get back to you within 24 hours.</p>
+            
+            <div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                <p style='margin: 0 0 10px;'><strong>Your Inquiry Details:</strong></p>
+                <p style='margin: 5px 0;'>Name: {$contactSales->first_name} {$contactSales->last_name}</p>
+                <p style='margin: 5px 0;'>Email: {$contactSales->email}</p>
+                <p style='margin: 5px 0;'>Company: " . ($contactSales->company ?: 'Not provided') . "</p>
+            </div>
+            
+            <p>In the meantime, feel free to explore our resources or reach out to us at <a href='mailto:sales@qsights.com'>sales@qsights.com</a> if you have any urgent questions.</p>
+            
+            <p>We appreciate your interest and look forward to connecting with you!</p>
+            
+            <p>Best regards,<br>
+            <strong>The QSights Sales Team</strong></p>
+            
+            <hr style='border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;'>
+            
+            <p style='color: #666; font-size: 12px;'>
+                This is an automated confirmation email. Please do not reply directly to this message.
+            </p>
+        </div>
+        ";
+        
+        return $this->send($contactSales->email, $subject, $message, [
+            'event' => 'contact_sales_confirmation',
+            'contact_sales_id' => $contactSales->id,
+        ]);
+    }
 }
