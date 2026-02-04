@@ -511,6 +511,9 @@ export default function CreateActivityPage() {
         console.log('[CREATE ACTIVITY] selectedQuestionnaires:', selectedQuestionnaires);
         console.log('[CREATE ACTIVITY] approvalPayload.questionnaire_id:', approvalPayload.questionnaire_id);
         console.log('[CREATE ACTIVITY] Full approval payload:', approvalPayload);
+        console.log('[CREATE ACTIVITY] enable_generated_links value:', approvalPayload.enable_generated_links, 'Type:', typeof approvalPayload.enable_generated_links);
+        console.log('[CREATE ACTIVITY] contact_us_enabled value:', approvalPayload.contact_us_enabled, 'Type:', typeof approvalPayload.contact_us_enabled);
+        console.log('[CREATE ACTIVITY] allow_guests value:', approvalPayload.allow_guests, 'Type:', typeof approvalPayload.allow_guests);
 
         await activityApprovalsApi.create(approvalPayload);
         toast({ 
@@ -533,6 +536,7 @@ export default function CreateActivityPage() {
           questionnaire_id: selectedQuestionnaires[0] || undefined,
           allow_guests: activityData.allowGuests,
           contact_us_enabled: activityData.contactUsEnabled,
+          enable_generated_links: activityData.enableGeneratedLinks,
           is_multilingual: activityData.isMultilingual,
           languages: activityData.selectedLanguages,
           registration_form_fields: normalizedRegistrationFields,

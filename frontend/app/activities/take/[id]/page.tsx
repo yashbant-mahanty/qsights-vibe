@@ -23,6 +23,7 @@ import {
   MessageCircle,
   Bell,
   BellRing,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { filterQuestionsByLogic } from "@/utils/conditionalLogicEvaluator";
@@ -2656,6 +2657,54 @@ export default function TakeActivityPage() {
           </div>
         );
 
+      case "information":
+        // Information block - display only, no response needed
+        // Check for hyperlinks in question directly or in settings
+        const infoHyperlinks = question.hyperlinks || question.settings?.hyperlinks || [];
+        const hyperlinksPosition = question.hyperlinksPosition || question.settings?.hyperlinksPosition || 'bottom';
+        // Check for formatted content in question directly or in settings
+        const formattedContent = question.formattedQuestion || question.settings?.formattedContent || '';
+        
+        const hyperlinkButtons = infoHyperlinks.length > 0 && (
+          <div className="flex flex-wrap gap-3">
+            {infoHyperlinks.map((link: any, idx: number) => (
+              link.text && link.url ? (
+                <a
+                  key={idx}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 underline decoration-blue-400 hover:decoration-blue-600 transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  {link.text}
+                </a>
+              ) : null
+            ))}
+          </div>
+        );
+        
+        return (
+          <div className="py-2">
+            <div className="space-y-3">
+              {/* Hyperlinks at top */}
+              {hyperlinksPosition === 'top' && hyperlinkButtons}
+              
+              {formattedContent ? (
+                <div 
+                  className="text-sm text-gray-800 prose prose-sm max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a:hover]:text-blue-800"
+                  dangerouslySetInnerHTML={{ __html: formattedContent }}
+                />
+              ) : question.description ? (
+                <p className="text-sm text-gray-800">{question.description}</p>
+              ) : null}
+              
+              {/* Hyperlinks at bottom */}
+              {hyperlinksPosition === 'bottom' && hyperlinkButtons}
+            </div>
+          </div>
+        );
+
       default:
         return (
           <Input
@@ -4267,41 +4316,46 @@ export default function TakeActivityPage() {
                               </p>
                             </div>
                           )}
-                          <div className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
-                              {currentQuestionIndex + 1}
-                            </span>
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center">
-                                  <p 
-                                    className="text-base font-medium text-gray-900"
-                                    dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                  />
-                                  {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                          {question.type === 'information' ? (
+                            // Information block - render only the formatted content without number/title/description
+                            <div className="w-full">{renderQuestion(question)}</div>
+                          ) : (
+                            <div className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                {currentQuestionIndex + 1}
+                              </span>
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center">
+                                    <p 
+                                      className="text-base font-medium text-gray-900"
+                                      dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                    />
+                                    {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-400 hidden">{question.type}</span>
+                                    <PerQuestionLanguageSwitcher
+                                      availableLanguages={questionnaire?.languages || activity?.languages || []}
+                                      currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
+                                      onLanguageChange={(lang) => {
+                                        setPerQuestionLanguages(prev => ({
+                                          ...prev,
+                                          [question.id]: lang
+                                        }));
+                                      }}
+                                      questionId={question.id}
+                                      isEnabled={enablePerQuestionLanguageSwitch}
+                                    />
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-400 hidden">{question.type}</span>
-                                  <PerQuestionLanguageSwitcher
-                                    availableLanguages={questionnaire?.languages || activity?.languages || []}
-                                    currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
-                                    onLanguageChange={(lang) => {
-                                      setPerQuestionLanguages(prev => ({
-                                        ...prev,
-                                        [question.id]: lang
-                                      }));
-                                    }}
-                                    questionId={question.id}
-                                    isEnabled={enablePerQuestionLanguageSwitch}
-                                  />
-                                </div>
+                                {question.description && (
+                                  <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                                )}
+                                <div className="mt-4">{renderQuestion(question)}</div>
                               </div>
-                              {question.description && (
-                                <p className="text-sm text-gray-500 mt-1">{question.description}</p>
-                              )}
-                              <div className="mt-4">{renderQuestion(question)}</div>
                             </div>
-                          </div>
+                          )}
                           <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                             <p className="text-sm text-gray-500">
                               Question {currentQuestionIndex + 1} of {currentSectionFiltered.length}
@@ -4321,42 +4375,47 @@ export default function TakeActivityPage() {
                   currentSectionFiltered && currentSectionFiltered.length > 0 ? (
                     <div className="space-y-6">
                       {currentSectionFiltered.map((question: any, qIndex: number) => (
-                        <div key={question.id || qIndex} className="space-y-3 pb-6 border-b border-gray-200 last:border-b-0">
-                          <div className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
-                              {qIndex + 1}
-                            </span>
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center">
-                                  <p 
-                                    className="text-base font-medium text-gray-900"
-                                    dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                  />
-                                  {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                        <div key={question.id || qIndex} className={`space-y-3 pb-6 border-b border-gray-200 last:border-b-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''}`}>
+                          {question.type === 'information' ? (
+                            // Information block - render only the formatted content without number/title/description
+                            <div className="w-full">{renderQuestion(question)}</div>
+                          ) : (
+                            <div className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                {qIndex + 1}
+                              </span>
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center">
+                                    <p 
+                                      className="text-base font-medium text-gray-900"
+                                      dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                    />
+                                    {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-400 hidden">{question.type}</span>
+                                    <PerQuestionLanguageSwitcher
+                                      availableLanguages={questionnaire?.languages || activity?.languages || []}
+                                      currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
+                                      onLanguageChange={(lang) => {
+                                        setPerQuestionLanguages(prev => ({
+                                          ...prev,
+                                          [question.id]: lang
+                                        }));
+                                      }}
+                                      questionId={question.id}
+                                      isEnabled={enablePerQuestionLanguageSwitch}
+                                    />
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-400 hidden">{question.type}</span>
-                                  <PerQuestionLanguageSwitcher
-                                    availableLanguages={questionnaire?.languages || activity?.languages || []}
-                                    currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
-                                    onLanguageChange={(lang) => {
-                                      setPerQuestionLanguages(prev => ({
-                                        ...prev,
-                                        [question.id]: lang
-                                      }));
-                                    }}
-                                    questionId={question.id}
-                                    isEnabled={enablePerQuestionLanguageSwitch}
-                                  />
-                                </div>
+                                {question.description && (
+                                  <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                                )}
+                                <div className="mt-4">{renderQuestion(question)}</div>
                               </div>
-                              {question.description && (
-                                <p className="text-sm text-gray-500 mt-1">{question.description}</p>
-                              )}
-                              <div className="mt-4">{renderQuestion(question)}</div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -4390,42 +4449,47 @@ export default function TakeActivityPage() {
                           {/* Section Questions */}
                           {section.questions && section.questions.length > 0 ? (
                             section.questions.map((question: any, qIdx: number) => (
-                              <div key={question.id || qIdx} className="space-y-3 pb-6 border-b border-gray-200 last:border-0">
-                                <div className="flex items-start gap-3">
-                                  <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
-                                    {qIdx + 1}
-                                  </span>
-                                  <div className="flex-1">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center">
-                                        <p 
-                                          className="text-base font-medium text-gray-900"
-                                          dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                        />
-                                        {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                              <div key={question.id || qIdx} className={`space-y-3 pb-6 border-b border-gray-200 last:border-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''}`}>
+                                {question.type === 'information' ? (
+                                  // Information block - render only the formatted content without number/title/description
+                                  <div className="w-full">{renderQuestion(question)}</div>
+                                ) : (
+                                  <div className="flex items-start gap-3">
+                                    <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                      {qIdx + 1}
+                                    </span>
+                                    <div className="flex-1">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center">
+                                          <p 
+                                            className="text-base font-medium text-gray-900"
+                                            dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                          />
+                                          {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs text-gray-400 hidden">{question.type}</span>
+                                          <PerQuestionLanguageSwitcher
+                                            availableLanguages={questionnaire?.languages || activity?.languages || []}
+                                            currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
+                                            onLanguageChange={(lang) => {
+                                              setPerQuestionLanguages(prev => ({
+                                                ...prev,
+                                                [question.id]: lang
+                                              }));
+                                            }}
+                                            questionId={question.id}
+                                            isEnabled={enablePerQuestionLanguageSwitch}
+                                          />
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs text-gray-400 hidden">{question.type}</span>
-                                        <PerQuestionLanguageSwitcher
-                                          availableLanguages={questionnaire?.languages || activity?.languages || []}
-                                          currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
-                                          onLanguageChange={(lang) => {
-                                            setPerQuestionLanguages(prev => ({
-                                              ...prev,
-                                              [question.id]: lang
-                                            }));
-                                          }}
-                                          questionId={question.id}
-                                          isEnabled={enablePerQuestionLanguageSwitch}
-                                        />
-                                      </div>
+                                      {question.description && (
+                                        <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                                      )}
+                                      <div className="mt-4">{renderQuestion(question)}</div>
                                     </div>
-                                    {question.description && (
-                                      <p className="text-sm text-gray-500 mt-1">{question.description}</p>
-                                    )}
-                                    <div className="mt-4">{renderQuestion(question)}</div>
                                   </div>
-                                </div>
+                                )}
                               </div>
                             ))
                           ) : (

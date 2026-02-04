@@ -45,6 +45,7 @@ import {
   Heart,
   Image as ImageIcon,
   MoveVertical,
+  Link2,
 } from "lucide-react";
 import {
   SliderScale,
@@ -882,10 +883,16 @@ function QuestionnaireBuilderPageContent() {
           description: section.description,
           order: sections.indexOf(section) + 1,
           questions: section.questions.map((question: any) => {
+            // For information blocks, use a short title and store full content in settings
+            const isInformationBlock = question.type === 'information';
+            const questionTitle = isInformationBlock 
+              ? 'Information Block' 
+              : (question.formattedQuestion || question.question || '').substring(0, 255);
+            
             const questionData: any = {
               type: typeMapping[question.type] || question.type,
-              title: question.formattedQuestion || question.question,
-              description: null,
+              title: questionTitle,
+              description: isInformationBlock ? (question.description || '').substring(0, 500) : null,
               is_required: question.required || false,
               options: question.options || null,
               settings: {
@@ -903,6 +910,12 @@ function QuestionnaireBuilderPageContent() {
                 ...(question.conditionalLogic ? { conditionalLogic: question.conditionalLogic } : {}),
                 // Save question image URL
                 ...(question.imageUrl ? { imageUrl: question.imageUrl } : {}),
+                // For information blocks, store the full HTML content and hyperlinks in settings
+                ...(isInformationBlock ? { 
+                  formattedContent: question.formattedQuestion || question.description || '',
+                  hyperlinks: question.hyperlinks || [],
+                  hyperlinksPosition: question.hyperlinksPosition || 'bottom'
+                } : {}),
               },
               order: section.questions.indexOf(question) + 1,
             };
@@ -1799,11 +1812,13 @@ function QuestionnaireBuilderPageContent() {
           </div>
         );
       case "information":
+        const infoHyperlinks = question.hyperlinks || [];
+        const hyperlinksPosition = question.hyperlinksPosition || 'bottom';
         return (
           <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
             <div className="flex items-start gap-3">
               <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 space-y-3">
                 <RichTextEditor
                   value={question.formattedQuestion || question.description || ""}
                   onChange={(value) => {
@@ -1826,9 +1841,152 @@ function QuestionnaireBuilderPageContent() {
                       )
                     );
                   }}
-                  placeholder="Enter information text here... This can be instructions, explanations, or important notes. Use the toolbar for formatting."
+                  placeholder="Enter information text here... You can add links using the link button in toolbar, or add separate hyperlink buttons below."
                   minHeight="150px"
                 />
+                
+                {/* Hyperlinks Section */}
+                <div className="border-t border-blue-200 pt-3 mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-blue-700 flex items-center gap-1">
+                      <Link2 className="w-3 h-3" />
+                      Hyperlink Buttons
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {/* Position selector */}
+                      <select
+                        value={hyperlinksPosition}
+                        onChange={(e) => {
+                          setSections(prevSections =>
+                            prevSections.map(section =>
+                              section.id === sectionId
+                                ? {
+                                    ...section,
+                                    questions: section.questions.map((q: any) =>
+                                      q.id === question.id
+                                        ? { ...q, hyperlinksPosition: e.target.value }
+                                        : q
+                                    )
+                                  }
+                                : section
+                            )
+                          );
+                        }}
+                        className="text-xs border border-blue-200 rounded px-1 py-0.5 bg-white"
+                      >
+                        <option value="top">Show at Top</option>
+                        <option value="bottom">Show at Bottom</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newHyperlinks = [...infoHyperlinks, { id: Date.now(), text: '', url: '' }];
+                          setSections(prevSections =>
+                            prevSections.map(section =>
+                              section.id === sectionId
+                                ? {
+                                    ...section,
+                                    questions: section.questions.map((q: any) =>
+                                      q.id === question.id
+                                        ? { ...q, hyperlinks: newHyperlinks }
+                                        : q
+                                    )
+                                  }
+                                : section
+                            )
+                          );
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add Link
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {infoHyperlinks.length === 0 ? (
+                    <p className="text-xs text-blue-500 italic">No hyperlink buttons. Use the link button in the toolbar above to add inline links, or click "Add Link" to add button-style links.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {infoHyperlinks.map((link: any, linkIdx: number) => (
+                        <div key={link.id || linkIdx} className="flex items-center gap-2 bg-white/50 p-2 rounded-lg">
+                          <input
+                            type="text"
+                            placeholder="Link text (e.g., Privacy Policy)"
+                            defaultValue={link.text}
+                            onBlur={(e) => {
+                              const newHyperlinks = [...infoHyperlinks];
+                              newHyperlinks[linkIdx] = { ...link, text: e.target.value };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, hyperlinks: newHyperlinks }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="flex-1 px-2 py-1 text-xs border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          />
+                          <input
+                            type="url"
+                            placeholder="URL (https://...)"
+                            defaultValue={link.url}
+                            onBlur={(e) => {
+                              const newHyperlinks = [...infoHyperlinks];
+                              newHyperlinks[linkIdx] = { ...link, url: e.target.value };
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, hyperlinks: newHyperlinks }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="flex-1 px-2 py-1 text-xs border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newHyperlinks = infoHyperlinks.filter((_: any, i: number) => i !== linkIdx);
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, hyperlinks: newHyperlinks }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
                 <p className="text-xs text-blue-600">
                   💡 This is an information block. It will be displayed to participants but won't require a response.
                 </p>
@@ -4316,11 +4474,32 @@ function QuestionnaireBuilderPageContent() {
                             )}
                             {question.type === "information" && (
                               <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-                                {question.isRichText && question.formattedQuestion ? (
-                                  <div dangerouslySetInnerHTML={{ __html: question.formattedQuestion }} className="text-sm text-blue-900" />
-                                ) : (
-                                  <p className="text-sm text-blue-900">{question.description || question.question}</p>
-                                )}
+                                <div className="space-y-2">
+                                  {question.isRichText && question.formattedQuestion ? (
+                                    <div dangerouslySetInnerHTML={{ __html: question.formattedQuestion }} className="text-sm text-blue-900" />
+                                  ) : (
+                                    <p className="text-sm text-blue-900">{question.description || question.question}</p>
+                                  )}
+                                  {/* Render hyperlinks in preview */}
+                                  {question.hyperlinks && question.hyperlinks.length > 0 && (
+                                    <div className="flex flex-wrap gap-3 pt-2">
+                                      {question.hyperlinks.map((link: any, idx: number) => (
+                                        link.text && link.url ? (
+                                          <a
+                                            key={idx}
+                                            href={link.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 underline decoration-blue-400 hover:decoration-blue-600 transition-colors"
+                                          >
+                                            <Link2 className="w-3 h-3" />
+                                            {link.text}
+                                          </a>
+                                        ) : null
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
                             {question.type !== "information" && renderQuestionForParticipant(question)}
