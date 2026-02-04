@@ -154,6 +154,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::patch('/programs/{id}/users/{userId}/services', [ProgramController::class, 'updateProgramUserServices']);
     });
     
+    // Get available services for a role (for filtering modal)
+    Route::get('/roles/{roleName}/available-services', [ProgramController::class, 'getRoleAvailableServices']);
+    
     // Program Roles Routes (Super Admin and Program Admin only)
     Route::middleware(['role:super-admin,program-admin'])->group(function () {
         Route::get('/programs/{programId}/roles', [ProgramRoleController::class, 'index']);

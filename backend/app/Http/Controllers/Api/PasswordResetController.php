@@ -252,7 +252,7 @@ class PasswordResetController extends Controller
             'success' => true,
             'message' => 'OTP verified successfully',
             'reset_token' => $resetToken,
-            'login_email' => $lookupEmail, // Return the actual login email for password reset
+            'login_email' => $email, // Return the actual login email for password reset
         ]);
     }
 

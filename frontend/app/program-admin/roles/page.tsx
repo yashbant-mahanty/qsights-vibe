@@ -13,6 +13,7 @@ import { Plus, Pencil, Trash2, Eye, EyeOff, RefreshCw, Filter, Users, UserCog, N
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -35,18 +36,123 @@ import HierarchyMappingModal from "@/components/hierarchy-mapping-modal";
 
 // Predefined list of services
 const AVAILABLE_SERVICES = [
+  // Dashboard & Overview
   { id: "dashboard", name: "Dashboard", category: "Overview" },
+  
+  // Organizations
   { id: "list_organization", name: "List Organizations", category: "Organizations" },
   { id: "add_organization", name: "Add Organization", category: "Organizations" },
   { id: "edit_organization", name: "Edit Organization", category: "Organizations" },
+  { id: "disable_organization", name: "Disable Organization", category: "Organizations" },
+  
+  // Programs
   { id: "list_programs", name: "List Programs", category: "Programs" },
   { id: "add_programs", name: "Add Programs", category: "Programs" },
   { id: "edit_programs", name: "Edit Programs", category: "Programs" },
-  { id: "list_activity", name: "List Events", category: "Events" },
-  { id: "activity_add", name: "Add Event", category: "Events" },
+  { id: "disable_programs", name: "Disable Programs", category: "Programs" },
+  
+  // Group Management
+  { id: "list_group_head", name: "List Group Head", category: "Group Management" },
+  { id: "add_group_head", name: "Add Group Head", category: "Group Management" },
+  { id: "edit_group_head", name: "Edit Group Head", category: "Group Management" },
+  { id: "disable_group_head", name: "Disable Group Head", category: "Group Management" },
+  { id: "add_group", name: "Add Group", category: "Group Management" },
+  { id: "edit_group", name: "Edit Group", category: "Group Management" },
+  { id: "group_map", name: "Group Map", category: "Group Management" },
+  { id: "group_list", name: "Group List", category: "Group Management" },
+  { id: "group_status", name: "Group Status", category: "Group Management" },
+  { id: "bulk_upload", name: "Bulk Upload", category: "Group Management" },
+  
+  // Participants
+  { id: "add_program_participants", name: "Add Program Participants", category: "Participants" },
   { id: "add_participants", name: "Add Participants", category: "Participants" },
+  { id: "edit_participants", name: "Edit Participants", category: "Participants" },
+  { id: "disable_participants", name: "Disable Participants", category: "Participants" },
+  { id: "list_program_participants", name: "List Program Participants", category: "Participants" },
   { id: "list_participants", name: "List Participants", category: "Participants" },
-  { id: "view_report", name: "View Reports", category: "Reports" },
+  
+  // Activities/Events
+  { id: "list_activity", name: "List Activity", category: "Activities" },
+  { id: "activity_status", name: "Activity Status", category: "Activities" },
+  { id: "delete_activity_files", name: "Delete Activity Files", category: "Activities" },
+  { id: "activity_files_upload", name: "Activity Files Upload", category: "Activities" },
+  { id: "generate_activity_link", name: "Generate Activity Link", category: "Activities" },
+  { id: "activity_add", name: "Activity Add", category: "Activities" },
+  { id: "activity_files_listing", name: "Activity Files Listing", category: "Activities" },
+  { id: "activity_view_anonymous", name: "Activity View Anonymous", category: "Activities" },
+  
+  // Questionnaires
+  { id: "category_add", name: "Category Add", category: "Questionnaires" },
+  { id: "category_edit", name: "Category Edit", category: "Questionnaires" },
+  { id: "category_list", name: "Category List", category: "Questionnaires" },
+  { id: "category_map", name: "Category Map", category: "Questionnaires" },
+  { id: "category_status", name: "Category Status", category: "Questionnaires" },
+  { id: "question_add", name: "Question Add", category: "Questionnaires" },
+  { id: "question_edit", name: "Question Edit", category: "Questionnaires" },
+  { id: "question_list", name: "Question List", category: "Questionnaires" },
+  { id: "question_bank_list", name: "Question Bank List", category: "Questionnaires" },
+  { id: "question_bank_add", name: "Question Bank Add", category: "Questionnaires" },
+  { id: "question_bank_edit", name: "Question Bank Edit", category: "Questionnaires" },
+  { id: "question_bank_status", name: "Question Bank Status", category: "Questionnaires" },
+  { id: "question_header_list", name: "Question Header List", category: "Questionnaires" },
+  { id: "question_header_add", name: "Question Header Add", category: "Questionnaires" },
+  { id: "question_header_edit", name: "Question Header Edit", category: "Questionnaires" },
+  { id: "question_header_tables", name: "Question Header Tables", category: "Questionnaires" },
+  
+  // Communications
+  { id: "sms_edit", name: "SMS Edit", category: "Communications" },
+  { id: "sms_status", name: "SMS Status", category: "Communications" },
+  { id: "send_sms", name: "Send SMS", category: "Communications" },
+  { id: "email_status", name: "Email Status", category: "Communications" },
+  { id: "send_email", name: "Send Email", category: "Communications" },
+  { id: "list_email", name: "List Email", category: "Communications" },
+  
+  // Reports
+  { id: "report_download", name: "Report Download", category: "Reports" },
+  { id: "edit_dynamic_report", name: "Edit Dynamic Report", category: "Reports" },
+  { id: "dynamic_report_status", name: "Dynamic Report Status", category: "Reports" },
+  { id: "dynamic_report_list", name: "Dynamic Report List", category: "Reports" },
+  { id: "generate_dynamic_report", name: "Generate Dynamic Report", category: "Reports" },
+  { id: "filter_report", name: "Filter Report", category: "Reports" },
+  { id: "view_report", name: "View Report", category: "Reports" },
+  
+  // Evaluation
+  { id: "list_evaluation", name: "List Evaluation", category: "Evaluation" },
+  { id: "add_evaluation", name: "Add Evaluation", category: "Evaluation" },
+  { id: "edit_evaluation", name: "Edit Evaluation", category: "Evaluation" },
+  { id: "disable_evaluation", name: "Disable Evaluation", category: "Evaluation" },
+  { id: "view_evaluation_results", name: "View Evaluation Results", category: "Evaluation" },
+  
+  // Settings
+  { id: "theme_customization", name: "Theme Customization", category: "Settings" },
+  { id: "page_edit", name: "Page Edit", category: "Settings" },
+  { id: "page_list", name: "Page List", category: "Settings" },
+  { id: "page_add", name: "Page Add", category: "Settings" },
+  { id: "settings", name: "Settings", category: "Settings" },
+  
+  // Users & Roles
+  { id: "list_user", name: "List User", category: "Users" },
+  { id: "add_user", name: "Add User", category: "Users" },
+  { id: "edit_user", name: "Edit User", category: "Users" },
+  { id: "map_user", name: "Map User", category: "Users" },
+  { id: "edit_roles", name: "Edit Roles", category: "Roles" },
+  { id: "list_roles", name: "List Roles", category: "Roles" },
+  { id: "add_roles", name: "Add Roles", category: "Roles" },
+  
+  // Permissions & Authentication
+  { id: "edit_read", name: "Edit Read", category: "Permissions" },
+  { id: "login", name: "Login", category: "Authentication" },
+  
+  // Special Access
+  { id: "is_group_head", name: "Is Group Head", category: "Special Access" },
+  { id: "is_organization", name: "Is Organization", category: "Special Access" },
+  { id: "is_manager", name: "Is Manager", category: "Special Access" },
+  { id: "is_moderator", name: "Is Moderator", category: "Special Access" },
+  { id: "is_support_admin", name: "Is Support Admin", category: "Special Access" },
+  { id: "is_admin", name: "Is Admin", category: "Special Access" },
+  
+  // User Profile
+  { id: "profile", name: "Profile", category: "User" },
 ];
 
 interface Role {
@@ -57,6 +163,8 @@ interface Role {
   program_id: string;
   created_at: string;
   is_default_user?: boolean; // true if from /users endpoint (integer ID), false if from /roles endpoint (UUID)
+  default_services?: string[]; // Services for default users (from users table)
+  services?: string[]; // Services for custom roles (from program_roles table)
   program?: {
     id: string;
     name: string;
@@ -89,6 +197,9 @@ function RolesPage() {
   const [editPassword, setEditPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [editSelectedServices, setEditSelectedServices] = useState<string[]>([]);
+  const [availableServicesForRole, setAvailableServicesForRole] = useState<string[]>([]);
+  const [isSystemRole, setIsSystemRole] = useState(false);
+  const [allowCustomServices, setAllowCustomServices] = useState(false);
   const [programId, setProgramId] = useState<string>("");
   const [programs, setPrograms] = useState<ProgramOption[]>([]);
   const [selectedProgramFilter, setSelectedProgramFilter] = useState<string>("all");
@@ -387,6 +498,7 @@ function RolesPage() {
                 program_id: prog.id,
                 created_at: user.created_at,
                 is_default_user: true,
+                default_services: user.default_services || [], // Include default_services from database
                 program: { id: prog.id, name: prog.name }
               }));
               allProgramRoles.push(...mappedUsers);
@@ -405,6 +517,7 @@ function RolesPage() {
                 program_id: prog.id,
                 created_at: role.created_at,
                 is_default_user: false,
+                services: role.services || [], // Include services from database for custom roles
                 program: { id: prog.id, name: prog.name }
               }));
               allProgramRoles.push(...mappedRoles);
@@ -530,6 +643,7 @@ function RolesPage() {
                 program_id: prog.id,
                 created_at: user.created_at,
                 is_default_user: true, // Flag: this is from /users endpoint with integer ID
+                default_services: user.default_services || user.services, // Include services
                 program: { id: prog.id, name: prog.name }
               }));
               console.log(`Sample mapped user:`, mappedUsers[0]);
@@ -550,6 +664,7 @@ function RolesPage() {
                 program_id: prog.id,
                 created_at: role.created_at,
                 is_default_user: false, // Flag: this is from /roles endpoint with UUID
+                services: role.services, // Include services
                 program: { id: prog.id, name: prog.name }
               }));
               console.log(`Sample mapped role:`, mappedRoles[0]);
@@ -660,6 +775,40 @@ function RolesPage() {
     }
   };
 
+  const fetchAvailableServices = async (roleName: string) => {
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch(`${API_URL}/roles/${roleName}/available-services`, {
+        headers
+      });
+      
+      const data = await response.json();
+      console.log('🔍 Available services response:', data);
+      
+      if (data.success) {
+        setAvailableServicesForRole(data.available_services || []);
+        setIsSystemRole(data.is_system_role || false);
+        setAllowCustomServices(data.allow_custom_services || false);
+        
+        console.log('✅ Available services set:', data.available_services?.length || 0, 'services');
+        console.log('✅ Is system role:', data.is_system_role);
+        console.log('✅ Allow custom services:', data.allow_custom_services);
+      } else {
+        // If role not found in definitions, allow all services (backward compatibility)
+        console.log('⚠️ Role definition not found, allowing all services');
+        setAvailableServicesForRole([]);
+        setIsSystemRole(false);
+        setAllowCustomServices(true);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching available services:', error);
+      // On error, allow all services (backward compatibility)
+      setAvailableServicesForRole([]);
+      setIsSystemRole(false);
+      setAllowCustomServices(true);
+    }
+  };
+
   const handleEdit = async (role: Role) => {
     console.log('=== handleEdit called ===');
     console.log('Role object:', role);
@@ -672,39 +821,23 @@ function RolesPage() {
     setEditEmail(role.email);
     setEditPassword(""); // Don't show actual password
     setShowPassword(false);
-    setEditSelectedServices([]); // Reset services
     
-    // Fetch role details including services
-    try {
-      const headers = getAuthHeaders();
-      let url: string;
-      if (activeTab === 'system-roles') {
-        url = `${API_URL}/system-roles/${role.id}`;
-      } else if (role.is_default_user) {
-        // Default program users: use /users endpoint
-        url = `${API_URL}/programs/${role.program_id}/users/${role.id}`;
-      } else {
-        // Custom roles: use /roles endpoint
-        url = `${API_URL}/programs/${role.program_id}/roles/${role.id}`;
-      }
-      console.log('Fetching role from URL:', url);
-      
-      const response = await fetch(url, {
-        headers,
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        const roleData = data.role || data;
-        // Set services if available
-        if (roleData.services && Array.isArray(roleData.services)) {
-          setEditSelectedServices(roleData.services);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching role details:', error);
+    // Set services from the role data directly (no need to fetch)
+    // For default users: use default_services field
+    // For custom roles: use services field
+    const servicesField = (role as any).default_services || (role as any).services;
+    console.log('📋 Services field found:', servicesField);
+    console.log('📋 Services count:', Array.isArray(servicesField) ? servicesField.length : 0);
+    console.log('📋 First 10 services:', Array.isArray(servicesField) ? servicesField.slice(0, 10) : []);
+    
+    if (servicesField && Array.isArray(servicesField)) {
+      setEditSelectedServices(servicesField);
+    } else {
+      setEditSelectedServices([]);
     }
+    
+    // Fetch available services for this role to filter the checkboxes
+    await fetchAvailableServices(role.role_name);
     
     setShowEditModal(true);
   };
@@ -717,11 +850,37 @@ function RolesPage() {
     console.log('Editing role ID:', editingRole.id, 'Type:', typeof editingRole.id);
     console.log('Program ID:', editingRole.program_id, 'Type:', typeof editingRole.program_id);
     console.log('Is default user:', editingRole.is_default_user);
+    console.log('💾 Services being sent:', editSelectedServices);
+    console.log('💾 Services count:', editSelectedServices.length);
 
     try {
       setLoading(true);
       const headers = getAuthHeaders();
 
+      // For default users, update services separately using dedicated endpoint
+      if (editingRole.is_default_user && editSelectedServices.length > 0) {
+        const servicesUrl = `${API_URL}/programs/${editingRole.program_id}/users/${editingRole.id}/services`;
+        console.log('Updating services at URL:', servicesUrl);
+        console.log('Request body:', JSON.stringify({ services: editSelectedServices }, null, 2));
+        
+        const servicesResponse = await fetch(servicesUrl, {
+          method: 'PUT',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ services: editSelectedServices }),
+        });
+
+        if (!servicesResponse.ok) {
+          const error = await servicesResponse.json().catch(() => ({ message: 'Failed to update services' }));
+          console.error('❌ Service update error:', error);
+          throw new Error(error.message || 'Failed to update services');
+        }
+        
+        const successData = await servicesResponse.json();
+        console.log('✅ Services updated successfully:', successData);
+      }
+
+      // Update basic user info (username, email, password)
       const updateData: any = {
         username: editUsername,
         email: editEmail,
@@ -732,8 +891,8 @@ function RolesPage() {
         updateData.password = editPassword;
       }
       
-      // Include services if any are selected
-      if (editSelectedServices.length > 0) {
+      // For custom roles, include services in the main update
+      if (!editingRole.is_default_user && editSelectedServices.length > 0) {
         updateData.service_ids = editSelectedServices;
       }
 
@@ -1825,6 +1984,9 @@ function RolesPage() {
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Role: {editingRole?.role_name}</DialogTitle>
+              <DialogDescription>
+                Update user details and manage service permissions for this role.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div>
@@ -1888,36 +2050,70 @@ function RolesPage() {
               <div className="border-t pt-4">
                 <Label className="text-base font-semibold mb-3 block">
                   Selected Services ({editSelectedServices.length} selected)
+                  {isSystemRole && !allowCustomServices && editingRole?.is_default_user !== false && availableServicesForRole.length > 0 && (
+                    <span className="text-xs font-normal text-yellow-600 ml-2">
+                      ⚠️ System role - only {availableServicesForRole.length} predefined services available
+                    </span>
+                  )}
+                  {(allowCustomServices || !isSystemRole || editingRole?.is_default_user === false) && (
+                    <span className="text-xs font-normal text-green-600 ml-2">
+                      ✓ Custom services allowed
+                    </span>
+                  )}
                 </Label>
                 <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {Object.entries(servicesByCategory).map(([category, services]) => (
-                    <div key={category} className="border rounded-lg p-3">
-                      <h3 className="font-semibold text-sm text-gray-900 mb-2">{category}</h3>
-                      <div className="grid grid-cols-1 gap-2">
-                        {services.map((service) => (
-                          <div key={service.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`edit-${service.id}`}
-                              checked={editSelectedServices.includes(service.id)}
-                              onCheckedChange={() => {
-                                setEditSelectedServices(prev =>
-                                  prev.includes(service.id)
-                                    ? prev.filter(id => id !== service.id)
-                                    : [...prev, service.id]
-                                );
-                              }}
-                            />
-                            <Label
-                              htmlFor={`edit-${service.id}`}
-                              className="text-sm font-normal cursor-pointer"
-                            >
-                              {service.name}
-                            </Label>
-                          </div>
-                        ))}
+                  {Object.entries(servicesByCategory).map(([category, services]) => {
+                    // For system roles (default users), show all but disable non-available
+                    // For custom roles or super-admin, all services are enabled
+                    const shouldRestrictServices = isSystemRole && !allowCustomServices && editingRole?.is_default_user !== false;
+                    
+                    return (
+                      <div key={category} className="border rounded-lg p-3">
+                        <h3 className="font-semibold text-sm text-gray-900 mb-2">{category}</h3>
+                        <div className="grid grid-cols-1 gap-2">
+                          {services.map((service) => {
+                            const isAvailable = !shouldRestrictServices || 
+                                              availableServicesForRole.length === 0 || 
+                                              availableServicesForRole.includes(service.id);
+                            const isChecked = editSelectedServices.includes(service.id);
+                            
+                            return (
+                              <div key={service.id} className={`flex items-center space-x-2 ${
+                                !isAvailable ? 'opacity-50' : ''
+                              }`}>
+                                <Checkbox
+                                  id={`edit-${service.id}`}
+                                  checked={isChecked}
+                                  disabled={!isAvailable}
+                                  onCheckedChange={() => {
+                                    if (isAvailable) {
+                                      setEditSelectedServices(prev =>
+                                        prev.includes(service.id)
+                                          ? prev.filter(id => id !== service.id)
+                                          : [...prev, service.id]
+                                      );
+                                    }
+                                  }}
+                                />
+                                <Label
+                                  htmlFor={`edit-${service.id}`}
+                                  className={`text-sm font-normal ${
+                                    isAvailable ? 'cursor-pointer' : 'cursor-not-allowed text-gray-400'
+                                  }`}
+                                  title={!isAvailable ? `Not available for ${editingRole?.role_name} role` : ''}
+                                >
+                                  {service.name}
+                                  {!isAvailable && isChecked && (
+                                    <span className="ml-2 text-xs text-orange-600">(will be removed)</span>
+                                  )}
+                                </Label>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

@@ -583,8 +583,8 @@ class ProgramController extends Controller
             $program = Program::findOrFail($programId);
             
             $users = User::where('program_id', $programId)
-                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator'])
-                ->select('id', 'name', 'email', 'role', 'program_id', 'status', 'created_at', 'updated_at')
+                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin'])
+                ->select('id', 'name', 'email', 'role', 'program_id', 'status', 'default_services', 'created_at', 'updated_at')
                 ->get();
             
             return response()->json([
@@ -610,7 +610,7 @@ class ProgramController extends Controller
             $program = Program::findOrFail($programId);
             $user = User::where('id', $userId)
                 ->where('program_id', $programId)
-                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator'])
+                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin'])
                 ->firstOrFail();
             
             $newPassword = Str::random(12);
@@ -659,7 +659,7 @@ class ProgramController extends Controller
             
             $user = User::where('id', $userId)
                 ->where('program_id', $programId)
-                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator'])
+                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin'])
                 ->firstOrFail();
             
             // Validate request
@@ -747,13 +747,13 @@ class ProgramController extends Controller
             $program = Program::findOrFail($programId);
             $user = User::where('id', $userId)
                 ->where('program_id', $programId)
-                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator'])
+                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin'])
                 ->firstOrFail();
             
-            // Validate request
+            // Validate request - accept any string service IDs
             $validated = $request->validate([
                 'services' => 'required|array',
-                'services.*' => 'string|in:dashboard,activities-view,activities-create,activities-edit,activities-delete,activities-send-notification,activities-set-reminder,activities-landing-config,participants-view,participants-create,participants-edit,participants-delete,reports-view,reports-export',
+                'services.*' => 'string',
             ]);
             
             // Update services
@@ -811,7 +811,7 @@ class ProgramController extends Controller
             
             $user = User::where('id', $userId)
                 ->where('program_id', $programId)
-                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator'])
+                ->whereIn('role', ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin'])
                 ->firstOrFail();
             
             // Prevent self-deletion
@@ -837,6 +837,46 @@ class ProgramController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete user',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get available services for a specific role
+     * This returns which services a role TYPE can have selected
+     */
+    public function getRoleAvailableServices(Request $request, string $roleName)
+    {
+        try {
+            $roleDefinition = \DB::table('role_service_definitions')
+                ->where('role_name', $roleName)
+                ->first();
+
+            if (!$roleDefinition) {
+                // If no definition exists, return empty (no restrictions)
+                return response()->json([
+                    'success' => true,
+                    'role_name' => $roleName,
+                    'is_system_role' => false,
+                    'allow_custom_services' => false,
+                    'available_services' => [],
+                    'message' => 'No service restrictions defined for this role'
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'role_name' => $roleDefinition->role_name,
+                'description' => $roleDefinition->description,
+                'is_system_role' => (bool)$roleDefinition->is_system_role,
+                'allow_custom_services' => (bool)$roleDefinition->allow_custom_services,
+                'available_services' => json_decode($roleDefinition->available_services, true),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch role services',
                 'error' => $e->getMessage(),
             ], 500);
         }

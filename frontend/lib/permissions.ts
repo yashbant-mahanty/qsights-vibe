@@ -312,23 +312,23 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
     items.push({ label: 'Group Heads', href: '/group-heads', icon: 'Users' });
   }
 
-  // Programs - super admin, admin, program admin can manage; program manager can view; HIDE from evaluation-admin
-  if (role !== 'evaluation-admin' && canAccessResource(role, 'programs') && hasService('programs-view')) {
+  // Programs - super admin, admin, program admin can manage; program manager can view; evaluation-admin can view
+  if (canAccessResource(role, 'programs') && hasService('list_programs')) {
     items.push({ label: 'Programs', href: '/programs', icon: 'FolderTree' });
   }
 
   // Participants - all except moderator and evaluation-admin
-  if (role !== 'evaluation-admin' && canAccessResource(role, 'participants') && hasService('participants-view')) {
+  if (role !== 'evaluation-admin' && canAccessResource(role, 'participants') && (hasService('list_participants') || hasService('list_program_participants'))) {
     items.push({ label: 'Participants', href: '/participants', icon: 'UserCheck' });
   }
 
   // Questionnaires - all roles can access (full for evaluation-admin)
-  if (canAccessResource(role, 'questionnaires') && hasService('questionnaires-view')) {
+  if (canAccessResource(role, 'questionnaires') && (hasService('question_list') || hasService('category_list') || hasService('question_bank_list'))) {
     items.push({ label: 'Questionnaires', href: '/questionnaires', icon: 'FileText' });
   }
 
-  // Activities - all roles can access EXCEPT evaluation-admin
-  if (role !== 'evaluation-admin' && canAccessResource(role, 'activities') && hasService('activities-view')) {
+  // Activities - all roles can access, including evaluation-admin
+  if (canAccessResource(role, 'activities') && hasService('list_activity')) {
     items.push({ label: 'Events', href: '/activities', icon: 'Activity' });
   }
 
@@ -337,8 +337,8 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
     items.push({ label: 'Roles & Services', href: '/program-admin/roles', icon: 'UserCog' });
   }
 
-  // Reports & Analytics - all roles can access EXCEPT evaluation-admin
-  if (role !== 'evaluation-admin' && canAccessResource(role, 'reports') && hasService('reports-view')) {
+  // Reports & Analytics - all roles can access, including evaluation-admin
+  if (canAccessResource(role, 'reports') && (hasService('view_report') || hasService('report_download') || hasService('filter_report'))) {
     items.push({ label: 'Reports & Analytics', href: '/analytics', icon: 'BarChart3' });
   }
 
@@ -347,10 +347,10 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
     items.push({ label: 'AI Reports', href: '/report-builder', icon: 'Brain' });
   }
 
-  // Evaluation Module - ONLY evaluation-admin has access (specialized module)
+  // Evaluation Module - evaluation-admin has full access
   // Note: evaluation-staff is handled at the top of this function with early return
   // Super-admin and admin have access to everything by default
-  if (hasService('evaluation-view') || hasService('evaluation-manage')) {
+  if (hasService('list_evaluation') || hasService('add_evaluation') || hasService('edit_evaluation')) {
     if (role === 'super-admin' || role === 'admin' || role === 'evaluation-admin') {
       items.push({ label: 'Evaluation', href: '/evaluation-new', icon: 'ClipboardCheck' });
     }

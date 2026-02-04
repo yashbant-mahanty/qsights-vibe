@@ -127,22 +127,23 @@ class EmailService
             $email->addContent("text/html", $message);
 
             // Add custom args for webhook tracking (if metadata provided)
+            // Note: SendGrid's addCustomArg requires all values to be strings
             if (!empty($metadata['program_id'])) {
-                $email->addCustomArg('program_id', $metadata['program_id']);
+                $email->addCustomArg('program_id', (string)$metadata['program_id']);
             }
             if (!empty($metadata['program_name'])) {
-                $email->addCustomArg('program_name', $metadata['program_name']);
+                $email->addCustomArg('program_name', (string)$metadata['program_name']);
             }
             if (!empty($metadata['activity_id'])) {
-                $email->addCustomArg('activity_id', $metadata['activity_id']);
+                $email->addCustomArg('activity_id', (string)$metadata['activity_id']);
             }
             if (!empty($metadata['activity_name'])) {
-                $email->addCustomArg('activity_name', $metadata['activity_name']);
+                $email->addCustomArg('activity_name', (string)$metadata['activity_name']);
             }
             
             // Add notification log ID for webhook correlation
             if ($notificationLog) {
-                $email->addCustomArg('notification_log_id', $notificationLog->id);
+                $email->addCustomArg('notification_log_id', (string)$notificationLog->id);
             }
 
             \Log::debug('EmailService: Calling SendGrid API...');
