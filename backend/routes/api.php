@@ -836,6 +836,12 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
     Route::get('/triggered/{id}', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'show']);
     Route::post('/triggered/{id}/submit', [App\Http\Controllers\Api\EvaluationTriggerController::class, 'submit']);
     
+    // Bulk Import (Evaluation Admin and Super Admin only)
+    Route::middleware(['role:super-admin,evaluation-admin'])->group(function () {
+        Route::post('/bulk-import', [App\Http\Controllers\Api\EvaluationBulkImportController::class, 'import']);
+        Route::get('/bulk-import/sample', [App\Http\Controllers\Api\EvaluationBulkImportController::class, 'downloadSample']);
+    });
+    
     // Evaluation Departments (Admin-only for create/update/delete)
     Route::get('/departments', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'index']);
     Route::get('/departments/{id}', [App\Http\Controllers\Api\EvaluationDepartmentController::class, 'show']);

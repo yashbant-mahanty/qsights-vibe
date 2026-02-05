@@ -8,7 +8,7 @@ import {
   Star, TrendingUp, MessageSquare, UserCheck, Smile, List, X,
   Mail, AlertCircle, Loader2, Power, RefreshCw, Calendar, BarChart3,
   Download, Filter, Eye, FileText, ChevronUp, Award, Target, 
-  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart, FileQuestion
+  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart, FileQuestion, Upload
 } from 'lucide-react';
 import { 
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -18,6 +18,7 @@ import AppLayout from '@/components/app-layout';
 import { fetchWithAuth } from '@/lib/api';
 import { toast } from '@/components/ui/toast';
 import DeleteConfirmationModal from '@/components/delete-confirmation-modal';
+import BulkImportModal from '@/components/evaluation/BulkImportModal';
 
 // Safe date formatter that prevents hydration mismatches
 const formatDate = (dateString: string | null | undefined): string => {
@@ -401,6 +402,7 @@ function EvaluationNewPageContent() {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [showMappingModal, setShowMappingModal] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   
   // Edit mode states
   const [editingDept, setEditingDept] = useState<Department | null>(null);
@@ -431,6 +433,28 @@ function EvaluationNewPageContent() {
   const [endDate, setEndDate] = useState('');
   const [evaluatorDeptFilter, setEvaluatorDeptFilter] = useState<string>('');
   const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTimezone, setScheduledTimezone] = useState(() => {
+    // Default to user's local timezone
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+  });
+  
+  // Common timezones list
+  const timezones = [
+    { value: 'Asia/Kolkata', label: 'India Standard Time (IST) - UTC+5:30' },
+    { value: 'America/New_York', label: 'Eastern Time (ET) - UTC-5/-4' },
+    { value: 'America/Chicago', label: 'Central Time (CT) - UTC-6/-5' },
+    { value: 'America/Denver', label: 'Mountain Time (MT) - UTC-7/-6' },
+    { value: 'America/Los_Angeles', label: 'Pacific Time (PT) - UTC-8/-7' },
+    { value: 'Europe/London', label: 'Greenwich Mean Time (GMT) - UTC+0/+1' },
+    { value: 'Europe/Paris', label: 'Central European Time (CET) - UTC+1/+2' },
+    { value: 'Europe/Berlin', label: 'Central European Time (CET) - UTC+1/+2' },
+    { value: 'Asia/Dubai', label: 'Gulf Standard Time (GST) - UTC+4' },
+    { value: 'Asia/Singapore', label: 'Singapore Time (SGT) - UTC+8' },
+    { value: 'Asia/Tokyo', label: 'Japan Standard Time (JST) - UTC+9' },
+    { value: 'Australia/Sydney', label: 'Australian Eastern Time (AET) - UTC+10/+11' },
+    { value: 'Pacific/Auckland', label: 'New Zealand Time (NZT) - UTC+12/+13' },
+    { value: 'UTC', label: 'Coordinated Universal Time (UTC)' },
+  ];
   
   // Custom questionnaires state - support multiple custom questionnaires
   interface CustomQuestionnaire {
@@ -1574,6 +1598,7 @@ function EvaluationNewPageContent() {
           start_date: startDate || null,
           end_date: endDate || null,
           scheduled_trigger_at: scheduledDate || null,
+          scheduled_timezone: scheduledDate ? scheduledTimezone : null,
         })
       });
       
@@ -1770,33 +1795,45 @@ function EvaluationNewPageContent() {
                   Setup, trigger, and manage staff performance evaluations
                 </p>
               </div>
-              {user?.role === 'super-admin' && programs.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700">Program:</label>
-                  <select
-                    value={selectedProgramFilter}
-                    onChange={(e) => {
-                      setSelectedProgramFilter(e.target.value);
-                      // Refetch data when program changes
-                      const newProgramId = e.target.value === 'all' ? '' : e.target.value;
-                      if (activeTab === 'setup') {
-                        fetchDepartments(newProgramId);
-                        fetchRoles(newProgramId);
-                        fetchStaff(newProgramId);
-                        fetchMappings(newProgramId);
-                      }
-                    }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+              <div className="flex items-center gap-3">
+                {/* Bulk Import Button - Only for Super Admin and Evaluation Admin */}
+                {(user?.role === 'super-admin' || user?.role === 'evaluation-admin') && activeTab === 'setup' && (
+                  <button
+                    onClick={() => setBulkImportOpen(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg font-medium text-sm"
                   >
-                    <option value="all">All Programs</option>
-                    {programs.map((program) => (
-                      <option key={program.id} value={program.id}>
-                        {program.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+                    <Upload className="w-4 h-4" />
+                    Bulk Import - Department, Role & Staff
+                  </button>
+                )}
+                {user?.role === 'super-admin' && programs.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700">Program:</label>
+                    <select
+                      value={selectedProgramFilter}
+                      onChange={(e) => {
+                        setSelectedProgramFilter(e.target.value);
+                        // Refetch data when program changes
+                        const newProgramId = e.target.value === 'all' ? '' : e.target.value;
+                        if (activeTab === 'setup') {
+                          fetchDepartments(newProgramId);
+                          fetchRoles(newProgramId);
+                          fetchStaff(newProgramId);
+                          fetchMappings(newProgramId);
+                        }
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                    >
+                      <option value="all">All Programs</option>
+                      {programs.map((program) => (
+                        <option key={program.id} value={program.id}>
+                          {program.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
             </div>
 
           {/* Modern Tabs */}
@@ -5118,12 +5155,40 @@ function EvaluationNewPageContent() {
                   Schedule Send (Optional)
                 </h3>
                 <p className="text-sm text-gray-600 mb-3">Leave empty to send immediately</p>
-                <input
-                  type="datetime-local"
-                  value={scheduledDate}
-                  onChange={(e) => setScheduledDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
-                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={scheduledDate}
+                      onChange={(e) => setScheduledDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Time Zone
+                    </label>
+                    <select
+                      value={scheduledTimezone}
+                      onChange={(e) => setScheduledTimezone(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 bg-white"
+                    >
+                      {timezones.map((tz) => (
+                        <option key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {scheduledDate && (
+                  <p className="text-xs text-yellow-700 mt-2">
+                    Evaluation will be sent at {scheduledDate.replace('T', ' ')} ({scheduledTimezone})
+                  </p>
+                )}
               </div>
 
               {/* Email Preview */}
@@ -5354,6 +5419,24 @@ function EvaluationNewPageContent() {
           </div>
         </div>
       )}
+
+      {/* Bulk Import Modal */}
+      <BulkImportModal
+        isOpen={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        onSuccess={() => {
+          setBulkImportOpen(false);
+          // Refresh data after successful import
+          if (activeTab === 'setup') {
+            const programIdForRefresh = user?.role === 'super-admin' && selectedProgramFilter !== 'all' 
+              ? selectedProgramFilter 
+              : programId;
+            fetchDepartments(programIdForRefresh);
+            fetchRoles(programIdForRefresh);
+            fetchStaff(programIdForRefresh);
+          }
+        }}
+      />
     </AppLayout>
   );
 }

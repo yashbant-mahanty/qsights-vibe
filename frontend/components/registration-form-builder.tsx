@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  Globe,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,7 @@ import { Label } from "@/components/ui/label";
 export interface FormField {
   id: string;
   name?: string;
-  type: "text" | "email" | "phone" | "number" | "date" | "textarea" | "select" | "address" | "organization";
+  type: "text" | "email" | "phone" | "number" | "date" | "textarea" | "select" | "address" | "organization" | "country";
   label: string;
   placeholder?: string;
   required: boolean;
@@ -45,8 +46,33 @@ const FIELD_TYPES = [
   { type: "date" as const, label: "Date", icon: Calendar, color: "bg-orange-100 text-orange-600" },
   { type: "textarea" as const, label: "Long Text", icon: FileText, color: "bg-pink-100 text-pink-600" },
   { type: "select" as const, label: "Dropdown", icon: ChevronDown, color: "bg-cyan-50 text-qsights-cyan" },
+  { type: "country" as const, label: "Country", icon: Globe, color: "bg-indigo-100 text-indigo-600" },
   { type: "address" as const, label: "Address", icon: MapPin, color: "bg-yellow-100 text-yellow-600" },
   { type: "organization" as const, label: "Organization", icon: Building, color: "bg-teal-100 text-teal-600" },
+];
+
+// Complete list of all countries in the world
+const ALL_COUNTRIES = [
+  "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria",
+  "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan",
+  "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia",
+  "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo (Congo-Brazzaville)", "Costa Rica",
+  "Croatia", "Cuba", "Cyprus", "Czechia (Czech Republic)", "Democratic Republic of the Congo", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador",
+  "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini (fmr. Swaziland)", "Ethiopia", "Fiji", "Finland", "France",
+  "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau",
+  "Guyana", "Haiti", "Holy See", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq",
+  "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kuwait",
+  "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
+  "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico",
+  "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar (Burma)", "Namibia", "Nauru",
+  "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway", "Oman",
+  "Pakistan", "Palau", "Palestine State", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal",
+  "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe",
+  "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia",
+  "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria",
+  "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan",
+  "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States of America", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela",
+  "Vietnam", "Yemen", "Zambia", "Zimbabwe"
 ];
 
 export default function RegistrationFormBuilder({
@@ -67,8 +93,8 @@ export default function RegistrationFormBuilder({
       id: newId,
       name: newId,
       type,
-      label: `New ${type} field`,
-      placeholder: "",
+      label: type === "country" ? "Country" : `New ${type} field`,
+      placeholder: type === "country" ? "Select your country" : "",
       required: false,
       order: fields.length,
       isMandatory: false,
@@ -76,6 +102,9 @@ export default function RegistrationFormBuilder({
 
     if (type === "select") {
       newField.options = ["Option 1", "Option 2", "Option 3"];
+    } else if (type === "country") {
+      // Pre-populate with all countries
+      newField.options = [...ALL_COUNTRIES];
     }
 
     onChange([...fields, newField]);
@@ -389,6 +418,22 @@ export default function RegistrationFormBuilder({
                                 Add Option
                               </button>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Country Field Info */}
+                        {field.type === "country" && field.options && (
+                          <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Globe className="w-4 h-4 text-indigo-600" />
+                              <Label className="text-xs font-medium text-indigo-700">
+                                Country Dropdown
+                              </Label>
+                            </div>
+                            <p className="text-xs text-indigo-600">
+                              Pre-populated with {field.options.length} countries worldwide.
+                              Participants will see a searchable dropdown to select their country.
+                            </p>
                           </div>
                         )}
                       </div>

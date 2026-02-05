@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import AppLayout from '@/components/app-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import { 
   ClipboardCheck, FileText, Activity, BarChart3, Users, Star, 
@@ -77,79 +78,66 @@ export default function EvaluationAdminDashboard() {
     try {
       setLoading(true);
       
-      // Fetch triggered evaluations
+      // Fetch all data in parallel for faster loading
+      const [
+        triggeredRes,
+        reportsRes,
+        summaryRes,
+        evaluatorRes,
+        deptRes,
+        questionnairesRes
+      ] = await Promise.allSettled([
+        fetchWithAuth('/evaluation/triggered'),
+        fetchWithAuth('/evaluation/reports'),
+        fetchWithAuth('/evaluation/reports/summary'),
+        fetchWithAuth('/evaluation/reports?view=evaluator'),
+        fetchWithAuth('/evaluation/departments'),
+        fetchWithAuth('/questionnaires')
+      ]);
+
+      // Process triggered evaluations
       let triggeredEvalsData: any[] = [];
-      try {
-        const triggeredRes = await fetchWithAuth('/evaluation/triggered');
-        if (triggeredRes.success && triggeredRes.evaluations) {
-          triggeredEvalsData = triggeredRes.evaluations;
-          setTriggeredEvaluations(triggeredEvalsData);
-        }
-      } catch (error) {
-        console.log('Triggered evaluations not available:', error);
-      }
-      
-      // Fetch staff reports for analytics
-      try {
-        const reportsRes = await fetchWithAuth('/evaluation/reports');
-        if (reportsRes.success) {
-          setStaffReports(reportsRes.reports || []);
-        }
-      } catch (error) {
-        console.log('Reports not available:', error);
+      if (triggeredRes.status === 'fulfilled' && triggeredRes.value.success) {
+        triggeredEvalsData = triggeredRes.value.evaluations || [];
+        setTriggeredEvaluations(triggeredEvalsData);
       }
 
-      // Fetch report summary
-      try {
-        const summaryRes = await fetchWithAuth('/evaluation/reports/summary');
-        if (summaryRes.success) {
-          setReportSummary(summaryRes.summary);
-        }
-      } catch (error) {
-        console.log('Summary not available:', error);
+      // Process staff reports
+      if (reportsRes.status === 'fulfilled' && reportsRes.value.success) {
+        setStaffReports(reportsRes.value.reports || []);
       }
 
-      // Fetch evaluator reports
-      try {
-        const evaluatorRes = await fetchWithAuth('/evaluation/reports?view=evaluator');
-        if (evaluatorRes.success) {
-          setEvaluatorReports(evaluatorRes.reports || []);
-        }
-      } catch (error) {
-        console.log('Evaluator reports not available:', error);
+      // Process report summary
+      if (summaryRes.status === 'fulfilled' && summaryRes.value.success) {
+        setReportSummary(summaryRes.value.summary);
       }
 
-      // Fetch departments
-      try {
-        const deptRes = await fetchWithAuth('/evaluation/departments');
-        if (deptRes.success) {
-          setDepartments(deptRes.departments || []);
-        }
-      } catch (error) {
-        console.log('Departments not available:', error);
+      // Process evaluator reports
+      if (evaluatorRes.status === 'fulfilled' && evaluatorRes.value.success) {
+        setEvaluatorReports(evaluatorRes.value.reports || []);
       }
-      
+
+      // Process departments
+      if (deptRes.status === 'fulfilled' && deptRes.value.success) {
+        setDepartments(deptRes.value.departments || []);
+      }
+
       // Count pre-defined evaluation templates (5) + custom questionnaires
-      let allTemplatesCount = 5; // Pre-defined templates: Performance Review, 360 Feedback, Competency Rating, Self Assessment, Peer Review
-      try {
-        const questionnairesRes = await fetchWithAuth('/questionnaires');
-        if (questionnairesRes.data) {
-          allTemplatesCount += questionnairesRes.data.length; // Add custom questionnaires
-        }
-      } catch (error) {
-        console.log('Questionnaires not available:', error);
+      let allTemplatesCount = 5; // Pre-defined templates
+      if (questionnairesRes.status === 'fulfilled' && questionnairesRes.value.data) {
+        allTemplatesCount += questionnairesRes.value.data.length;
       }
-      
+
       // Calculate unique templates actually used in triggered evaluations
       const uniqueTemplatesUsed = new Set(
         triggeredEvalsData.map((t: any) => t.template_name).filter(Boolean)
       );
       
       setStats({
-        questionnaires: allTemplatesCount, // Pre-defined (5) + custom questionnaires
-        evaluations: triggeredEvalsData.length, // Total evaluation forms created/triggered
-        events: uniqueTemplatesUsed.size, // Number of unique templates actually being used
-        reports: triggeredEvalsData.filter((e: any) => e.status === 'completed').length // Completed evaluations with submitted responses
+        questionnaires: allTemplatesCount,
+        evaluations: triggeredEvalsData.length,
+        events: uniqueTemplatesUsed.size,
+        reports: triggeredEvalsData.filter((e: any) => e.status === 'completed').length
       });
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -175,7 +163,6 @@ export default function EvaluationAdminDashboard() {
           <h1 className="text-3xl font-bold text-gray-900">Evaluation Admin Dashboard</h1>
           <p className="text-gray-600 mt-2">Comprehensive analytics and evaluation insights</p>
         </div>
-
         {/* Main Stat Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="relative group">
@@ -666,4 +653,3 @@ export default function EvaluationAdminDashboard() {
     </AppLayout>
   );
 }
-
