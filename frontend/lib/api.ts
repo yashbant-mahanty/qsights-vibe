@@ -2375,5 +2375,82 @@ export const reportBuilderApi = {
   },
 };
 
+// AI Report Agent API
+export const aiAgentApi = {
+  /**
+   * Ask the AI Agent a natural language question
+   */
+  async ask(params: {
+    query: string;
+    activity_id: string;
+    session_id?: string;
+    context?: Array<{user_message: string; ai_response: string}>;
+  }): Promise<{
+    success: boolean;
+    data: any;
+    chart_type: string;
+    summary: string;
+    sql_query?: string;
+    intent?: any;
+    cached: boolean;
+    response_time_ms?: number;
+    error?: string;
+  }> {
+    const data = await fetchWithAuth('/ai-agent/ask', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+    return data;
+  },
 
+  /**
+   * Get conversation history for current session
+   */
+  async getHistory(sessionId: string, limit?: number): Promise<{
+    success: boolean;
+    history: Array<{
+      id: string;
+      user_message: string;
+      ai_response: string;
+      chart_type?: string;
+      query_result?: any;
+      created_at: string;
+    }>;
+  }> {
+    const data = await fetchWithAuth(`/ai-agent/history?session_id=${sessionId}&limit=${limit || 20}`);
+    return data;
+  },
 
+  /**
+   * Provide feedback on AI response
+   */
+  async provideFeedback(conversationId: string, wasHelpful: boolean, feedback?: string): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const data = await fetchWithAuth('/ai-agent/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        was_helpful: wasHelpful,
+        feedback,
+      }),
+    });
+    return data;
+  },
+
+  /**
+   * Get popular/suggested queries for an activity
+   */
+  async getPopularQueries(activityId: string, limit?: number): Promise<{
+    success: boolean;
+    queries: Array<{
+      query_text: string;
+      hit_count: number;
+      last_accessed_at: string;
+    }>;
+  }> {
+    const data = await fetchWithAuth(`/ai-agent/popular-queries?activity_id=${activityId}&limit=${limit || 5}`);
+    return data;
+  },
+};

@@ -437,6 +437,21 @@ Route::middleware(['auth:sanctum'])->prefix('report-builder')->group(function ()
     Route::get('/export/program/{programId}', [App\Http\Controllers\Api\ReportController::class, 'exportProgramReport']);
 });
 
+// AI Report Agent Routes (Natural Language Query Interface)
+Route::middleware(['auth:sanctum'])->prefix('ai-agent')->group(function () {
+    // Main AI query endpoint
+    Route::post('/ask', [App\Http\Controllers\Api\AIReportAgentController::class, 'ask']);
+    
+    // Conversation history
+    Route::get('/history', [App\Http\Controllers\Api\AIReportAgentController::class, 'getHistory']);
+    
+    // User feedback
+    Route::post('/feedback', [App\Http\Controllers\Api\AIReportAgentController::class, 'feedback']);
+    
+    // Popular/suggested queries
+    Route::get('/popular-queries', [App\Http\Controllers\Api\AIReportAgentController::class, 'popularQueries']);
+});
+
 // Public Activity Routes (no authentication required)
 Route::prefix('public')->group(function () {
     Route::get('activities/{id}', [App\Http\Controllers\Api\PublicActivityController::class, 'show']);

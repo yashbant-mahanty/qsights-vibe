@@ -1,16 +1,21 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AppLayout from '@/components/app-layout';
+import AIAgentChat from '@/components/ai-agent-chat';
+import AdvancedFilters from '@/components/report-builder/AdvancedFilters';
+import DragDropReportBuilder from '@/components/report-builder/DragDropReportBuilder';
+import ExportService from '@/components/report-builder/ExportService';
 import { reportBuilderApi, activitiesApi, AIInsight, QuestionAnalytics } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   BarChart3, PieChart, TrendingUp, Brain, Download, Filter,
   Save, Eye, Clock, Users, CheckCircle2, AlertCircle,
-  Sparkles, FileText, LayoutGrid, Activity
+  Sparkles, FileText, LayoutGrid, Activity, MessageSquare
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -57,7 +62,13 @@ function ReportBuilderContent() {
   const [aiInsights, setAIInsights] = useState<AIInsight[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
   const [filters, setFilters] = useState<any>({});
-  const [viewMode, setViewMode] = useState<'builder' | 'preview'>('preview');
+  const [advancedFilters, setAdvancedFilters] = useState<any[]>([]);
+  const [selectedDimensions, setSelectedDimensions] = useState<any[]>([]);
+  const [selectedMeasures, setSelectedMeasures] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<'builder' | 'preview' | 'advanced'>('preview');
+  const [activeTab, setActiveTab] = useState<'builder' | 'agent' | 'bi'>('builder');
+  const [showFilters, setShowFilters] = useState(false);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (activityId) {
@@ -78,7 +89,7 @@ function ReportBuilderContent() {
       toast({
         title: 'Error',
         description: error.message || 'Failed to load activities',
-        variant: 'error',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -98,7 +109,7 @@ function ReportBuilderContent() {
       toast({
         title: 'Error',
         description: error.message || 'Failed to load report data',
-        variant: 'error',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -248,38 +259,63 @@ function ReportBuilderContent() {
     );
   }
 
+  // Get activity name
+  const selectedActivity = activities.find(a => a.id === activityId);
+  const activityName = selectedActivity?.title || selectedActivity?.name || 'Event';
+
   return (
     <AppLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">AI Report Builder</h1>
-            <p className="text-gray-600 mt-1">Activity Analytics & AI-Powered Insights</p>
+            <h1 className="text-2xl font-bold text-gray-900">AI Reports</h1>
+            <p className="text-gray-600 mt-1">{activityName} - Analytics & Insights</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => router.push('/report-builder')}>
               ← Back to Events
             </Button>
-            <Button variant="outline" onClick={() => setViewMode(viewMode === 'builder' ? 'preview' : 'builder')}>
-              {viewMode === 'builder' ? <Eye className="w-4 h-4 mr-2" /> : <LayoutGrid className="w-4 h-4 mr-2" />}
-              {viewMode === 'builder' ? 'Preview' : 'Builder'}
-            </Button>
-            <Button variant="outline">
-              <Filter className="w-4 h-4 mr-2" />
-              Filters
-            </Button>
-            <Button variant="outline">
-              <Save className="w-4 h-4 mr-2" />
-              Save Template
-            </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
+            {(activeTab === 'builder' || activeTab === 'bi') && (
+              <>
+                <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
+                  <Filter className="w-4 h-4 mr-2" />
+                  Filters {advancedFilters.length > 0 && `(${advancedFilters.length})`}
+                </Button>
+                <Button variant="outline">
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Template
+                </Button>
+                <ExportService 
+                  activityId={activityId}
+                  reportData={analytics}
+                  chartRef={chartContainerRef}
+                />
+              </>
+            )}
           </div>
         </div>
-        {/* AI Insights Section */}
+
+        {/* Tabs for Builder, BI Builder, and ASK Agent */}
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'builder' | 'bi' | 'agent')} className="w-full">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3">
+            <TabsTrigger value="builder" className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Quick Reports
+            </TabsTrigger>
+            <TabsTrigger value="bi" className="flex items-center gap-2">
+              <LayoutGrid className="w-4 h-4" />
+              BI Builder
+            </TabsTrigger>
+            <TabsTrigger value="agent" className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" />
+              ASK Agent
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Report Builder Tab */}
+          <TabsContent value="builder" className="space-y-6 mt-6">
+            {/* AI Insights Section */}
         {aiInsights.length > 0 && (
           <Card className="mb-6 border-l-4 border-l-purple-500">
             <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50">
@@ -452,6 +488,142 @@ function ReportBuilderContent() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          {/* BI Builder Tab */}
+          <TabsContent value="bi" className="space-y-6 mt-6">
+            {/* Advanced Filters Panel */}
+            {showFilters && (
+              <AdvancedFilters
+                availableFields={{
+                  demographics: [
+                    { id: 'country', name: 'Country', type: 'text' },
+                    { id: 'age', name: 'Age', type: 'number' },
+                    { id: 'department', name: 'Department', type: 'text' },
+                    { id: 'role', name: 'Role', type: 'text' },
+                    { id: 'specialty', name: 'Specialty', type: 'text' },
+                    { id: 'submitted_at', name: 'Submission Date', type: 'date' },
+                  ],
+                  questions: questionBreakdown.map((q: any) => ({
+                    id: q.question_id,
+                    question: q.question_title,
+                    type: q.question_type,
+                  })),
+                }}
+                onFiltersChange={setAdvancedFilters}
+              />
+            )}
+
+            {/* Drag & Drop Report Builder */}
+            <DragDropReportBuilder
+              availableFields={{
+                dimensions: [
+                  { id: 'country', name: 'Country', type: 'dimension', dataType: 'text', category: 'demographic' },
+                  { id: 'age_group', name: 'Age Group', type: 'dimension', dataType: 'text', category: 'demographic' },
+                  { id: 'department', name: 'Department', type: 'dimension', dataType: 'text', category: 'demographic' },
+                  { id: 'role', name: 'Role', type: 'dimension', dataType: 'text', category: 'demographic' },
+                  { id: 'specialty', name: 'Specialty', type: 'dimension', dataType: 'text', category: 'demographic' },
+                  { id: 'status', name: 'Completion Status', type: 'dimension', dataType: 'text', category: 'system' },
+                  { id: 'submitted_date', name: 'Submission Date', type: 'dimension', dataType: 'date', category: 'system' },
+                  { id: 'device_type', name: 'Device Type', type: 'dimension', dataType: 'text', category: 'system' },
+                ],
+                measures: [
+                  { id: 'response_count', name: 'Response Count', type: 'measure', dataType: 'number', category: 'system' },
+                  { id: 'avg_completion_time', name: 'Avg Completion Time', type: 'measure', dataType: 'number', category: 'system' },
+                  { id: 'participation_rate', name: 'Participation Rate', type: 'measure', dataType: 'number', category: 'system' },
+                  ...questionBreakdown.slice(0, 10).map((q: any) => ({
+                    id: `q_${q.question_id}`,
+                    name: q.question_title.substring(0, 40) + '...',
+                    type: 'measure',
+                    dataType: 'number',
+                    category: 'question',
+                  })),
+                ],
+              }}
+              selectedDimensions={selectedDimensions}
+              selectedMeasures={selectedMeasures}
+              onDimensionsChange={setSelectedDimensions}
+              onMeasuresChange={setSelectedMeasures}
+              onGenerateReport={() => {
+                console.log('Generating custom report:', { selectedDimensions, selectedMeasures, advancedFilters });
+                toast({
+                  title: 'Generating Report',
+                  description: 'Custom report is being generated...',
+                });
+                loadReportData();
+              }}
+            />
+
+            {/* Generated Report Display Area */}
+            {(selectedDimensions.length > 0 || selectedMeasures.length > 0) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" />
+                    Generated Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div ref={chartContainerRef} className="min-h-[400px] flex items-center justify-center">
+                    {analytics ? (
+                      <div className="w-full space-y-6">
+                        {/* Preview of what would be generated */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <p className="text-sm text-blue-800">
+                            <strong>Report Configuration:</strong><br/>
+                            Dimensions: {selectedDimensions.map(d => d.field.name).join(', ') || 'None'}<br/>
+                            Measures: {selectedMeasures.map(m => `${m.aggregation}(${m.field.name})`).join(', ') || 'None'}<br/>
+                            Filters: {advancedFilters.length} active
+                          </p>
+                        </div>
+                        
+                        {/* Show existing analytics as placeholder */}
+                        <div className="grid grid-cols-4 gap-4">
+                          <div className="bg-white p-4 rounded-lg border text-center">
+                            <p className="text-sm text-gray-600">Total Records</p>
+                            <p className="text-2xl font-bold">{overview.total_responses || 0}</p>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg border text-center">
+                            <p className="text-sm text-gray-600">Completion Rate</p>
+                            <p className="text-2xl font-bold text-green-600">{overview.completion_rate || 0}%</p>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg border text-center">
+                            <p className="text-sm text-gray-600">Submitted</p>
+                            <p className="text-2xl font-bold">{overview.submitted_responses || 0}</p>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg border text-center">
+                            <p className="text-sm text-gray-600">In Progress</p>
+                            <p className="text-2xl font-bold">{overview.in_progress_responses || 0}</p>
+                          </div>
+                        </div>
+
+                        <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                          ℹ️ <strong>Note:</strong> Backend API enhancement needed to fully support custom dimension/measure queries. 
+                          Currently showing existing analytics. Once backend is updated, this will display your custom report.
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center text-gray-400">
+                        <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-20" />
+                        <p>Configure dimensions and measures above, then click "Generate Report"</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* ASK Agent Tab */}
+          <TabsContent value="agent" className="mt-6">
+            <Card className="h-[calc(100vh-250px)] overflow-hidden">
+              <AIAgentChat 
+                activityId={activityId}
+                activityName={activityName}
+              />
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
@@ -488,12 +660,9 @@ function QuestionChart({ question, index }: { question: QuestionAnalytics; index
       return (
         <div className="h-64">
           <ReactWordcloud
-            words={words}
-            options={{
-              rotations: 2,
-              rotationAngles: [0, 90],
-              fontSizes: [12, 60] as [number, number],
-            }}
+            data={words}
+            fontSize={(word) => Math.log2(word.value) * 10}
+            rotate={(word) => (word.value % 2 === 0 ? 0 : 90)}
           />
         </div>
       );
