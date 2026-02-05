@@ -390,7 +390,7 @@
             @foreach($appendix['backup_procedures'] as $type => $procedure)
             <tr>
                 <td><strong>{{ $type }}</strong></td>
-                <td>{{ $procedure }}</td>
+                <td>{{ is_array($procedure) ? json_encode($procedure) : $procedure }}</td>
             </tr>
             @endforeach
         </tbody>
@@ -408,7 +408,7 @@
             @foreach($appendix['rollback_strategy'] as $component => $method)
             <tr>
                 <td><strong>{{ $component }}</strong></td>
-                <td>{{ $method }}</td>
+                <td>{{ is_array($method) ? json_encode($method) : $method }}</td>
             </tr>
             @endforeach
         </tbody>

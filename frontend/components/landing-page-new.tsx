@@ -59,25 +59,24 @@ export default function LandingPage() {
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState("");
+	
+	// Load logo and settings from cache immediately for instant rendering
 	const [logoUrl, setLogoUrl] = useState<string | null>(() => {
 		if (typeof window !== 'undefined') {
-			return sessionStorage.getItem('qsights_logo') || null;
+			return localStorage.getItem('qsights_logo') || null;
 		}
 		return null;
 	});
-	const [mounted, setMounted] = useState(false);
-	const [themeSettings, setThemeSettings] = useState<any>({});
+	const [themeSettings, setThemeSettings] = useState<any>(() => {
+		if (typeof window !== 'undefined') {
+			const cached = localStorage.getItem('qsights_theme_settings');
+			return cached ? JSON.parse(cached) : {};
+		}
+		return {};
+	});
 
 	useEffect(() => {
-		setMounted(true);
-		// Load from sessionStorage only on client after mount
-		if (typeof window !== 'undefined') {
-			const cachedLogo = sessionStorage.getItem('qsights_logo');
-			if (cachedLogo) {
-				setLogoUrl(cachedLogo);
-			}
-		}
-
+		// Load settings in background and update cache
 		async function loadSettings() {
 			try {
 				const settings = await themeApi.getAll();
@@ -85,9 +84,12 @@ export default function LandingPage() {
 				const logo = settings?.branding?.logo?.value;
 				if (logo) {
 					setLogoUrl(logo);
-					// Cache the logo URL in sessionStorage
-					if (typeof window !== 'undefined') {
-						sessionStorage.setItem('qsights_logo', logo);
+				}
+				// Cache settings for instant loading next time
+				if (typeof window !== 'undefined') {
+					localStorage.setItem('qsights_theme_settings', JSON.stringify(settings));
+					if (logo) {
+						localStorage.setItem('qsights_logo', logo);
 					}
 				}
 			} catch (err) {

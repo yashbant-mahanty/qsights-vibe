@@ -409,4 +409,201 @@ class DataSafetyController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get statistics of soft-deleted records
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getDeletedDataStats()
+    {
+        try {
+            $tables = [
+                'organizations' => 'Organizations',
+                'group_heads' => 'Group Heads',
+                'programs' => 'Programs',
+                'questionnaires' => 'Questionnaires',
+                'activities' => 'Activities',
+                'participants' => 'Participants',
+                'responses' => 'Responses',
+                'answers' => 'Answers',
+                'evaluation_departments' => 'Evaluation Departments',
+                'evaluation_staff' => 'Evaluation Staff',
+                'program_roles' => 'Program Roles',
+            ];
+
+            $stats = [];
+            $totalCount = 0;
+
+            foreach ($tables as $table => $label) {
+                try {
+                    $count = \DB::table($table)->whereNotNull('deleted_at')->count();
+                    if ($count > 0) {
+                        $stats[] = [
+                            'table' => $table,
+                            'label' => $label,
+                            'count' => $count
+                        ];
+                        $totalCount += $count;
+                    }
+                } catch (\Exception $e) {
+                    // Table might not exist or doesn't have deleted_at
+                    continue;
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'stats' => $stats,
+                'total_count' => $totalCount,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get deleted data stats: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Flush all soft-deleted data permanently
+     * Creates backup before deletion
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function flushDeletedData()
+    {
+        try {
+            \DB::beginTransaction();
+
+            // Create backup directory with timestamp
+            $backupDir = storage_path('app/deleted_backups/' . now()->format('Y-m-d_H-i-s'));
+            if (!file_exists($backupDir)) {
+                mkdir($backupDir, 0755, true);
+            }
+
+            $tables = [
+                'organizations',
+                'group_heads',
+                'programs',
+                'questionnaires',
+                'activities',
+                'participants',
+                'responses',
+                'answers',
+                'evaluation_departments',
+                'evaluation_staff',
+                'program_roles',
+            ];
+
+            $deletedCounts = [];
+            $totalDeleted = 0;
+
+            foreach ($tables as $table) {
+                try {
+                    // Get soft-deleted records
+                    $records = \DB::table($table)->whereNotNull('deleted_at')->get();
+                    
+                    if ($records->count() > 0) {
+                        // Backup to JSON file
+                        $backupFile = $backupDir . '/' . $table . '.json';
+                        file_put_contents($backupFile, json_encode($records, JSON_PRETTY_PRINT));
+                        
+                        // Permanently delete
+                        $deleted = \DB::table($table)->whereNotNull('deleted_at')->delete();
+                        
+                        $deletedCounts[$table] = $deleted;
+                        $totalDeleted += $deleted;
+                    }
+                } catch (\Exception $e) {
+                    // Continue with other tables if one fails
+                    \Log::error("Failed to flush $table: " . $e->getMessage());
+                    continue;
+                }
+            }
+
+            \DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Successfully flushed deleted data',
+                'backup_location' => $backupDir,
+                'deleted_counts' => $deletedCounts,
+                'total_deleted' => $totalDeleted,
+            ]);
+
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to flush deleted data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create database backup
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function backupDatabase()
+    {
+        try {
+            $backupDir = storage_path('app/database_backups');
+            if (!file_exists($backupDir)) {
+                mkdir($backupDir, 0755, true);
+            }
+
+            $timestamp = now()->format('Y-m-d_H-i-s');
+            $backupFile = $backupDir . '/qsights_backup_' . $timestamp . '.sql';
+
+            // Get database config
+            $host = config('database.connections.pgsql.host');
+            $port = config('database.connections.pgsql.port');
+            $database = config('database.connections.pgsql.database');
+            $username = config('database.connections.pgsql.username');
+            $password = config('database.connections.pgsql.password');
+
+            // Set password environment variable
+            putenv("PGPASSWORD=$password");
+
+            // Execute pg_dump
+            $command = sprintf(
+                'pg_dump -h %s -p %s -U %s -d %s -F c -b -v -f %s 2>&1',
+                escapeshellarg($host),
+                escapeshellarg($port),
+                escapeshellarg($username),
+                escapeshellarg($database),
+                escapeshellarg($backupFile)
+            );
+
+            exec($command, $output, $returnCode);
+
+            // Clear password from environment
+            putenv("PGPASSWORD");
+
+            if ($returnCode !== 0) {
+                throw new \Exception('Backup command failed: ' . implode("\n", $output));
+            }
+
+            $fileSize = file_exists($backupFile) ? filesize($backupFile) : 0;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Database backup created successfully',
+                'backup_file' => basename($backupFile),
+                'backup_path' => $backupFile,
+                'file_size' => $fileSize,
+                'file_size_mb' => round($fileSize / 1024 / 1024, 2),
+                'timestamp' => $timestamp,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to create database backup: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

@@ -424,7 +424,11 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
     credentials: 'include',
   });
   
-  console.log('[API] Response status:', response.status);
+  // Don't log 401 errors for auth check endpoints (expected when not logged in)
+  const isAuthCheck = endpoint.includes('/auth/me');
+  if (!isAuthCheck || response.status !== 401) {
+    console.log('[API] Response status:', response.status);
+  }
 
   const responseText = await response.text();
   
@@ -444,8 +448,12 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
   }
 
   if (!response.ok) {
-    console.error('[API] Error response:', { status: response.status, data });
-    console.error('[API] Full error data:', JSON.stringify(data, null, 2));
+    // Don't log 401 errors for auth check endpoints (expected when not logged in)
+    const isAuthCheck = endpoint.includes('/auth/me');
+    if (!isAuthCheck || response.status !== 401) {
+      console.error('[API] Error response:', { status: response.status, data });
+      console.error('[API] Full error data:', JSON.stringify(data, null, 2));
+    }
     // For 422 validation errors, extract the actual field errors
     if (response.status === 422 && data.errors) {
       const errorMessages = Object.entries(data.errors)

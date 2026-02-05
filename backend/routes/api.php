@@ -47,8 +47,8 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-// Dashboard Routes (Super Admin, Admin, and Evaluation Admin)
-Route::middleware(['auth:sanctum', 'role:super-admin,admin,evaluation-admin'])->prefix('dashboard')->group(function () {
+// Dashboard Routes (Super Admin, Admin, Evaluation Admin, and System User)
+Route::middleware(['auth:sanctum', 'role:super-admin,admin,evaluation-admin,system-user'])->prefix('dashboard')->group(function () {
     Route::get('/global-statistics', [DashboardController::class, 'globalStatistics']);
     Route::get('/organization-performance', [DashboardController::class, 'organizationPerformance']);
     Route::get('/subscription-metrics', [DashboardController::class, 'subscriptionMetrics']);
@@ -87,7 +87,7 @@ Route::prefix('landing-config')->group(function () {
 
 // Organization Routes
 Route::middleware(['auth:sanctum'])->group(function () {
-    // Public read operations (all authenticated users)
+    // Public read operations (all authenticated users including system-user)
     Route::get('/organizations', [OrganizationController::class, 'index']);
     Route::get('/organizations/{id}', [OrganizationController::class, 'show']);
     
@@ -110,7 +110,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 // Group Head Routes
 Route::middleware(['auth:sanctum'])->group(function () {
-    // Public read operations (all authenticated users)
+    // Public read operations (all authenticated users including system-user)
     Route::get('/group-heads', [GroupHeadController::class, 'index']);
     Route::get('/group-heads/{id}', [GroupHeadController::class, 'show']);
     
@@ -134,7 +134,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 // Program Routes
 Route::middleware(['auth:sanctum'])->group(function () {
-    // Public read operations (all authenticated users)
+    // Public read operations (all authenticated users including system-user)
     Route::get('/programs', [ProgramController::class, 'index']);
     Route::get('/programs/{id}', [ProgramController::class, 'show']);
     Route::get('/programs/{id}/statistics', [ProgramController::class, 'statistics']);
@@ -172,6 +172,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // System-wide Roles Routes (Super Admin only)
     Route::middleware(['role:super-admin'])->group(function () {
         Route::get('/system-roles', [ProgramRoleController::class, 'indexSystemRoles']);
+        Route::get('/system-roles/available-services', [ProgramRoleController::class, 'getAvailableServicesForSystemRoles']);
         Route::post('/system-roles', [ProgramRoleController::class, 'storeSystemRole']);
         Route::get('/system-roles/{roleId}', [ProgramRoleController::class, 'showSystemRole']);
         Route::put('/system-roles/{roleId}', [ProgramRoleController::class, 'updateSystemRole']);
@@ -211,8 +212,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/participants/{id}', [ParticipantController::class, 'show']);
     Route::get('/participants/template/download', [ParticipantController::class, 'downloadTemplate']);
     
-    // Admin and Program roles can manage participants
-    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {
+    // Admin, Program roles, and System User can manage participants
+    Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager,system-user'])->group(function () {
         Route::post('/participants', [ParticipantController::class, 'store']);
         Route::post('/participants/bulk-import', [ParticipantController::class, 'bulkImport']);
         Route::post('/participants/bulk-delete', [ParticipantController::class, 'bulkDelete']);
@@ -298,7 +299,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
             ->middleware(['role:super-admin,admin']);
     });
     
-    // Public read operations
+    // Public read operations (all authenticated users including system-user)
     Route::get('/activities', [ActivityController::class, 'index']);
     Route::get('/activities/statistics', [ActivityController::class, 'statistics']);
     Route::post('/activities/participant-counts', [ActivityController::class, 'getParticipantCounts']);
@@ -667,12 +668,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Evaluation Events CRUD (Admin and Program Admin can manage)
     Route::prefix('evaluation-events')->group(function () {
-        // Read operations (all authenticated users can list their accessible events)
+        // Read operations (all authenticated users including system-user can list their accessible events)
         Route::get('/', [App\Http\Controllers\Api\EvaluationEventController::class, 'index']);
         Route::get('/{id}', [App\Http\Controllers\Api\EvaluationEventController::class, 'show']);
         
-        // Admin-only operations (create, update, delete)
-        Route::middleware(['role:super-admin,admin,group-head,program-admin'])->group(function () {
+        // Admin-only operations (create, update, delete) - includes system-user
+        Route::middleware(['role:super-admin,admin,group-head,program-admin,system-user'])->group(function () {
             Route::post('/', [App\Http\Controllers\Api\EvaluationEventController::class, 'store']);
             Route::put('/{id}', [App\Http\Controllers\Api\EvaluationEventController::class, 'update']);
             Route::patch('/{id}', [App\Http\Controllers\Api\EvaluationEventController::class, 'update']);
@@ -736,6 +737,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/migration-stats', [App\Http\Controllers\Api\DataSafetyController::class, 'migrationStats']);
         Route::get('/backups', [App\Http\Controllers\Api\DataSafetyController::class, 'getBackups']);
         Route::post('/migrate', [App\Http\Controllers\Api\DataSafetyController::class, 'migrateJsonToBackups']);
+        
+        // Database Maintenance Routes
+        Route::post('/flush-deleted-data', [App\Http\Controllers\Api\DataSafetyController::class, 'flushDeletedData']);
+        Route::post('/backup-database', [App\Http\Controllers\Api\DataSafetyController::class, 'backupDatabase']);
+        Route::get('/deleted-data-stats', [App\Http\Controllers\Api\DataSafetyController::class, 'getDeletedDataStats']);
     });
     
     // System Design Document (SDD) & Engineering Governance (Super Admin only)

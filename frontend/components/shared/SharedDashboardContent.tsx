@@ -710,7 +710,7 @@ export default function SharedDashboardContent() {
                 <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
                   <Bell className="w-6 h-6 text-white" />
                 </div>
-                <span className="text-sm font-medium text-gray-900">Send Reminder</span>
+                <span className="text-sm font-medium text-gray-900">Set Reminder</span>
               </button>
               <button className="flex flex-col items-center gap-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
                 <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">

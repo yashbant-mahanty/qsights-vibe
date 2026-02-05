@@ -20,6 +20,7 @@ class ProgramRole extends Model
         'status',
         'description',
         'services',
+        'allowed_program_ids',
     ];
 
     protected $hidden = [
@@ -28,6 +29,7 @@ class ProgramRole extends Model
 
     protected $casts = [
         'services' => 'array',
+        'allowed_program_ids' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',

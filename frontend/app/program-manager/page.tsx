@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import ProgramAdminLayout from "@/components/program-admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
@@ -18,8 +19,12 @@ import {
   FileText,
   MoreVertical,
   UserCheck,
+  Bell,
+  X,
 } from "lucide-react";
 import { activitiesApi, participantsApi } from "@/lib/api";
+import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface UserData {
   userId: string;
@@ -30,6 +35,9 @@ interface UserData {
 }
 
 export default function ProgramManagerDashboard() {
+  const router = useRouter();
+  const { currentUser: authUser } = useAuth();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [participants, setParticipants] = useState<any[]>([]);
@@ -42,6 +50,14 @@ export default function ProgramManagerDashboard() {
   const [pendingResponses, setPendingResponses] = useState(0);
   const [completionRate, setCompletionRate] = useState(0);
   const [languageDistribution, setLanguageDistribution] = useState<any[]>([]);
+
+  // Send Reminder states
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
+  const [reminderDate, setReminderDate] = useState<string>("");
+  const [reminderTime, setReminderTime] = useState<string>("");
+  const [reminderMessage, setReminderMessage] = useState<string>("");
+  const [sendingReminder, setSendingReminder] = useState(false);
 
   // Stats array for dashboard cards
   const stats = [
@@ -83,17 +99,15 @@ export default function ProgramManagerDashboard() {
     try {
       setLoading(true);
       
-      // Get current user
-      const userResponse = await fetch('/api/auth/me');
-      if (!userResponse.ok) {
-        window.location.href = '/login';
+      // Use AuthContext user
+      if (!authUser) {
+        router.push('/login');
         return;
       }
       
-      const userData = await userResponse.json();
-      setCurrentUser(userData.user);
+      setCurrentUser(authUser as UserData);
       
-      if (!userData.user.programId) {
+      if (!authUser.programId) {
         console.error('Program Manager has no program assigned');
         setLoading(false);
         return;
@@ -101,8 +115,8 @@ export default function ProgramManagerDashboard() {
 
       // Fetch data filtered by program
       const [participantsData, activitiesData] = await Promise.all([
-        participantsApi.getAll({ program_id: userData.user.programId }).catch(() => []),
-        activitiesApi.getAll({ program_id: userData.user.programId }).catch(() => []),
+        participantsApi.getAll({ program_id: authUser.programId }).catch(() => []),
+        activitiesApi.getAll({ program_id: authUser.programId }).catch(() => []),
       ]);
 
       // Transform activities to include UI properties
@@ -261,14 +275,84 @@ export default function ProgramManagerDashboard() {
     },
   ];
 
-  if (loading) {
-    return (
-      <ProgramAdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qsights-blue"></div>
-        </div>
-      </ProgramAdminLayout>
-    );
+  // Send Reminder Functions
+  async function handleSendReminder() {
+    if (activities.length === 0) {
+      toast({
+        title: "No Events",
+        description: "No events available to send reminders for",
+        variant: "warning"
+      });
+      return;
+    }
+
+    // Set default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setReminderDate(tomorrow.toISOString().split('T')[0]);
+    setReminderTime("09:00");
+    setSelectedEventId(activities[0]?.id || "");
+    setReminderMessage(`Reminder: Please complete your pending activities.`);
+    setShowReminderDialog(true);
+  }
+
+  async function scheduleReminder() {
+    if (!selectedEventId || !reminderDate || !reminderTime) {
+      toast({
+        title: "Missing Information",
+        description: "Please select an event, date and time for the reminder",
+        variant: "error"
+      });
+      return;
+    }
+
+    setSendingReminder(true);
+
+    try {
+      const selectedEvent = activities.find((a: any) => String(a.id) === String(selectedEventId));
+      if (!selectedEvent) {
+        throw new Error("Event not found");
+      }
+
+      // Create Google Calendar event URL
+      const eventDate = new Date(`${reminderDate}T${reminderTime}`);
+      const endDate = new Date(eventDate.getTime() + 60 * 60 * 1000); // 1 hour later
+
+      const formatDateForGoogle = (date: Date) => {
+        return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      };
+
+      const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+        `Reminder: ${selectedEvent.name}`
+      )}&dates=${formatDateForGoogle(eventDate)}/${formatDateForGoogle(endDate)}&details=${encodeURIComponent(
+        reminderMessage || `Remember to complete the event: ${selectedEvent.name}`
+      )}&sf=true&output=xml`;
+
+      // Open Google Calendar
+      window.open(calendarUrl, '_blank');
+
+      toast({
+        title: "Reminder Scheduled!",
+        description: `Calendar reminder has been opened for ${selectedEvent.name}`,
+        variant: "success"
+      });
+
+      setShowReminderDialog(false);
+      setSelectedEventId("");
+      setReminderDate("");
+      setReminderTime("");
+      setReminderMessage("");
+
+    } catch (error) {
+      console.error('Error scheduling reminder:', error);
+      toast({
+        title: "Error",
+        description: "Failed to schedule reminder",
+        variant: "error"
+      });
+    } finally {
+      setSendingReminder(false);
+    }
   }
 
   return (
@@ -284,8 +368,13 @@ export default function ProgramManagerDashboard() {
             <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
               Export Data
             </button>
-            <button className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan-dark">
-              Send Reminder
+            <button 
+              onClick={handleSendReminder}
+              disabled={sendingReminder}
+              className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan-dark disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Bell className="w-4 h-4" />
+              {sendingReminder ? "Scheduling..." : "Set Reminder"}
             </button>
           </div>
         </div>
@@ -523,6 +612,108 @@ export default function ProgramManagerDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Send Reminder Dialog */}
+        {showReminderDialog && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-200">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-cyan-50 rounded-lg">
+                      <Bell className="w-5 h-5 text-qsights-cyan" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Set Reminder</h3>
+                      <p className="text-sm text-gray-500">Schedule a calendar reminder</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowReminderDialog(false)}
+                    className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Select Event</label>
+                  <select 
+                    value={selectedEventId}
+                    onChange={(e) => setSelectedEventId(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-transparent"
+                  >
+                    {activities.map((activity) => (
+                      <option key={activity.id} value={activity.id}>
+                        {activity.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                    <input 
+                      type="date"
+                      value={reminderDate}
+                      onChange={(e) => setReminderDate(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Time</label>
+                    <input 
+                      type="time"
+                      value={reminderTime}
+                      onChange={(e) => setReminderTime(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Message (Optional)</label>
+                  <textarea 
+                    value={reminderMessage}
+                    onChange={(e) => setReminderMessage(e.target.value)}
+                    placeholder="Add a custom message for the reminder..."
+                    rows={3}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qsights-cyan focus:border-transparent resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setShowReminderDialog(false)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={scheduleReminder}
+                  disabled={sendingReminder || !selectedEventId || !reminderDate || !reminderTime}
+                  className="px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-qsights-cyan-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                >
+                  {sendingReminder ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Scheduling...
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="w-4 h-4" />
+                      Open Calendar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ProgramAdminLayout>
   );

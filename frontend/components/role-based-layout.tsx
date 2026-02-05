@@ -29,12 +29,9 @@ export default function RoleBasedLayout({ children }: RoleBasedLayoutProps) {
     }
   }, [mounted, currentUser]);
 
-  if (isLoading || !mounted) {
-    return (
-      <div className="flex items-center justify-center h-screen" suppressHydrationWarning>
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qsights-blue"></div>
-      </div>
-    );
+  // Don't block rendering - show content immediately
+  if (!mounted) {
+    return null;
   }
 
   const role = currentUser?.role;

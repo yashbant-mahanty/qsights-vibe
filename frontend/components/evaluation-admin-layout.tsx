@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { handleLogout } from "@/lib/logout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,6 +36,7 @@ const iconMap: { [key: string]: any } = {
 
 export default function EvaluationAdminLayout({ children }: EvaluationAdminLayoutProps) {
   const { currentUser, isLoading } = useAuth();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -189,7 +191,7 @@ export default function EvaluationAdminLayout({ children }: EvaluationAdminLayou
               ? pathname === item.href 
               : pathname.startsWith(item.href);
             return (
-              <a
+              <Link
                 key={index}
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
@@ -205,7 +207,7 @@ export default function EvaluationAdminLayout({ children }: EvaluationAdminLayou
                 {sidebarOpen && (
                   <span className="text-sm font-medium">{item.label}</span>
                 )}
-              </a>
+              </Link>
             );
           })}
         </nav>
@@ -329,7 +331,7 @@ export default function EvaluationAdminLayout({ children }: EvaluationAdminLayou
                     {/* Sign Out */}
                     <div className="border-t border-gray-100 py-2">
                       <button
-                        onClick={handleLogout}
+                        onClick={() => handleLogout(router)}
                         className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                       >
                         <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">

@@ -114,23 +114,31 @@ class AuthController extends Controller
                     ->first();
                 
                 if ($programRole) {
-                    \Log::info('Program role found', ['email' => $programRole->email]);
+                    \Log::info('Program role found', ['email' => $programRole->email, 'program_id' => $programRole->program_id]);
                     $passwordVerified = Hash::check($request->password, $programRole->password);
                     
                     if ($passwordVerified) {
                         \Log::info('Password verified for program role');
+                        
+                        // Determine the role for users table
+                        // System roles (program_id = null) should use role_name directly
+                        // Program roles should use 'program-user' as the role
+                        $userRole = is_null($programRole->program_id) 
+                            ? 'system-user' // System-wide role
+                            : 'program-user'; // Program-specific role
+                        
                         // Create or sync user record for this program role
                         $user = User::updateOrCreate(
                             ['email' => $programRole->email],
                             [
                                 'name' => $programRole->username,
                                 'password' => $programRole->password, // Already hashed
-                                'role' => $programRole->role_name ?? 'program-user',
-                                'program_id' => $programRole->program_id,
+                                'role' => $userRole,
+                                'program_id' => $programRole->program_id, // Will be null for system roles
                                 'status' => 'active'
                             ]
                         );
-                        \Log::info('User synced from program_roles', ['email' => $user->email]);
+                        \Log::info('User synced from program_roles', ['email' => $user->email, 'role' => $userRole, 'program_id' => $programRole->program_id]);
                     }
                 }
             }
@@ -199,25 +207,43 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // Get services/permissions for program roles
+        // Get services/permissions for program roles and system roles
         $services = [];
+        $allowedProgramIds = null; // For system users with program restrictions
         
-        // First, check user's default_services (set when user is created)
-        if ($user->default_services) {
-            $services = $user->default_services;
-        }
+        // Check program_roles table for both system roles (program_id = null) and program roles
+        $programRole = DB::table('program_roles')
+            ->where('email', $user->email)
+            ->where(function($query) use ($user) {
+                // Match system roles (program_id = null) OR match specific program
+                $query->whereNull('program_id')
+                      ->orWhere('program_id', $user->program_id);
+            })
+            ->first();
         
-        // For custom program roles, override with role-specific services
-        if ($user->program_id) {
-            $programRole = DB::table('program_roles')
-                ->where('email', $user->email)
-                ->where('program_id', $user->program_id)
-                ->first();
-            
-            if ($programRole && $programRole->services) {
-                $roleServices = json_decode($programRole->services, true) ?? [];
-                // Merge with default services (role services take precedence)
+        if ($programRole && $programRole->services) {
+            $roleServices = json_decode($programRole->services, true) ?? [];
+            // For system-user and program-user roles, ONLY use services from program_roles
+            // (don't merge with default_services)
+            if ($user->role === 'system-user' || $user->role === 'program-user') {
+                $services = $roleServices;
+                
+                // For system users, also get allowed_program_ids
+                if ($user->role === 'system-user' && isset($programRole->allowed_program_ids)) {
+                    $allowedProgramIds = json_decode($programRole->allowed_program_ids, true);
+                }
+            } else {
+                // For other roles, use default_services as base if available
+                if ($user->default_services) {
+                    $services = $user->default_services;
+                }
+                // Merge with role services (role services take precedence)
                 $services = array_unique(array_merge($services, $roleServices));
+            }
+        } else {
+            // No program role found, use default_services if available
+            if ($user->default_services) {
+                $services = $user->default_services;
             }
         }
 
@@ -240,6 +266,7 @@ class AuthController extends Controller
                 'preferences' => $user->preferences,
                 'services' => $services, // Add services for permission checks
                 'defaultServices' => $user->default_services, // Original default services for reference
+                'allowedProgramIds' => $allowedProgramIds, // For system users with program restrictions
             ]
         ]);
     }

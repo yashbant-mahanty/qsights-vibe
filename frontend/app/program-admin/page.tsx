@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import ProgramAdminLayout from "@/components/program-admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
@@ -21,6 +22,7 @@ import {
 import { activitiesApi, participantsApi, programsApi } from "@/lib/api";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from "@/components/ui/toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Language color mappings (moved outside component to avoid initialization issues)
 const languageColors: { [key: string]: string } = {
@@ -43,6 +45,8 @@ interface UserData {
 }
 
 export default function ProgramAdminDashboard() {
+  const router = useRouter();
+  const { currentUser: authUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [participants, setParticipants] = useState<any[]>([]);
@@ -78,28 +82,26 @@ export default function ProgramAdminDashboard() {
     try {
       setLoading(true);
       
-      // Get current user
-      const userResponse = await fetch('/api/auth/me');
-      if (!userResponse.ok) {
-        window.location.href = '/login';
+      // Use AuthContext user
+      if (!authUser) {
+        router.push('/login');
         return;
       }
       
-      const userData = await userResponse.json();
-      setCurrentUser(userData.user);
+      setCurrentUser(authUser as UserData);
       
       // CRITICAL: Load ONLY programs for the user's assigned programId
       try {
-        const programsData = userData.user.programId 
-          ? await programsApi.getAll({ program_id: userData.user.programId })
+        const programsData = authUser.programId 
+          ? await programsApi.getAll({ program_id: authUser.programId })
           : await programsApi.getAll();
         setPrograms(programsData);
-        console.log('[PROGRAM-ADMIN] Loaded programs for programId:', userData.user.programId, '- Count:', programsData.length);
+        console.log('[PROGRAM-ADMIN] Loaded programs for programId:', authUser.programId, '- Count:', programsData.length);
       } catch (err) {
         console.error('Error loading programs:', err);
       }
       
-      if (!userData.user.programId && !userData.user.organizationId) {
+      if (!authUser.programId && !authUser.organizationId) {
         console.error('Program Admin has no program or organization assigned');
         setLoading(false);
         return;
@@ -378,7 +380,7 @@ export default function ProgramAdminDashboard() {
               className="flex items-center gap-2 px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan-dark disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Bell className="w-4 h-4" />
-              {sendingReminder ? "Scheduling..." : "Send Reminder"}
+              {sendingReminder ? "Scheduling..." : "Set Reminder"}
             </button>
           </div>
         </div>
@@ -711,9 +713,9 @@ export default function ProgramAdminDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <button className="flex flex-col items-center gap-3 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                   <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
-                    <Mail className="w-6 h-6 text-white" />
+                    <Bell className="w-6 h-6 text-white" />
                   </div>
-                  <span className="text-sm font-medium text-gray-900">Send Reminder</span>
+                  <span className="text-sm font-medium text-gray-900">Set Reminder</span>
                 </button>
                 <button className="flex flex-col items-center gap-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
                   <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">

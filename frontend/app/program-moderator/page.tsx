@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import ProgramAdminLayout from "@/components/program-admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
@@ -20,6 +21,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { activitiesApi, participantsApi } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface UserData {
   userId: string;
@@ -54,6 +56,8 @@ function getLanguageBadgeColor(code: string): string {
 }
 
 export default function ProgramModeratorDashboard() {
+  const router = useRouter();
+  const { currentUser: authUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [participants, setParticipants] = useState<any[]>([]);
@@ -107,17 +111,15 @@ export default function ProgramModeratorDashboard() {
     try {
       setLoading(true);
       
-      // Get current user
-      const userResponse = await fetch('/api/auth/me');
-      if (!userResponse.ok) {
-        window.location.href = '/login';
+      // Use AuthContext user
+      if (!authUser) {
+        router.push('/login');
         return;
       }
       
-      const userData = await userResponse.json();
-      setCurrentUser(userData.user);
+      setCurrentUser(authUser as UserData);
       
-      if (!userData.user.programId) {
+      if (!authUser.programId) {
         console.error('Program Moderator has no program assigned');
         setLoading(false);
         return;
@@ -125,8 +127,8 @@ export default function ProgramModeratorDashboard() {
 
       // Fetch data filtered by program
       const [participantsData, activitiesData] = await Promise.all([
-        participantsApi.getAll({ program_id: userData.user.programId }).catch(() => []),
-        activitiesApi.getAll({ program_id: userData.user.programId }).catch(() => []),
+        participantsApi.getAll({ program_id: authUser.programId }).catch(() => []),
+        activitiesApi.getAll({ program_id: authUser.programId }).catch(() => []),
       ]);
 
       // Transform activities to include UI properties
@@ -240,16 +242,6 @@ export default function ProgramModeratorDashboard() {
     medium: "bg-yellow-100 text-yellow-700",
     low: "bg-gray-100 text-gray-700",
   };
-
-  if (loading) {
-    return (
-      <ProgramAdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qsights-blue"></div>
-        </div>
-      </ProgramAdminLayout>
-    );
-  }
 
   return (
     <ProgramAdminLayout>

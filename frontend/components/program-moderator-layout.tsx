@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { handleLogout } from "@/lib/logout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -143,7 +144,7 @@ export default function ProgramModeratorLayout({ children }: ProgramModeratorLay
               ? pathname === item.href
               : (pathname === item.href || pathname.startsWith(item.href + '/'));
             return (
-              <a
+              <Link
                 key={index}
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
@@ -159,7 +160,7 @@ export default function ProgramModeratorLayout({ children }: ProgramModeratorLay
                 {sidebarOpen && (
                   <span className="text-sm font-medium">{item.label}</span>
                 )}
-              </a>
+              </Link>
             );
           })}
         </nav>

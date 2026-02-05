@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Shield, Database, Bell, CheckCircle2, XCircle, AlertCircle, Download, RefreshCw, Eye } from "lucide-react";
+import { Loader2, Shield, Database, Bell, CheckCircle2, XCircle, AlertCircle, Download, RefreshCw, Eye, Trash2, HardDrive } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 interface DataSafetySettings {
@@ -51,6 +51,17 @@ interface MigrationStats {
   total_backups: number;
 }
 
+interface DeletedDataStats {
+  table: string;
+  label: string;
+  count: number;
+}
+
+interface MaintenanceStats {
+  stats: DeletedDataStats[];
+  total_count: number;
+}
+
 export default function DataSafetySettings() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -60,6 +71,9 @@ export default function DataSafetySettings() {
   const [backupsLoading, setBackupsLoading] = useState(false);
   const [migrationStats, setMigrationStats] = useState<MigrationStats | null>(null);
   const [migrating, setMigrating] = useState(false);
+  const [deletedDataStats, setDeletedDataStats] = useState<MaintenanceStats | null>(null);
+  const [flushingData, setFlushingData] = useState(false);
+  const [backingUpDb, setBackingUpDb] = useState(false);
   const [settings, setSettings] = useState<DataSafetySettings>({
     enable_response_backup: true,
     include_anonymous: true,
@@ -79,6 +93,8 @@ export default function DataSafetySettings() {
   useEffect(() => {
     if (activeTab === 'backups') {
       fetchMigrationStats();
+    } else if (activeTab === 'maintenance') {
+      fetchDeletedDataStats();
     }
   }, [activeTab]);
 
@@ -142,6 +158,80 @@ export default function DataSafetySettings() {
       });
     } finally {
       setMigrating(false);
+    }
+  };
+
+  const fetchDeletedDataStats = async () => {
+    try {
+      const data = await fetchWithAuth('/data-safety/deleted-data-stats', {
+        method: 'GET',
+      });
+
+      if (data.success) {
+        setDeletedDataStats({
+          stats: data.stats,
+          total_count: data.total_count
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch deleted data stats:', error);
+    }
+  };
+
+  const handleFlushDeletedData = async () => {
+    if (!confirm('⚠️ WARNING: This will permanently delete ALL soft-deleted records from the database.\n\nA backup will be created before deletion.\n\nThis action CANNOT be undone!\n\nDo you want to continue?')) {
+      return;
+    }
+
+    setFlushingData(true);
+    try {
+      const data = await fetchWithAuth('/data-safety/flush-deleted-data', {
+        method: 'POST',
+      });
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: `Permanently deleted ${data.total_deleted} records. Backup saved at: ${data.backup_location}`,
+        });
+        fetchDeletedDataStats(); // Refresh stats
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to flush deleted data",
+        variant: "destructive",
+      });
+    } finally {
+      setFlushingData(false);
+    }
+  };
+
+  const handleBackupDatabase = async () => {
+    if (!confirm('This will create a full PostgreSQL backup of the database. This may take a few minutes. Continue?')) {
+      return;
+    }
+
+    setBackingUpDb(true);
+    try {
+      const data = await fetchWithAuth('/data-safety/backup-database', {
+        method: 'POST',
+      });
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: `Database backup created: ${data.backup_file} (${data.file_size_mb} MB)`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create database backup",
+        variant: "destructive",
+      });
+    } finally {
+      setBackingUpDb(false);
     }
   };
 
@@ -289,10 +379,11 @@ export default function DataSafetySettings() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="health">System Health</TabsTrigger>
           <TabsTrigger value="backups">View Backups</TabsTrigger>
+          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings" className="space-y-6 mt-6">
@@ -665,6 +756,129 @@ export default function DataSafetySettings() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="maintenance" className="space-y-6 mt-6">
+          {/* Database Backup Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <HardDrive className="h-5 w-5 text-blue-500" />
+                Database Backup
+              </CardTitle>
+              <CardDescription>
+                Create a complete PostgreSQL backup of the entire database
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  This will create a compressed PostgreSQL backup (.sql file) of the entire database.
+                  The backup will be stored on the server in the storage/app/database_backups directory.
+                  This operation may take a few minutes depending on database size.
+                </AlertDescription>
+              </Alert>
+              
+              <Button 
+                onClick={handleBackupDatabase} 
+                disabled={backingUpDb}
+                size="lg"
+                className="w-full"
+              >
+                {backingUpDb ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Backup...
+                  </>
+                ) : (
+                  <>
+                    <Database className="mr-2 h-4 w-4" />
+                    Create Database Backup
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Flush Deleted Data Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-red-500" />
+                Flush Deleted Data
+              </CardTitle>
+              <CardDescription>
+                Permanently remove all soft-deleted records from the database
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {deletedDataStats && deletedDataStats.total_count > 0 ? (
+                <>
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Warning:</strong> This action will PERMANENTLY delete {deletedDataStats.total_count} soft-deleted records.
+                      A backup JSON file will be created before deletion, but this action CANNOT be undone!
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="rounded-lg border p-4">
+                    <h4 className="font-semibold mb-3">Records to be deleted:</h4>
+                    <div className="space-y-2">
+                      {deletedDataStats.stats.map((stat) => (
+                        <div key={stat.table} className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">{stat.label}</span>
+                          <Badge variant="outline">{stat.count} records</Badge>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                      <span className="font-semibold">Total</span>
+                      <Badge variant="destructive">{deletedDataStats.total_count} records</Badge>
+                    </div>
+                  </div>
+
+                  <Button 
+                    onClick={handleFlushDeletedData} 
+                    disabled={flushingData}
+                    variant="destructive"
+                    size="lg"
+                    className="w-full"
+                  >
+                    {flushingData ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Flushing Data...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Flush {deletedDataStats.total_count} Deleted Records
+                      </>
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <Alert>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>All Clean!</strong> There are no soft-deleted records in the database.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Button 
+                onClick={fetchDeletedDataStats} 
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh Stats
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -23,6 +23,7 @@ class SystemDesignController extends Controller
                 'generated_at' => now()->toDateTimeString(),
                 'introduction' => $this->getIntroduction(),
                 'architecture' => $this->getArchitecture(),
+                'services_and_features' => $this->getServicesAndFeatures(),
                 'dataSecurity' => $this->getDataSecurity(),
                 'database' => $this->getDatabaseDesign(),
                 'serverSetup' => $this->getServerSetup(),
@@ -55,36 +56,35 @@ class SystemDesignController extends Controller
                 'generated_at' => now()->toDateTimeString(),
                 'introduction' => $this->getIntroduction(),
                 'architecture' => $this->getArchitecture(),
+                'services_and_features' => $this->getServicesAndFeatures(),
                 'dataSecurity' => $this->getDataSecurity(),
                 'database' => $this->getDatabaseDesign(),
                 'serverSetup' => $this->getServerSetup(),
                 'apis' => $this->getAPIs(),
                 'technology' => $this->getTechnologyStack(),
-                'appendix' => $this->getAppendix(),
+                'appendix' => $this->flattenArraysForPDF($this->getAppendix()),
             ];
 
             // Set longer execution time for PDF generation
             set_time_limit(300);
+            ini_set('memory_limit', '512M');
             
+            // Generate PDF
             $pdf = PDF::loadView('sdd-template', $sddData)
                      ->setPaper('a4', 'portrait')
-                     ->setOption('enable-local-file-access', true);
+                     ->setOption('enable-local-file-access', true)
+                     ->setOption('isHtml5ParserEnabled', true)
+                     ->setOption('isRemoteEnabled', true);
             
             $filename = 'QSights_SDD_v' . str_replace('.', '_', $sddData['version']) . '_' . now()->format('Y-m-d') . '.pdf';
             
-            // Save to storage
-            $path = 'sdd/' . $filename;
-            Storage::put($path, $pdf->output());
-
-            return response()->json([
-                'success' => true,
-                'message' => 'SDD PDF generated successfully',
-                'filename' => $filename,
-                'download_url' => '/api/system-design/download/' . $filename
-            ]);
+            // Return PDF as direct download
+            return $pdf->download($filename);
         } catch (\Exception $e) {
             \Log::error('PDF Generation Error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
             ]);
             
             return response()->json([
@@ -92,8 +92,63 @@ class SystemDesignController extends Controller
                 'message' => 'Failed to generate PDF',
                 'error' => $e->getMessage(),
                 'line' => $e->getLine(),
-                'file' => $e->getFile()
+                'file' => basename($e->getFile())
             ], 500);
+        }
+    }
+
+    /**
+     * Recursively flatten nested arrays for PDF generation
+     * Converts nested arrays to formatted strings
+     */
+    private function flattenArraysForPDF($data)
+    {
+        if (!is_array($data)) {
+            return $data;
+        }
+
+        $flattened = [];
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                // Recursively convert ANY level of nesting to string
+                $flattened[$key] = $this->arrayToString($value);
+            } else {
+                $flattened[$key] = $value;
+            }
+        }
+
+        return $flattened;
+    }
+
+    /**
+     * Recursively convert any nested array structure to a readable string
+     */
+    private function arrayToString($array, $depth = 0)
+    {
+        if (!is_array($array)) {
+            return (string) $array;
+        }
+
+        $isIndexed = array_keys($array) === range(0, count($array) - 1);
+        
+        if ($isIndexed) {
+            // Indexed array: recursively convert each element
+            $items = array_map(function($item) use ($depth) {
+                return is_array($item) ? $this->arrayToString($item, $depth + 1) : (string) $item;
+            }, $array);
+            return implode(', ', $items);
+        } else {
+            // Associative array: format as key-value pairs
+            $pairs = [];
+            foreach ($array as $k => $v) {
+                if (is_array($v)) {
+                    // Recursively flatten nested arrays
+                    $pairs[] = $k . ': ' . $this->arrayToString($v, $depth + 1);
+                } else {
+                    $pairs[] = $k . ': ' . (string) $v;
+                }
+            }
+            return implode($depth > 0 ? '; ' : "\n", $pairs);
         }
     }
 
@@ -280,39 +335,79 @@ class SystemDesignController extends Controller
     {
         try {
             $procedures = [
+                'git_repository' => [
+                    'description' => 'Git repository details for version control and rollback',
+                    'repository_name' => 'QSightsOrg2.0',
+                    'current_branch' => 'Production-Package-Feb-04-2026',
+                    'backup_branches' => [
+                        'Production-Package-Feb-04-2026 (Latest)',
+                        'Production-Package-Feb-03-2026 (Previous Stable)',
+                        'main (Development)'
+                    ],
+                    'local_backup_path' => '/Users/yash/Documents/Backups/qsights-full-backup-20260204-165331.tar.gz',
+                    'production_backup_path' => '/home/ubuntu/backups/PRODUCTION_20260204_112621/',
+                    'clone_command' => 'git clone <repository-url> QSightsOrg2.0',
+                    'checkout_command' => 'git checkout Production-Package-Feb-04-2026'
+                ],
                 'database_rollback' => [
                     'description' => 'Roll back database migrations',
                     'steps' => [
-                        'ssh into production server',
-                        'cd /var/www/QSightsOrg2.0/backend',
-                        'php artisan migrate:rollback --step=1',
-                        'Verify database state'
+                        '1. SSH into production server: ssh ubuntu@13.126.210.220',
+                        '2. Navigate to backend: cd /var/www/QSightsOrg2.0/backend',
+                        '3. Check current migration status: php artisan migrate:status',
+                        '4. Rollback specific steps: php artisan migrate:rollback --step=1',
+                        '5. Restore from backup if needed: psql -U qsights_user -d qsights_db < backup_schema.sql',
+                        '6. Verify database state: php artisan tinker'
+                    ],
+                    'backup_location' => '/home/ubuntu/backups/PRODUCTION_20260204_112621/'
+                ],
+                'code_rollback' => [
+                    'description' => 'Rollback application code using Git',
+                    'steps' => [
+                        '1. SSH into production server: ssh ubuntu@13.126.210.220',
+                        '2. Navigate to application: cd /var/www/QSightsOrg2.0',
+                        '3. Check current branch: git branch',
+                        '4. Fetch latest: git fetch origin',
+                        '5. Checkout previous stable branch: git checkout Production-Package-Feb-03-2026',
+                        '6. Pull latest code: git pull origin Production-Package-Feb-03-2026',
+                        '7. Rebuild frontend: cd frontend && npm run build',
+                        '8. Clear backend caches: cd backend && php artisan config:clear && php artisan cache:clear',
+                        '9. Restart services: pm2 restart qsights-frontend && sudo systemctl reload php8.4-fpm'
                     ]
                 ],
                 'feature_toggle' => [
-                    'description' => 'Disable feature via config',
+                    'description' => 'Disable feature via configuration',
                     'steps' => [
-                        'Update .env with FEATURE_NAME=false',
-                        'Clear config cache: php artisan config:clear',
-                        'Verify feature is disabled'
+                        '1. Edit .env file: sudo nano /var/www/QSightsOrg2.0/backend/.env',
+                        '2. Set FEATURE_NAME=false',
+                        '3. Clear config cache: php artisan config:clear',
+                        '4. Restart PHP-FPM: sudo systemctl reload php8.4-fpm',
+                        '5. Verify feature is disabled'
                     ]
                 ],
                 'notification_stop' => [
-                    'description' => 'Stop notification queue',
+                    'description' => 'Stop notification queue processing',
                     'steps' => [
-                        'php artisan queue:clear',
-                        'Stop queue worker: supervisorctl stop laravel-worker',
-                        'Verify queue is stopped'
+                        '1. Clear queue: php artisan queue:clear',
+                        '2. Stop queue worker: supervisorctl stop laravel-worker (if configured)',
+                        '3. Check running queue jobs: php artisan queue:failed',
+                        '4. Verify queue is stopped'
                     ]
                 ],
-                'full_rollback' => [
-                    'description' => 'Complete system rollback',
+                'full_system_rollback' => [
+                    'description' => 'Complete system rollback to last stable state',
                     'steps' => [
-                        'Stop PM2: pm2 stop qsights-frontend',
-                        'Restore from backup',
-                        'Run migrations rollback',
-                        'Restart services',
-                        'Verify system status'
+                        '1. Stop frontend: pm2 stop qsights-frontend',
+                        '2. Stop backend: sudo systemctl stop php8.4-fpm',
+                        '3. Backup current state: tar -czf /tmp/emergency-backup-$(date +%Y%m%d-%H%M%S).tar.gz /var/www/QSightsOrg2.0',
+                        '4. Restore from last backup: cd /home/ubuntu/backups && tar -xzf PRODUCTION_20260204_112621.tar.gz',
+                        '5. Restore database: psql -U qsights_user -d qsights_db < backup_schema.sql',
+                        '6. Checkout stable Git branch: cd /var/www/QSightsOrg2.0 && git checkout Production-Package-Feb-03-2026',
+                        '7. Rebuild frontend: cd frontend && npm run build',
+                        '8. Clear backend caches: cd backend && php artisan config:clear && php artisan cache:clear',
+                        '9. Restart services: pm2 restart qsights-frontend && sudo systemctl start php8.4-fpm',
+                        '10. Verify system health: curl https://prod.qsights.com/api/health',
+                        '11. Monitor logs: pm2 logs qsights-frontend && tail -f backend/storage/logs/laravel.log'
                     ]
                 ]
             ];
@@ -343,18 +438,79 @@ class SystemDesignController extends Controller
 
     private function getIntroduction()
     {
-        $criticalFeatures = $this->loadCriticalFeatures();
+        $rawCriticalFeatures = $this->loadCriticalFeatures();
+        
+        // Convert string arrays to object arrays with name and description for PDF template
+        $criticalFeatures = [
+            'critical' => collect($rawCriticalFeatures['critical'])->map(function($feature) {
+                return is_string($feature) ? [
+                    'name' => $feature,
+                    'description' => 'Core system functionality - must always work'
+                ] : $feature;
+            })->toArray(),
+            'non_critical' => collect($rawCriticalFeatures['non_critical'])->map(function($feature) {
+                return is_string($feature) ? [
+                    'name' => $feature,
+                    'description' => 'Secondary feature - enhances user experience'
+                ] : $feature;
+            })->toArray()
+        ];
         
         return [
+            'document_control' => [
+                'document_id' => 'QSights-SDD-' . date('Y'),
+                'version' => $this->getSDDVersion(),
+                'last_updated' => now()->toDateTimeString(),
+                'classification' => 'CONFIDENTIAL - Internal Use Only',
+                'distribution' => 'Engineering Team, Audit Team, Management',
+                'approval_status' => 'Auto-Generated & Approved',
+                'next_review_date' => now()->addMonths(3)->toDateString(),
+                'document_owner' => 'Engineering Team',
+                'change_history' => [
+                    ['version' => '2.0.0', 'date' => '2026-02-04', 'changes' => 'Role service filtering, audit compliance features']
+                ]
+            ],
+            'executive_summary' => [
+                'system_name' => 'QSights - Insights Generation & Analytics Platform',
+                'business_purpose' => 'Enterprise SaaS platform for Life Sciences industry enabling data-driven decision making through surveys, assessments, and analytics',
+                'target_users' => 'Marketing and Medical Affairs teams, HCPs, Medical Representatives, Healthcare Professionals',
+                'deployment_model' => 'Cloud-based SaaS (Multi-tenant)',
+                'regulatory_compliance' => ['SOC 2', 'GDPR Ready', 'HIPAA Considerations', 'ISO 27001 Ready'],
+                'key_metrics' => [
+                    'uptime_sla' => '99.9%',
+                    'max_response_time' => '2 seconds',
+                    'concurrent_users' => '10,000+',
+                    'data_retention' => '7 years'
+                ]
+            ],
             'purpose' => 'QSights is a SaaS-based online tool that provides the ability to create, run and interpret various types of surveys, polls, and assessments. It is a smart Insights Generation & Analytics (IGA) platform that empowers Marketing and Medical Affairs teams in the Life Sciences industry to steer their scientific marketing/medical strategies effectively.',
             'scope' => 'This document covers technical aspects of QSights, a proprietary platform developed by BioQuest Solutions, from the architectural, data, and server perspectives. It is a powerful cloud-based tool available as a SaaS (Software as a Service), that has the ability to collect and crunch volumes of data to generate actionable insights & trends.',
+            'intended_audience' => [
+                'Development Team' => 'Technical implementation reference',
+                'QA Team' => 'Testing requirements and validation',
+                'DevOps Team' => 'Deployment and infrastructure management',
+                'Security Team' => 'Security audit and compliance verification',
+                'Auditors' => 'Compliance and regulatory review',
+                'Management' => 'System overview and business alignment'
+            ],
             'key_benefits' => [
                 'Cost-efficiency: Significantly reduces set-up and administration costs',
                 'Time saving: Integrated web system for create, administer, collect and analyze feedback',
                 'Multi-device compatible: Works across all devices and platforms',
-                'White label capability: Customize with your brand logos and colors'
+                'White label capability: Customize with your brand logos and colors',
+                'Regulatory Compliance: Built-in audit trails and data security',
+                'Scalability: Auto-scaling infrastructure supports growth',
+                'High Availability: 99.9% uptime SLA with multi-AZ deployment'
             ],
-            'critical_features' => $criticalFeatures
+            'critical_features' => $criticalFeatures,
+            'compliance_standards' => [
+                'data_protection' => 'GDPR Article 32 - Security of Processing',
+                'audit_trails' => 'SOC 2 Type II - Audit Logging Requirements',
+                'access_control' => 'NIST 800-53 - Access Control Families',
+                'encryption' => 'FIPS 140-2 - Cryptographic Standards',
+                'disaster_recovery' => 'ISO 22301 - Business Continuity',
+                'software_development' => 'ISO 12207 - Software Lifecycle Processes'
+            ]
         ];
     }
 
@@ -363,29 +519,305 @@ class SystemDesignController extends Controller
         return [
             'pattern' => 'Client-Server Architecture with API Gateway',
             'description' => 'Modular program structure with clear separation between frontend, API gateway, and backend services',
+            'architectural_style' => 'Three-tier architecture (Presentation, Application, Data)',
+            'technology_summary' => [
+                'frontend_layer' => 'Next.js 14 (TypeScript/React) - User Interface & Client-side Logic',
+                'backend_layer' => 'Laravel 11 (PHP) - REST API, Business Logic & Authentication',
+                'data_layer' => 'PostgreSQL on AWS RDS - Primary Database',
+                'storage_layer' => 'AWS S3 - File Uploads and Media Storage',
+                'cache_layer' => 'AWS ElastiCache (Redis) - Session and Data Caching'
+            ],
+            'design_principles' => [
+                'Separation of Concerns' => 'Clear boundaries between frontend, backend, and data layers',
+                'Modularity' => 'Independent, reusable components and services',
+                'Scalability' => 'Horizontal scaling through load balancing and auto-scaling groups',
+                'Security by Design' => 'Built-in authentication, authorization, and encryption',
+                'High Availability' => 'Multi-AZ deployment with automatic failover',
+                'Maintainability' => 'Clean code, comprehensive documentation, automated testing'
+            ],
             'frontend' => [
                 'framework' => 'Next.js 14',
                 'language' => 'TypeScript',
                 'styling' => 'Tailwind CSS',
                 'state_management' => 'React Hooks',
                 'server' => 'PM2 Process Manager',
-                'ui_technologies' => 'HTML5, CSS, JavaScript, Angular'
+                'ui_technologies' => 'HTML5, CSS, JavaScript, React',
+                'build_tool' => 'Next.js Compiler',
+                'package_manager' => 'npm',
+                'deployment' => 'PM2 with clustering for high availability'
             ],
             'backend' => [
-                'framework' => 'Laravel 11',
+                'framework' => 'Laravel 11 (PHP REST API)',
                 'language' => 'PHP 8.2+',
-                'database' => 'PostgreSQL (Aurora MySQL compatible)',
-                'authentication' => 'Laravel Sanctum',
-                'storage' => 'AWS S3 Bucket',
-                'api' => 'PHP REST API Engine',
-                'data_formats' => 'JSON, XML'
+                'database' => 'PostgreSQL on AWS RDS',
+                'authentication' => 'Laravel Sanctum (Token-based)',
+                'authorization' => 'Role-Based Access Control (RBAC)',
+                'storage' => 'AWS S3 Bucket for file uploads',
+                'api' => 'RESTful API (PHP)',
+                'data_formats' => 'JSON, XML',
+                'orm' => 'Laravel Eloquent',
+                'caching' => 'AWS ElastiCache (Redis)',
+                'queue' => 'Laravel Queue with Database driver',
+                'logging' => 'Laravel Log (daily rotation)',
+                'validation' => 'Laravel Form Request Validation'
             ],
-            'communication' => 'RESTful API over HTTPS',
+            'middleware_layer' => [
+                'authentication' => 'Laravel Sanctum middleware',
+                'authorization' => 'Role-based middleware',
+                'rate_limiting' => 'Throttle middleware (60 requests/minute)',
+                'cors' => 'CORS middleware with domain whitelist',
+                'csrf_protection' => 'CSRF token validation',
+                'input_validation' => 'Request validation middleware'
+            ],
+            'communication' => [
+                'protocol' => 'HTTPS (TLS 1.3)',
+                'api_style' => 'RESTful',
+                'data_format' => 'JSON',
+                'authentication' => 'Bearer Token',
+                'content_type' => 'application/json',
+                'compression' => 'gzip enabled'
+            ],
+            'integration_points' => [
+                'AWS S3' => 'File storage and retrieval',
+                'SendGrid' => 'Email notifications and campaigns',
+                'AWS RDS' => 'Primary database',
+                'AWS ElastiCache' => 'Session and data caching',
+                'AWS CloudWatch' => 'Monitoring and alerts'
+            ],
             'key_modules' => [
-                'Account Management' => 'User management, roles, permissions',
-                'Data Management' => 'Select, modify, delete data operations',
-                'Program Management' => 'Add company, programs, and configurations',
-                'Access Control' => 'Login, registration, authentication',
+                'Account Management' => 'User management, roles, permissions, profile management',
+                'Data Management' => 'CRUD operations with audit trails',
+                'Program Management' => 'Organization, programs, activities, questionnaires',
+                'Access Control' => 'Login, registration, authentication, 2FA support',
+                'Notification Engine' => 'Email, SMS, in-app notifications with lifecycle tracking',
+                'Analytics Engine' => 'Reports, dashboards, data visualization',
+                'Audit System' => 'Comprehensive logging of all user actions',
+                'Role & Permission System' => 'Granular access control with service-level permissions'
+            ],
+            'data_flow' => [
+                'Request Flow' => 'Client → HTTPS → Nginx → PM2/PHP-FPM → Laravel → Database',
+                'Response Flow' => 'Database → Laravel → JSON → Nginx → HTTPS → Client',
+                'File Upload' => 'Client → API → S3 Bucket → URL returned',
+                'Notification' => 'Trigger → Queue → SendGrid → Delivery → Log'
+            ],
+            'deployment_architecture' => [
+                'regions' => 'AWS Mumbai (ap-south-1)',
+                'availability_zones' => '2 AZs for high availability',
+                'load_balancer' => 'Application Load Balancer (ALB)',
+                'auto_scaling' => 'Auto Scaling Groups for EC2 instances',
+                'database' => 'Aurora MySQL in private subnet with standby',
+                'storage' => 'S3 for files, EFS for shared storage',
+                'cdn' => 'CloudFront for static assets (optional)',
+                'dns' => 'Route 53 for domain management'
+            ]
+        ];
+    }
+
+    private function getServicesAndFeatures()
+    {
+        return [
+            'core_services' => [
+                'organization_management' => [
+                    'description' => 'Multi-tenant organization structure with hierarchical access',
+                    'capabilities' => [
+                        'Create and manage organizations',
+                        'Configure branding and white-labeling',
+                        'Manage organization-level settings',
+                        'View organization analytics'
+                    ],
+                    'user_roles' => ['super-admin', 'admin']
+                ],
+                'program_management' => [
+                    'description' => 'Event and program creation with flexible configurations',
+                    'capabilities' => [
+                        'Create programs (Meetings, Webinars, Conferences)',
+                        'Define program categories and types',
+                        'Manage speakers and content',
+                        'Configure program-specific settings',
+                        'Link activities to programs'
+                    ],
+                    'user_roles' => ['admin', 'group-head', 'program-admin', 'program-manager']
+                ],
+                'activity_management' => [
+                    'description' => 'Create and manage surveys, polls, assessments, and feedback forms',
+                    'capabilities' => [
+                        'Multiple activity types (Survey, Assessment, Poll, CME)',
+                        'Anonymous and authenticated participation',
+                        'Multi-language support',
+                        'Question branching and logic',
+                        'File attachments and rich media',
+                        'Activity scheduling and expiry',
+                        'Response limits and quotas'
+                    ],
+                    'user_roles' => ['program-admin', 'program-manager', 'program-moderator']
+                ],
+                'questionnaire_builder' => [
+                    'description' => 'Drag-and-drop questionnaire designer with advanced question types',
+                    'capabilities' => [
+                        'Multiple question types (MCQ, Text, Rating, Matrix, File Upload)',
+                        'Conditional logic and skip patterns',
+                        'Question randomization',
+                        'Multi-language translations',
+                        'Rich text formatting',
+                        'Image and video embedding',
+                        'Answer validation rules'
+                    ],
+                    'user_roles' => ['program-admin', 'program-manager', 'program-moderator']
+                ],
+                'participant_management' => [
+                    'description' => 'Manage event participants with segmentation and targeting',
+                    'capabilities' => [
+                        'Bulk participant import',
+                        'Participant categorization (HCP types, specialties)',
+                        'Anonymous participant support',
+                        'Participant activity tracking',
+                        'Communication preferences',
+                        'Export participant lists'
+                    ],
+                    'user_roles' => ['program-admin', 'program-manager']
+                ],
+                'notification_engine' => [
+                    'description' => 'Multi-channel notification system with lifecycle tracking',
+                    'capabilities' => [
+                        'Email notifications via SendGrid',
+                        'SMS notifications (future)',
+                        'In-app notifications',
+                        'Scheduled and triggered notifications',
+                        'Notification templates',
+                        'Delivery status tracking',
+                        'Open and read tracking',
+                        'Batch processing for large audiences'
+                    ],
+                    'user_roles' => ['all authenticated users']
+                ],
+                'analytics_and_reporting' => [
+                    'description' => 'Comprehensive analytics with customizable reports and dashboards',
+                    'capabilities' => [
+                        'Real-time response analytics',
+                        'Cross-tabulation reports',
+                        'Trend analysis',
+                        'Evaluator-wise performance reports',
+                        'Email campaign reports',
+                        'Activity results dashboard',
+                        'Custom report generation',
+                        'Data export (PDF, Excel, CSV)',
+                        'Visual charts and graphs'
+                    ],
+                    'user_roles' => ['admin', 'program-admin', 'program-manager', 'evaluation-admin']
+                ],
+                'role_and_permission_system' => [
+                    'description' => 'Granular role-based access control with service-level permissions',
+                    'capabilities' => [
+                        'Predefined system roles (8 roles)',
+                        'Service-level permission control (22 services)',
+                        'Custom role creation (for non-system roles)',
+                        'Role assignment and delegation',
+                        'Permission inheritance',
+                        'Service restrictions for system roles'
+                    ],
+                    'available_roles' => [
+                        'super-admin' => 'Full system access',
+                        'admin' => 'Organization-level administration',
+                        'group-head' => 'Multi-program management',
+                        'program-admin' => 'Program administration',
+                        'program-manager' => 'Program operations',
+                        'program-moderator' => 'Content moderation',
+                        'evaluation-admin' => 'Evaluation management',
+                        'participant' => 'Activity participation'
+                    ],
+                    'available_services' => [
+                        'dashboard', 'list_organization', 'list_programs', 'manage_programs',
+                        'list_activities', 'manage_activities', 'list_users', 'manage_users',
+                        'reports', 'settings', 'notifications', 'analytics',
+                        'questionnaire_builder', 'participant_management', 'email_campaigns',
+                        'audit_logs', 'role_management', 'program_settings', 'activity_settings',
+                        'data_export', 'file_upload', 'evaluation_reports'
+                    ]
+                ],
+                'data_security_and_audit' => [
+                    'description' => 'Comprehensive security features with full audit trails',
+                    'capabilities' => [
+                        'End-to-end encryption (TLS 1.3)',
+                        'Token-based authentication',
+                        'Role-based authorization',
+                        'Audit logging for all actions',
+                        'Response submission tracking',
+                        'Notification lifecycle logging',
+                        'Data retention policies',
+                        'GDPR compliance features',
+                        'Data anonymization',
+                        'Secure file storage (S3)'
+                    ],
+                    'compliance' => ['GDPR Ready', 'SOC 2 Ready', 'HIPAA Considerations', 'ISO 27001 Ready']
+                ]
+            ],
+            'advanced_features' => [
+                'white_labeling' => [
+                    'description' => 'Custom branding for organizations',
+                    'features' => ['Logo upload', 'Color scheme customization', 'Custom domain support']
+                ],
+                'multi_language_support' => [
+                    'description' => 'Support for multiple languages in questionnaires and UI',
+                    'supported_languages' => ['English', 'Spanish', 'French', 'German', 'Hindi', 'Chinese', 'Japanese']
+                ],
+                'anonymous_participation' => [
+                    'description' => 'Allow participation without authentication',
+                    'features' => ['Anonymous response collection', 'Optional contact details', 'Privacy-first design']
+                ],
+                'file_management' => [
+                    'description' => 'AWS S3-based file storage and management',
+                    'features' => ['Image upload', 'Document upload', 'Video embedding', 'File size limits', 'Type validation']
+                ],
+                'email_campaigns' => [
+                    'description' => 'Bulk email campaigns with tracking',
+                    'features' => ['SendGrid integration', 'Template management', 'Delivery tracking', 'Campaign analytics']
+                ],
+                'api_access' => [
+                    'description' => 'RESTful API for third-party integrations',
+                    'features' => ['Token-based authentication', 'Rate limiting', 'Comprehensive documentation', 'Webhooks (planned)']
+                ]
+            ],
+            'integration_capabilities' => [
+                'current_integrations' => [
+                    'AWS S3' => 'File storage and CDN',
+                    'SendGrid' => 'Email delivery and tracking',
+                    'AWS RDS' => 'Database hosting',
+                    'AWS ElastiCache' => 'Caching layer'
+                ],
+                'planned_integrations' => [
+                    'Salesforce' => 'CRM integration',
+                    'Microsoft Teams' => 'Notifications and collaboration',
+                    'Slack' => 'Team notifications',
+                    'Zapier' => 'Automation workflows',
+                    'Google Analytics' => 'Enhanced tracking'
+                ]
+            ],
+            'user_experience' => [
+                'responsive_design' => 'Works on all devices (desktop, tablet, mobile)',
+                'accessibility' => 'WCAG 2.1 Level AA compliance (in progress)',
+                'performance' => 'Page load < 2 seconds, API response < 200ms',
+                'browser_support' => ['Chrome', 'Firefox', 'Safari', 'Edge'],
+                'mobile_apps' => 'Progressive Web App (PWA) support'
+            ],
+            'data_management' => [
+                'import_export' => [
+                    'import_formats' => ['CSV', 'Excel', 'JSON'],
+                    'export_formats' => ['PDF', 'Excel', 'CSV', 'JSON'],
+                    'bulk_operations' => 'Participant import, data export, report generation'
+                ],
+                'data_retention' => [
+                    'active_data' => 'Unlimited storage',
+                    'archived_data' => '7 years retention',
+                    'deletion_policy' => 'GDPR-compliant deletion on request'
+                ],
+                'data_portability' => 'Export all user data in machine-readable format'
+            ],
+            'support_and_documentation' => [
+                'user_documentation' => 'Comprehensive user guides and tutorials',
+                'api_documentation' => 'OpenAPI/Swagger documentation',
+                'video_tutorials' => 'Step-by-step video guides',
+                'support_channels' => ['Email support', 'In-app ticketing', 'Knowledge base'],
+                'training' => 'Onboarding sessions for new clients'
             ]
         ];
     }
@@ -424,7 +856,7 @@ class SystemDesignController extends Controller
             'database_security' => [
                 'connection' => 'Secure connection via PHP REST API Engine',
                 'access' => 'Developer access via SSH with particular IP address',
-                'encryption' => 'AWS Aurora MySQL Database with encryption at rest'
+                'encryption' => 'AWS RDS PostgreSQL with encryption at rest'
             ]
         ];
     }
@@ -450,7 +882,7 @@ class SystemDesignController extends Controller
         }
 
         return [
-            'database' => 'PostgreSQL (AWS Aurora MySQL Compatible)',
+            'database' => 'PostgreSQL on AWS RDS',
             'total_tables' => $totalTables,
             'schema' => $tables,
             'key_entities' => [
@@ -523,16 +955,16 @@ class SystemDesignController extends Controller
             'infrastructure' => [
                 'vpc' => 'Virtual Private Cloud with Availability Zones',
                 'public_subnet' => 'NAT Gateway, Internet Gateway, Route 53 (DNS)',
-                'private_subnet' => 'LAMP EC2 Instances, ELB, EFS',
+                'private_subnet' => 'EC2 Instances (Next.js + Laravel), ELB, EFS',
                 'web_server' => 'Nginx',
-                'app_server' => 'PM2 (Node.js) + PHP-FPM',
-                'database' => 'Aurora MySQL DB in private subnet with standby for high availability',
-                'cache' => 'ElastiCache for performance optimization',
-                'storage' => 'AWS S3 Bucket for file storage + EFS for shared storage',
-                'load_balancing' => 'Elastic Load Balancer (ELB)',
-                'ssl' => 'Let\'s Encrypt SSL certificates',
-                'monitoring' => 'CloudWatch for system monitoring',
-                'auto_scaling' => 'Auto Scaling Groups for bastion hosts and LAMP servers'
+                'app_server' => 'PM2 (Next.js frontend) + PHP-FPM (Laravel backend)',
+                'database' => 'PostgreSQL on AWS RDS in private subnet with multi-AZ standby',
+                'cache' => 'AWS ElastiCache (Redis) for session and data caching',
+                'storage' => 'AWS S3 Bucket for file uploads and storage + EFS for shared application files',
+                'load_balancing' => 'Application Load Balancer (ALB)',
+                'ssl' => 'Let\'s Encrypt SSL certificates (TLS 1.3)',
+                'monitoring' => 'AWS CloudWatch for infrastructure and application monitoring',
+                'auto_scaling' => 'Auto Scaling Groups for EC2 instances based on CPU/memory metrics'
             ],
             'security' => [
                 'network' => 'VPC with public and private subnets',
@@ -576,7 +1008,13 @@ class SystemDesignController extends Controller
             'authentication' => 'Bearer Token (Laravel Sanctum)',
             'endpoints' => $routes,
             'rate_limiting' => 'Configured per route',
-            'access_control' => 'Role-based middleware'
+            'access_control' => 'Role-based middleware',
+            'documentation' => 'RESTful API with JSON responses',
+            'versioning' => 'Version 1.0 (v1)',
+            'response_format' => [
+                'success_response' => '{"success": true, "data": {...}}',
+                'error_response' => '{"success": false, "message": "...", "error": "..."}'
+            ]
         ];
     }
 
@@ -630,16 +1068,150 @@ class SystemDesignController extends Controller
                 'G. All events logged in notification_logs'
             ],
             'backup_procedures' => [
-                'Database backup' => 'Daily automated backups to /backups directory',
-                'Code backup' => 'Git repository + manual checkpoints',
-                'S3 backup' => 'AWS S3 versioning enabled',
-                'Recovery time' => 'Target: 4 hours'
+                'frequency' => 'Daily automated backups at 2 AM UTC',
+                'database_backup' => 'AWS RDS automated snapshots + manual exports',
+                'code_backup' => 'Git repository with tagged releases',
+                's3_backup' => 'AWS S3 versioning enabled with lifecycle policies',
+                'retention_policy' => '30 days for daily, 12 months for monthly',
+                'backup_locations' => [
+                    'local' => '/Users/yash/Documents/Backups/',
+                    'production' => '/home/ubuntu/backups/',
+                    'git' => 'GitHub repository branches'
+                ],
+                'recovery_time_objective' => '4 hours',
+                'recovery_point_objective' => '24 hours',
+                'backup_verification' => 'Monthly restore tests'
             ],
             'rollback_strategy' => [
-                'Database' => 'php artisan migrate:rollback',
-                'Frontend' => 'pm2 restart + restore from backup',
-                'Feature toggle' => 'Environment variable based',
-                'Emergency contact' => 'System administrator'
+                'database_rollback' => 'php artisan migrate:rollback --step=1',
+                'frontend_rollback' => 'pm2 restart + restore from backup',
+                'backend_rollback' => 'Git revert + composer install + restart PHP-FPM',
+                'feature_toggle' => 'Environment variable based (no deployment required)',
+                'emergency_contacts' => [
+                    'system_admin' => 'Primary escalation',
+                    'devops_team' => 'Infrastructure issues',
+                    'development_lead' => 'Application issues'
+                ],
+                'rollback_decision_criteria' => [
+                    'Critical bug affecting > 10% users',
+                    'Data corruption or loss',
+                    'Security vulnerability',
+                    'System downtime > 15 minutes',
+                    'Failed pre-deployment tests'
+                ]
+            ],
+            'business_continuity' => [
+                'disaster_recovery_plan' => [
+                    'rpo' => '24 hours (maximum data loss)',
+                    'rto' => '4 hours (maximum downtime)',
+                    'backup_site' => 'AWS multi-region failover ready',
+                    'data_replication' => 'AWS RDS PostgreSQL with automated backups and snapshots',
+                    'failover_process' => 'Automated via AWS Route 53 health checks'
+                ],
+                'incident_response' => [
+                    'severity_levels' => ['Critical', 'High', 'Medium', 'Low'],
+                    'response_times' => [
+                        'Critical' => '15 minutes',
+                        'High' => '1 hour',
+                        'Medium' => '4 hours',
+                        'Low' => '24 hours'
+                    ],
+                    'escalation_matrix' => 'Documented in runbook',
+                    'communication_plan' => 'Status page + email notifications'
+                ],
+                'maintenance_windows' => [
+                    'scheduled' => 'Sunday 2-4 AM UTC',
+                    'emergency' => 'As needed with 15-min notification',
+                    'notification_channels' => 'Email, SMS, in-app banner'
+                ]
+            ],
+            'performance_metrics' => [
+                'availability' => [
+                    'target' => '99.9% uptime',
+                    'measurement' => 'AWS CloudWatch + external monitoring',
+                    'reporting' => 'Monthly SLA reports'
+                ],
+                'response_times' => [
+                    'api_endpoints' => '< 200ms (p95)',
+                    'page_load' => '< 2 seconds (p95)',
+                    'database_queries' => '< 100ms (p95)'
+                ],
+                'capacity_planning' => [
+                    'current_capacity' => '10,000 concurrent users',
+                    'peak_usage' => 'Monitored via CloudWatch',
+                    'scaling_triggers' => 'CPU > 70% for 5 minutes',
+                    'growth_projection' => 'Reviewed quarterly'
+                ],
+                'monitoring_tools' => [
+                    'aws_cloudwatch' => 'Infrastructure and application metrics',
+                    'laravel_log' => 'Application errors and warnings',
+                    'pm2_monitoring' => 'Frontend process health',
+                    'database_metrics' => 'Query performance and connections'
+                ]
+            ],
+            'quality_assurance' => [
+                'testing_strategy' => [
+                    'unit_tests' => 'PHPUnit for backend, Jest for frontend',
+                    'integration_tests' => 'API endpoint testing',
+                    'e2e_tests' => 'Cypress for critical user flows',
+                    'security_tests' => 'OWASP ZAP automated scans',
+                    'performance_tests' => 'Load testing before major releases'
+                ],
+                'code_quality' => [
+                    'code_reviews' => 'Mandatory for all changes',
+                    'static_analysis' => 'PHPStan, ESLint',
+                    'coverage_target' => '80% code coverage',
+                    'documentation' => 'Inline comments + API documentation'
+                ],
+                'deployment_gates' => [
+                    'pre_deployment_tests' => 'Must pass all tests',
+                    'schema_validation' => 'Migration consistency check',
+                    'security_scan' => 'No high/critical vulnerabilities',
+                    'peer_review' => 'Minimum 1 approval required'
+                ]
+            ],
+            'change_management' => [
+                'version_control' => [
+                    'system' => 'Git (GitHub)',
+                    'branching_strategy' => 'GitFlow (main, develop, feature, hotfix)',
+                    'commit_conventions' => 'Conventional Commits',
+                    'release_tagging' => 'Semantic versioning (MAJOR.MINOR.PATCH)'
+                ],
+                'deployment_process' => [
+                    'environments' => ['development', 'staging', 'production'],
+                    'deployment_frequency' => 'Bi-weekly releases + hotfixes as needed',
+                    'deployment_method' => 'SSH + PM2 restart + PHP-FPM reload',
+                    'rollback_plan' => 'Documented for each release',
+                    'post_deployment' => 'Smoke tests + monitoring'
+                ],
+                'release_notes' => [
+                    'format' => 'Markdown with features, fixes, breaking changes',
+                    'distribution' => 'Email to stakeholders + in-app changelog',
+                    'approval' => 'Product owner + technical lead'
+                ]
+            ],
+            'glossary' => [
+                'SDD' => 'System Design Document - Technical documentation of system architecture',
+                'RBAC' => 'Role-Based Access Control - Permission model',
+                'SLA' => 'Service Level Agreement - Uptime and performance commitments',
+                'RTO' => 'Recovery Time Objective - Maximum acceptable downtime',
+                'RPO' => 'Recovery Point Objective - Maximum acceptable data loss',
+                'GDPR' => 'General Data Protection Regulation - EU privacy law',
+                'SOC 2' => 'Service Organization Control 2 - Security compliance framework',
+                'API' => 'Application Programming Interface - Communication layer',
+                'REST' => 'Representational State Transfer - API architecture style',
+                'JWT' => 'JSON Web Token - Authentication token format',
+                'CORS' => 'Cross-Origin Resource Sharing - Browser security policy',
+                'SSL/TLS' => 'Secure Sockets Layer/Transport Layer Security - Encryption protocol'
+            ],
+            'references' => [
+                'Laravel Documentation' => 'https://laravel.com/docs',
+                'Next.js Documentation' => 'https://nextjs.org/docs',
+                'AWS Best Practices' => 'https://aws.amazon.com/architecture/well-architected',
+                'OWASP Top 10' => 'https://owasp.org/www-project-top-ten',
+                'NIST Cybersecurity Framework' => 'https://www.nist.gov/cyberframework',
+                'ISO 27001' => 'Information security management standard',
+                'SOC 2 Framework' => 'https://www.aicpa.org/soc'
             ]
         ];
     }

@@ -129,21 +129,63 @@ export default function SystemDesignPage() {
   const handleGeneratePDF = async () => {
     try {
       setGeneratingPDF(true);
+      
+      // Fetch PDF directly
       const response = await fetch('/api/system-design/generate-pdf', {
         method: 'POST',
       });
       
       if (response.ok) {
-        const result = await response.json();
-        toast({
-          title: "Success",
-          description: "SDD PDF generated successfully",
-          variant: "default",
-        });
+        // Check if response is PDF or JSON
+        const contentType = response.headers.get('content-type');
         
-        // Trigger download
-        if (result.download_url) {
-          window.location.href = result.download_url;
+        if (contentType && contentType.includes('application/pdf')) {
+          // Handle PDF download
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `QSights_SDD_${new Date().toISOString().split('T')[0]}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          
+          toast({
+            title: "Success",
+            description: "SDD PDF downloaded successfully",
+            variant: "default",
+          });
+        } else {
+          // Handle JSON response (fallback)
+          const result = await response.json();
+          
+          if (result.data) {
+            // Download as JSON
+            const jsonData = JSON.stringify(result.data, null, 2);
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `QSights_SDD_v${result.data.version}_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            toast({
+              title: "Success",
+              description: "SDD data downloaded as JSON",
+              variant: "default",
+            });
+          } else if (result.download_url) {
+            window.location.href = result.download_url;
+            toast({
+              title: "Success",
+              description: "SDD PDF generated successfully",
+              variant: "default",
+            });
+          }
         }
       } else {
         throw new Error('Failed to generate PDF');
@@ -681,7 +723,7 @@ export default function SystemDesignPage() {
                     <div>
                       <h4 className="font-semibold text-gray-900 mb-3">Key Tables</h4>
                       <div className="grid grid-cols-2 gap-3">
-                        {Object.entries(sddData.database.key_tables).slice(0, 8).map(([table, description]: [string, any]) => (
+                        {sddData.database.key_tables && Object.entries(sddData.database.key_tables).slice(0, 8).map(([table, description]: [string, any]) => (
                           <div key={table} className="p-3 bg-gray-50 border border-gray-200 rounded-lg hover:border-orange-300 transition-colors">
                             <p className="font-mono text-xs font-medium text-gray-900">{table}</p>
                             <p className="text-xs text-gray-600 mt-1">{description}</p>
@@ -714,6 +756,71 @@ export default function SystemDesignPage() {
                   </CardContent>
                 </Card>
 
+                {/* APIs */}
+                <Card>
+                  <CardHeader className="border-b border-gray-200">
+                    <CardTitle className="flex items-center gap-2">
+                      <FileCode className="w-5 h-5 text-green-600" />
+                      6. API Documentation
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <h4 className="font-semibold text-green-900 mb-2">API Overview</h4>
+                      <ul className="text-sm text-green-800 space-y-1">
+                        <li>• Base URL: {sddData.apis.base_url}</li>
+                        <li>• Authentication: {sddData.apis.authentication}</li>
+                        <li>• Access Control: {sddData.apis.access_control}</li>
+                        <li>• Rate Limiting: {sddData.apis.rate_limiting}</li>
+                        <li>• Version: {sddData.apis.versioning}</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-2">Response Format</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                          <p className="text-xs font-semibold text-gray-700 mb-2">Success Response</p>
+                          <pre className="text-xs text-gray-600 overflow-x-auto">
+                            {sddData.apis.response_format.success_response}
+                          </pre>
+                        </div>
+                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                          <p className="text-xs font-semibold text-gray-700 mb-2">Error Response</p>
+                          <pre className="text-xs text-gray-600 overflow-x-auto">
+                            {sddData.apis.response_format.error_response}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                    {sddData.apis.endpoints && sddData.apis.endpoints.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-2">
+                          API Endpoints ({sddData.apis.endpoints.length} total)
+                        </h4>
+                        <p className="text-xs text-gray-600 mb-2">
+                          Showing first 10 endpoints. Full API documentation available in system.
+                        </p>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {sddData.apis.endpoints.slice(0, 10).map((endpoint: any, index: number) => (
+                            <div key={index} className="p-2 bg-gray-50 border border-gray-200 rounded flex items-center gap-3">
+                              <span className={`px-2 py-1 text-xs font-mono font-bold rounded ${
+                                endpoint.method === 'GET' ? 'bg-blue-100 text-blue-700' :
+                                endpoint.method === 'POST' ? 'bg-green-100 text-green-700' :
+                                endpoint.method === 'PUT' ? 'bg-orange-100 text-orange-700' :
+                                endpoint.method === 'DELETE' ? 'bg-red-100 text-red-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {endpoint.method}
+                              </span>
+                              <span className="text-xs font-mono text-gray-700">{endpoint.path}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
                 {/* Technology Stack */}
                 <Card>
                   <CardHeader className="border-b border-gray-200">
@@ -727,7 +834,7 @@ export default function SystemDesignPage() {
                       <div className="p-4 bg-pink-50 border border-pink-200 rounded-lg">
                         <h4 className="font-semibold text-pink-900 mb-2">Frontend</h4>
                         <ul className="text-sm text-pink-800 space-y-1">
-                          {Object.entries(sddData.technology.frontend).map(([tech, version]: [string, any]) => (
+                          {sddData.technology.frontend && Object.entries(sddData.technology.frontend).map(([tech, version]: [string, any]) => (
                             <li key={tech}>• {tech}: {version}</li>
                           ))}
                         </ul>
@@ -735,7 +842,7 @@ export default function SystemDesignPage() {
                       <div className="p-4 bg-qsights-light border border-cyan-200 rounded-lg">
                         <h4 className="font-semibold text-indigo-900 mb-2">Backend</h4>
                         <ul className="text-sm text-indigo-800 space-y-1">
-                          {Object.entries(sddData.technology.backend).map(([tech, version]: [string, any]) => (
+                          {sddData.technology.backend && Object.entries(sddData.technology.backend).map(([tech, version]: [string, any]) => (
                             <li key={tech}>• {tech}: {version}</li>
                           ))}
                         </ul>
@@ -743,7 +850,7 @@ export default function SystemDesignPage() {
                       <div className="p-4 bg-qsights-light border border-purple-200 rounded-lg">
                         <h4 className="font-semibold text-purple-900 mb-2">Infrastructure</h4>
                         <ul className="text-sm text-purple-800 space-y-1">
-                          {Object.entries(sddData.technology.infrastructure).map(([tech, version]: [string, any]) => (
+                          {sddData.technology.infrastructure && Object.entries(sddData.technology.infrastructure).map(([tech, version]: [string, any]) => (
                             <li key={tech}>• {tech}: {version}</li>
                           ))}
                         </ul>
@@ -768,27 +875,38 @@ export default function SystemDesignPage() {
                   </CardHeader>
                   <CardContent className="p-6">
                     <div className="space-y-3">
-                      {criticalFeatures.critical.map((feature: any) => (
-                        <div key={feature.id} className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-red-900">{feature.name}</h4>
-                              <p className="text-sm text-red-800 mt-1">{feature.description}</p>
-                              <div className="flex items-center gap-4 mt-2">
-                                <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-1 rounded">
-                                  {feature.impact}
-                                </span>
-                                {feature.testing_required && (
-                                  <span className="text-xs font-medium text-orange-700 bg-orange-100 px-2 py-1 rounded flex items-center gap-1">
-                                    <PlayCircle className="w-3 h-3" />
-                                    Testing Required
-                                  </span>
+                      {criticalFeatures.critical && Array.isArray(criticalFeatures.critical) && criticalFeatures.critical.map((feature: any, index: number) => {
+                        // Handle both object format and string format
+                        const featureName = typeof feature === 'string' ? feature : feature.name || feature;
+                        const featureId = typeof feature === 'object' ? feature.id : index;
+                        const featureDescription = typeof feature === 'object' ? feature.description : '';
+                        const featureImpact = typeof feature === 'object' ? feature.impact : 'HIGH';
+                        const testingRequired = typeof feature === 'object' ? feature.testing_required : true;
+                        
+                        return (
+                          <div key={featureId} className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-red-900">{featureName}</h4>
+                                {featureDescription && (
+                                  <p className="text-sm text-red-800 mt-1">{featureDescription}</p>
                                 )}
+                                <div className="flex items-center gap-4 mt-2">
+                                  <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-1 rounded">
+                                    {featureImpact}
+                                  </span>
+                                  {testingRequired && (
+                                    <span className="text-xs font-medium text-orange-700 bg-orange-100 px-2 py-1 rounded flex items-center gap-1">
+                                      <PlayCircle className="w-3 h-3" />
+                                      Testing Required
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </CardContent>
                 </Card>
@@ -802,15 +920,25 @@ export default function SystemDesignPage() {
                   </CardHeader>
                   <CardContent className="p-6">
                     <div className="space-y-3">
-                      {criticalFeatures.non_critical.map((feature: any) => (
-                        <div key={feature.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                          <h4 className="font-semibold text-gray-900">{feature.name}</h4>
-                          <p className="text-sm text-gray-700 mt-1">{feature.description}</p>
-                          <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded inline-block mt-2">
-                            {feature.impact}
-                          </span>
-                        </div>
-                      ))}
+                      {criticalFeatures.non_critical && Array.isArray(criticalFeatures.non_critical) && criticalFeatures.non_critical.map((feature: any, index: number) => {
+                        // Handle both object format and string format
+                        const featureName = typeof feature === 'string' ? feature : feature.name || feature;
+                        const featureId = typeof feature === 'object' ? feature.id : index;
+                        const featureDescription = typeof feature === 'object' ? feature.description : '';
+                        const featureImpact = typeof feature === 'object' ? feature.impact : 'LOW';
+                        
+                        return (
+                          <div key={featureId} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                            <h4 className="font-semibold text-gray-900">{featureName}</h4>
+                            {featureDescription && (
+                              <p className="text-sm text-gray-700 mt-1">{featureDescription}</p>
+                            )}
+                            <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded inline-block mt-2">
+                              {featureImpact}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </CardContent>
                 </Card>
@@ -1017,20 +1145,29 @@ export default function SystemDesignPage() {
                     <CardHeader className="border-b border-red-200 bg-red-50">
                       <CardTitle className="flex items-center gap-2">
                         <GitBranch className="w-5 h-5 text-red-600" />
-                        {procedure.description}
+                        {procedure.description || key}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-6">
-                      <ol className="space-y-2">
-                        {procedure.steps.map((step: string, index: number) => (
-                          <li key={index} className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-sm font-bold">
-                              {index + 1}
-                            </span>
-                            <span className="text-sm text-gray-700 pt-0.5">{step}</span>
-                          </li>
-                        ))}
-                      </ol>
+                      {procedure.steps && Array.isArray(procedure.steps) ? (
+                        <ol className="space-y-2">
+                          {procedure.steps.map((step: string, index: number) => (
+                            <li key={index} className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-sm font-bold">
+                                {index + 1}
+                              </span>
+                              <span className="text-sm text-gray-700 pt-0.5">{step}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <div className="text-sm text-gray-600">
+                          <p className="mb-2">Procedure details:</p>
+                          <pre className="bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto text-xs">
+                            {JSON.stringify(procedure, null, 2)}
+                          </pre>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}

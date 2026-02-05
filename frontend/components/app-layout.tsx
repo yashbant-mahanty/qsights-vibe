@@ -388,7 +388,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     {/* Sign Out */}
                     <div className="border-t border-gray-100 py-2">
                       <button
-                        onClick={handleLogout}
+                        onClick={() => handleLogout(router)}
                         className="w-full flex items-center gap-3 px-5 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                       >
                         <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
