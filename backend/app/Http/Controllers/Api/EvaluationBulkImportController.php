@@ -13,9 +13,9 @@ class EvaluationBulkImportController extends Controller
     /**
      * Bulk import departments, roles, and staff from CSV file
      * Expected CSV format:
-     * Department,Role,Staff
-     * ITES,AGM,"Yash, Ram, Richa"
-     * ITES,AVP,"Lokesh, Rachita"
+     * Department,Role,Staff,Email
+     * ITES,AGM,"Yash, Ram, Richa","yash@example.com, ram@example.com, richa@example.com"
+     * ITES,AVP,"Lokesh, Rachita","lokesh@example.com, rachita@example.com"
      */
     public function import(Request $request)
     {
@@ -164,11 +164,22 @@ class EvaluationBulkImportController extends Controller
                     // Process Staff (comma-separated)
                     if (!empty($row['Staff'])) {
                         $staffNames = array_map('trim', explode(',', $row['Staff']));
+                        $staffEmails = [];
                         
-                        foreach ($staffNames as $staffName) {
+                        // Process emails if provided
+                        if (!empty($row['Email'])) {
+                            $staffEmails = array_map('trim', explode(',', $row['Email']));
+                        }
+                        
+                        foreach ($staffNames as $index => $staffName) {
                             if (empty($staffName)) {
                                 continue;
                             }
+                            
+                            // Get corresponding email or generate placeholder
+                            $staffEmail = isset($staffEmails[$index]) && !empty($staffEmails[$index])
+                                ? $staffEmails[$index]
+                                : strtolower(str_replace(' ', '.', $staffName)) . '@example.com';
                             
                             // Check if staff already exists
                             $staffExists = DB::table('evaluation_staff')
@@ -189,7 +200,7 @@ class EvaluationBulkImportController extends Controller
                                 DB::table('evaluation_staff')->insert([
                                     'id' => (string) Str::uuid(),
                                     'name' => $staffName,
-                                    'email' => strtolower(str_replace(' ', '.', $staffName)) . '@example.com', // Placeholder email
+                                    'email' => $staffEmail,
                                     'role_id' => $roleId,
                                     'role_name' => $roleName,
                                     'department' => $currentDepartment,
@@ -259,6 +270,13 @@ class EvaluationBulkImportController extends Controller
                             throw new Exception("Missing required column: $col");
                         }
                     }
+                    
+                    // Email column is optional but recommended
+                    if (!in_array('Email', $headers)) {
+                        // Add warning in logs but continue processing
+                        \Log::warning('CSV upload: Email column not found. Placeholder emails will be generated.');
+                    }
+                    
                     continue;
                 }
                 
@@ -282,14 +300,14 @@ class EvaluationBulkImportController extends Controller
      */
     public function downloadSample()
     {
-        $csv = "Department,Role,Staff\n";
-        $csv .= "ITES,AGM,\"Yash, Ram, Richa\"\n";
-        $csv .= "ITES,AVP,\"Lokesh, Rachita\"\n";
-        $csv .= "ITES,Leads,\"Arun, Ashwin\"\n";
-        $csv .= "Sales,Manager,\"John, Sarah\"\n";
-        $csv .= "Sales,Executive,\"Mike, Lisa, Tom\"\n";
-        $csv .= "HR,Head,\"Emma\"\n";
-        $csv .= "HR,Recruiter,\"David, Anna\"\n";
+        $csv = "Department,Role,Staff,Email\n";
+        $csv .= "ITES,AGM,\"Yash, Ram, Richa\",\"yash@example.com, ram@example.com, richa@example.com\"\n";
+        $csv .= "ITES,AVP,\"Lokesh, Rachita\",\"lokesh@example.com, rachita@example.com\"\n";
+        $csv .= "ITES,Leads,\"Arun, Ashwin\",\"arun@example.com, ashwin@example.com\"\n";
+        $csv .= "Sales,Manager,\"John, Sarah\",\"john@example.com, sarah@example.com\"\n";
+        $csv .= "Sales,Executive,\"Mike, Lisa, Tom\",\"mike@example.com, lisa@example.com, tom@example.com\"\n";
+        $csv .= "HR,Head,\"Emma\",\"emma@example.com\"\n";
+        $csv .= "HR,Recruiter,\"David, Anna\",\"david@example.com, anna@example.com\"\n";
         
         return response($csv, 200)
             ->header('Content-Type', 'text/csv')

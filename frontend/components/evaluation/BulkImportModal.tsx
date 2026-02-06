@@ -33,14 +33,14 @@ export default function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImpo
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const downloadSampleCSV = () => {
-    const csvContent = `Department,Role,Staff
-ITES,AGM,"Yash, Ram, Richa"
-ITES,AVP,"Lokesh, Rachita"
-ITES,Leads,"Arun, Ashwin"
-Sales,Manager,"John, Sarah"
-Sales,Executive,"Mike, Lisa, Tom"
-HR,Head,"Emma"
-HR,Recruiter,"David, Anna"`;
+    const csvContent = `Department,Role,Staff,Email
+ITES,AGM,"Yash, Ram, Richa","yash@example.com, ram@example.com, richa@example.com"
+ITES,AVP,"Lokesh, Rachita","lokesh@example.com, rachita@example.com"
+ITES,Leads,"Arun, Ashwin","arun@example.com, ashwin@example.com"
+Sales,Manager,"John, Sarah","john@example.com, sarah@example.com"
+Sales,Executive,"Mike, Lisa, Tom","mike@example.com, lisa@example.com, tom@example.com"
+HR,Head,"Emma","emma@example.com"
+HR,Recruiter,"David, Anna","david@example.com, anna@example.com"`;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -60,21 +60,23 @@ HR,Recruiter,"David, Anna"`;
 
   const downloadSampleExcel = () => {
     // For Excel, we'll download as CSV with instructions
-    const csvContent = `Department,Role,Staff
-ITES,AGM,"Yash, Ram, Richa"
-ITES,AVP,"Lokesh, Rachita"
-ITES,Leads,"Arun, Ashwin"
-Sales,Manager,"John, Sarah"
-Sales,Executive,"Mike, Lisa, Tom"
-HR,Head,"Emma"
-HR,Recruiter,"David, Anna"
+    const csvContent = `Department,Role,Staff,Email
+ITES,AGM,"Yash, Ram, Richa","yash@example.com, ram@example.com, richa@example.com"
+ITES,AVP,"Lokesh, Rachita","lokesh@example.com, rachita@example.com"
+ITES,Leads,"Arun, Ashwin","arun@example.com, ashwin@example.com"
+Sales,Manager,"John, Sarah","john@example.com, sarah@example.com"
+Sales,Executive,"Mike, Lisa, Tom","mike@example.com, lisa@example.com, tom@example.com"
+HR,Head,"Emma","emma@example.com"
+HR,Recruiter,"David, Anna","david@example.com, anna@example.com"
 
 Instructions:
 1. Department column: Enter unique department names. Same department name for roles under it.
 2. Role column: Enter role names under each department.
 3. Staff column: Enter staff names separated by commas. Format: "Name1, Name2, Name3"
-4. You can have multiple roles per department.
-5. Save as CSV before uploading.`;
+4. Email column: Enter staff email addresses separated by commas (same order as names): "email1@domain.com, email2@domain.com"
+5. Email addresses are used for sending notifications and reminders.
+6. You can have multiple roles per department.
+7. Save as CSV before uploading.`;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -230,12 +232,13 @@ Instructions:
                 <li>• <strong>Column 1 (Department):</strong> Department name (same name for multiple roles)</li>
                 <li>• <strong>Column 2 (Role):</strong> Role name within the department</li>
                 <li>• <strong>Column 3 (Staff):</strong> Staff names separated by commas: "Name1, Name2, Name3"</li>
+                <li>• <strong>Column 4 (Email):</strong> Email addresses separated by commas (same order as names): "email1@domain.com, email2@domain.com"</li>
               </ul>
               <p className="mt-2 text-sm font-medium">Example:</p>
               <pre className="mt-1 text-xs bg-gray-100 p-2 rounded">
-ITES,AGM,"Yash, Ram, Richa"{'\n'}
-ITES,AVP,"Lokesh, Rachita"{'\n'}
-ITES,Leads,"Arun, Ashwin"
+ITES,AGM,"Yash, Ram, Richa","yash@example.com, ram@example.com, richa@example.com"{' \n'}
+ITES,AVP,"Lokesh, Rachita","lokesh@example.com, rachita@example.com"{' \n'}
+ITES,Leads,"Arun, Ashwin","arun@example.com, ashwin@example.com"
               </pre>
             </AlertDescription>
           </Alert>
