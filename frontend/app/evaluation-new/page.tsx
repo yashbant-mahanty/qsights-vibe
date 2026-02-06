@@ -420,7 +420,16 @@ function EvaluationNewPageContent() {
   // Form states
   const [deptForm, setDeptForm] = useState({ name: '', code: '', description: '', program_id: '' });
   const [roleForm, setRoleForm] = useState({ name: '', code: '', description: '', department_id: '' });
-  const [staffForm, setStaffForm] = useState({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
+  const [staffForm, setStaffForm] = useState({ 
+    name: '', 
+    email: '', 
+    employee_id: '', 
+    role_id: '', 
+    create_account: false,
+    is_new_joinee: false,
+    joining_date: '',
+    new_joinee_days: 30
+  });
   
   // Trigger state
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -1214,6 +1223,12 @@ function EvaluationNewPageContent() {
       return;
     }
     
+    // Validate new joinee fields
+    if (staffForm.is_new_joinee && !staffForm.joining_date) {
+      showToast.error('Please provide joining date for new joinee');
+      return;
+    }
+    
     try {
       setLoading(true);
       
@@ -1230,19 +1245,26 @@ function EvaluationNewPageContent() {
           department: selectedDepartment || '',
           program_id: programId,
           is_available_for_evaluation: true,
-          create_account: !editingStaff ? staffForm.create_account : undefined
+          create_account: !editingStaff ? staffForm.create_account : undefined,
+          is_new_joinee: !editingStaff ? staffForm.is_new_joinee : undefined,
+          joining_date: !editingStaff && staffForm.is_new_joinee ? staffForm.joining_date : undefined,
+          new_joinee_days: !editingStaff && staffForm.is_new_joinee ? staffForm.new_joinee_days : undefined
         })
       });
       
       if (response.success) {
         const successMsg = editingStaff 
           ? 'Staff updated successfully' 
-          : staffForm.create_account 
+          : staffForm.create_account && staffForm.is_new_joinee
+            ? 'Staff added, account created, and trainee evaluation scheduled. Manager will receive evaluation notification automatically.'
+            : staffForm.create_account 
             ? 'Staff added and account created. Login credentials sent via email.' 
+            : staffForm.is_new_joinee
+            ? 'Staff added successfully. Trainee evaluation scheduled for manager.'
             : 'Staff added successfully';
         showToast.success(successMsg);
         setShowStaffModal(false);
-        setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
+        setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
         setEditingStaff(null);
         fetchStaff();
       } else {
@@ -2317,7 +2339,7 @@ function EvaluationNewPageContent() {
                   <button
                     onClick={() => {
                       setEditingStaff(null);
-                      setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
+                      setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
                       setShowStaffModal(true);
                     }}
                     className="mt-4 w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium"
@@ -5037,7 +5059,7 @@ function EvaluationNewPageContent() {
                 <button onClick={() => {
                   setShowStaffModal(false);
                   setEditingStaff(null);
-                  setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
+                  setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
                 }} className="text-gray-400 hover:text-gray-600">
                   <X className="h-5 w-5" />
                 </button>
@@ -5106,13 +5128,64 @@ function EvaluationNewPageContent() {
                     </label>
                   </div>
                 )}
+                
+                {/* New Joinee Option - Only show when adding new staff */}
+                {!editingStaff && (
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={staffForm.is_new_joinee}
+                        onChange={(e) => setStaffForm({ ...staffForm, is_new_joinee: e.target.checked })}
+                        className="w-5 h-5 text-green-600 rounded mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <span className="font-medium text-green-900">New Joinee</span>
+                        <p className="text-xs text-green-600 mt-1">
+                          Auto-schedule "Trainee Evaluation - NJ" to be sent to their manager after X days.
+                        </p>
+                      </div>
+                    </label>
+                    
+                    {staffForm.is_new_joinee && (
+                      <div className="mt-3 space-y-3 pl-8">
+                        <div>
+                          <label className="block text-sm font-medium text-green-900 mb-1">Joining Date *</label>
+                          <input
+                            type="date"
+                            value={staffForm.joining_date}
+                            onChange={(e) => setStaffForm({ ...staffForm, joining_date: e.target.value })}
+                            className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                            required={staffForm.is_new_joinee}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-green-900 mb-1">
+                            Evaluation After (Days)
+                          </label>
+                          <input
+                            type="number"
+                            value={staffForm.new_joinee_days}
+                            onChange={(e) => setStaffForm({ ...staffForm, new_joinee_days: parseInt(e.target.value) || 30 })}
+                            min="1"
+                            max="365"
+                            className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          />
+                          <p className="text-xs text-green-600 mt-1">
+                            Manager will receive evaluation {staffForm.new_joinee_days} days after joining date
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   onClick={() => {
                     setShowStaffModal(false);
                     setEditingStaff(null);
-                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false });
+                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
                   }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                 >

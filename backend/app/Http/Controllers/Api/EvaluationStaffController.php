@@ -196,7 +196,9 @@ class EvaluationStaffController extends Controller
                 'mobile' => 'nullable|string|max:50',
                 'status' => 'nullable|in:active,inactive,on_leave,terminated',
                 'metadata' => 'nullable|array',
-                'create_account' => 'nullable|boolean'
+                'create_account' => 'nullable|boolean',
+                'is_new_joinee' => 'nullable|boolean',
+                'new_joinee_days' => 'nullable|integer|min:1|max:365'
             ]);
             
             // Determine program_id based on user role and associated role
@@ -298,6 +300,7 @@ class EvaluationStaffController extends Controller
                 'mobile' => $validated['mobile'] ?? null,
                 'status' => $validated['status'] ?? 'active',
                 'is_available_for_evaluation' => true,
+                'is_new_joinee' => $validated['is_new_joinee'] ?? false,
                 'metadata' => isset($validated['metadata']) ? json_encode($validated['metadata']) : null,
                 'created_by' => $user->id,
                 'created_at' => now(),
@@ -329,6 +332,11 @@ class EvaluationStaffController extends Controller
             }
             
             $this->logAudit('evaluation_staff', $staffId, 'created', 'Staff member created', $user, $programId);
+            
+            // Auto-schedule new joinee evaluation if applicable
+            if (!empty($validated['is_new_joinee']) && !empty($validated['joining_date'])) {
+                $this->scheduleNewJoineeEvaluation($staffId, $validated, $programId, $user);
+            }
             
             $staff = DB::table('evaluation_staff')->where('id', $staffId)->first();
             
@@ -902,6 +910,131 @@ class EvaluationStaffController extends Controller
                 'success' => false,
                 'message' => 'Failed to fetch team performance: ' . $e->getMessage()
             ], 500);
+        }
+    }
+    
+    /**
+     * Schedule automatic evaluation for new joinee
+     */
+    private function scheduleNewJoineeEvaluation($staffId, $validated, $programId, $user)
+    {
+        try {
+            // Get the staff's reporting manager (evaluator) from hierarchy
+            $hierarchy = DB::table('evaluation_hierarchy')
+                ->where('staff_id', $staffId)
+                ->where('is_active', true)
+                ->where('is_primary', true)
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if (!$hierarchy) {
+                \Log::warning('New joinee has no reporting manager assigned', [
+                    'staff_id' => $staffId,
+                    'staff_name' => $validated['name']
+                ]);
+                return;
+            }
+            
+            // Get evaluator details
+            $evaluator = DB::table('evaluation_staff')
+                ->where('id', $hierarchy->reports_to_id)
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if (!$evaluator) {
+                \Log::warning('Evaluator not found for new joinee', [
+                    'staff_id' => $staffId,
+                    'evaluator_id' => $hierarchy->reports_to_id
+                ]);
+                return;
+            }
+            
+            // Find the "Trainee Evaluation - NJ" questionnaire
+            $questionnaire = DB::table('questionnaires')
+                ->where('name', 'ILIKE', '%Trainee Evaluation%NJ%')
+                ->where('program_id', $programId)
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if (!$questionnaire) {
+                \Log::warning('Trainee Evaluation - NJ questionnaire not found', [
+                    'program_id' => $programId
+                ]);
+                return;
+            }
+            
+            // Calculate trigger date: joining_date + X days (default 30)
+            $triggerDays = $validated['new_joinee_days'] ?? 30;
+            $joiningDate = new \DateTime($validated['joining_date']);
+            $triggerDate = clone $joiningDate;
+            $triggerDate->modify("+{$triggerDays} days");
+            
+            // End date is trigger date + 30 days for completion
+            $endDate = clone $triggerDate;
+            $endDate->modify('+30 days');
+            
+            // Parse questionnaire questions
+            $questions = [];
+            if ($questionnaire->questions) {
+                $parsedQuestions = json_decode($questionnaire->questions, true);
+                if (is_array($parsedQuestions)) {
+                    $questions = $parsedQuestions;
+                }
+            }
+            
+            // Generate access token for the evaluation
+            $accessToken = Str::random(32);
+            
+            // Create the scheduled trigger
+            $triggerId = Str::uuid()->toString();
+            DB::table('evaluation_triggered')->insert([
+                'id' => $triggerId,
+                'organization_id' => $user->organization_id ?? 1,
+                'program_id' => $programId,
+                'template_id' => 'questionnaire_' . $questionnaire->id,
+                'template_name' => $questionnaire->name,
+                'template_questions' => json_encode($questions),
+                'evaluator_id' => $evaluator->id,
+                'evaluator_name' => $evaluator->name,
+                'evaluator_email' => $evaluator->email,
+                'staff_id' => $staffId,
+                'subordinates' => json_encode([[
+                    'staff_id' => $staffId,
+                    'staff_name' => $validated['name'],
+                    'staff_email' => $validated['email'],
+                    'employee_id' => $validated['employee_id'] ?? ''
+                ]]),
+                'subordinates_count' => 1,
+                'access_token' => $accessToken,
+                'status' => 'pending',
+                'triggered_by' => $user->id,
+                'triggered_at' => now(),
+                'start_date' => $triggerDate->format('Y-m-d'),
+                'end_date' => $endDate->format('Y-m-d'),
+                'scheduled_trigger_at' => $triggerDate->format('Y-m-d H:i:s'),
+                'scheduled_timezone' => 'Asia/Kolkata',
+                'is_auto_scheduled' => true,
+                'auto_schedule_type' => 'new_joinee',
+                'email_subject' => "Trainee Evaluation Required - {$validated['name']}",
+                'email_body' => "Hello {$evaluator->name},\n\nYour new team member {$validated['name']} has completed {$triggerDays} days. Please evaluate their performance using the Trainee Evaluation form.\n\nJoining Date: {$validated['joining_date']}\nEvaluation Period: {$triggerDays} days\n\nPlease complete the evaluation by {$endDate->format('Y-m-d')}.\n\nBest regards,\nQSights Team",
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+            
+            \Log::info('Auto-scheduled new joinee evaluation', [
+                'staff_id' => $staffId,
+                'staff_name' => $validated['name'],
+                'evaluator_name' => $evaluator->name,
+                'trigger_date' => $triggerDate->format('Y-m-d'),
+                'trigger_days' => $triggerDays,
+                'questionnaire' => $questionnaire->name
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Failed to schedule new joinee evaluation', [
+                'staff_id' => $staffId,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 }
