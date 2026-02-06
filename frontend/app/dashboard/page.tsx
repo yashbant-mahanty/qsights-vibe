@@ -596,7 +596,7 @@ export default function DashboardPage() {
             <CardContent className="p-6">
               {loading ? (
                 <div className="h-80 animate-pulse bg-gray-100 rounded-lg"></div>
-              ) : activities.length === 0 ? (
+              ) : totalActivities === 0 ? (
                 <div className="h-80 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl flex items-center justify-center border-2 border-dashed border-gray-300">
                   <div className="text-center">
                     <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-3" />
@@ -626,29 +626,9 @@ export default function DashboardPage() {
                       <div className="text-right">
                         <span className="font-bold text-gray-900">{totalActivities}</span>
                         <div className="text-xs text-gray-500 mt-0.5">
-                          {activities.filter(a => a.status === 'live').length > 0 && (
+                          {globalStats?.live_activities > 0 && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-700 mr-1">
-                              {activities.filter(a => a.status === 'live').length} Live
-                            </span>
-                          )}
-                          {activities.filter(a => a.status === 'draft').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 mr-1">
-                              {activities.filter(a => a.status === 'draft').length} Draft
-                            </span>
-                          )}
-                          {activities.filter(a => a.status === 'scheduled' || a.status === 'upcoming').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 mr-1">
-                              {activities.filter(a => a.status === 'scheduled' || a.status === 'upcoming').length} Scheduled
-                            </span>
-                          )}
-                          {activities.filter(a => a.status === 'completed' || a.status === 'closed').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-200 text-gray-700 mr-1">
-                              {activities.filter(a => a.status === 'completed' || a.status === 'closed').length} Completed
-                            </span>
-                          )}
-                          {activities.filter(a => a.status === 'paused').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">
-                              {activities.filter(a => a.status === 'paused').length} Paused
+                              {globalStats.live_activities} Live
                             </span>
                           )}
                         </div>
@@ -657,46 +637,15 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between text-sm py-2 border-t border-gray-200">
                       <span className="text-gray-600 font-medium">Total Programs</span>
                       <div className="text-right">
-                        <span className="font-bold text-gray-900">{programs.length}</span>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          {programs.filter(p => p.status === 'active').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-700 mr-1">
-                              {programs.filter(p => p.status === 'active').length} Active
-                            </span>
-                          )}
-                          {programs.filter(p => p.status === 'draft').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 mr-1">
-                              {programs.filter(p => p.status === 'draft').length} Draft
-                            </span>
-                          )}
-                          {programs.filter(p => p.status === 'inactive').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">
-                              {programs.filter(p => p.status === 'inactive').length} Inactive
-                            </span>
-                          )}
-                        </div>
+                        <span className="font-bold text-gray-900">{totalPrograms}</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between text-sm py-2 border-t border-gray-200">
-                      <span className="text-gray-600 font-medium">Total Questionnaires</span>
+                      <span className="text-gray-600 font-medium">Platform Engagement</span>
                       <div className="text-right">
-                        <span className="font-bold text-gray-900">{totalQuestionnaires}</span>
+                        <span className="font-bold text-gray-900">{engagementRate.toFixed(1)}%</span>
                         <div className="text-xs text-gray-500 mt-0.5">
-                          {questionnaires.filter(q => q.status === 'published').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-700 mr-1">
-                              {questionnaires.filter(q => q.status === 'published').length} Published
-                            </span>
-                          )}
-                          {questionnaires.filter(q => q.status === 'draft').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 mr-1">
-                              {questionnaires.filter(q => q.status === 'draft').length} Draft
-                            </span>
-                          )}
-                          {questionnaires.filter(q => q.status === 'archived').length > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">
-                              {questionnaires.filter(q => q.status === 'archived').length} Archived
-                            </span>
-                          )}
+                          Active participants responding
                         </div>
                       </div>
                     </div>
