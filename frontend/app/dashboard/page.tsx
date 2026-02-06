@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -42,38 +43,30 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { currentUser, isLoading: authLoading } = useAuth();
   
   // Redirect program-level users to their respective dashboards
   useEffect(() => {
-    async function checkUserRole() {
-      try {
-        const response = await fetch('/api/auth/me');
-        if (response.ok) {
-          const data = await response.json();
-          const userRole = data.user?.role as UserRole;
-          const programId = data.user?.programId;
-          
-          // Redirect evaluation-staff to evaluation page
-          if (userRole === 'evaluation-staff' || userRole === 'evaluation_staff') {
-            router.push('/evaluation-new');
-            return;
-          }
-          
-          // NEW: Redirect to program-scoped pages
-          if (userRole === 'program-admin' || userRole === 'program-manager' || userRole === 'program-moderator') {
-            if (programId) {
-              router.push(`/program/${programId}/dashboard`);
-              return;
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error checking user role:', error);
+    // Wait for auth to load
+    if (authLoading || !currentUser) return;
+    
+    const userRole = currentUser.role as UserRole;
+    const programId = currentUser.programId;
+    
+    // Redirect evaluation-staff to evaluation page
+    if (userRole === 'evaluation-staff' || userRole === 'evaluation_staff') {
+      router.push('/evaluation-new');
+      return;
+    }
+    
+    // NEW: Redirect to program-scoped pages
+    if (userRole === 'program-admin' || userRole === 'program-manager' || userRole === 'program-moderator') {
+      if (programId) {
+        router.push(`/program/${programId}/dashboard`);
+        return;
       }
     }
-    checkUserRole();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, currentUser, router]);
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
@@ -132,9 +125,8 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       
-      // First, check if user has access
-      const userResponse = await fetch('/api/auth/me').catch(() => null);
-      if (!userResponse || !userResponse.ok) {
+      // Check if user is authenticated using AuthContext
+      if (!currentUser) {
         router.push('/');
         return;
       }

@@ -300,10 +300,10 @@ export function getNavigationItems(role: UserRole, services?: string[]) {
     }
   }
 
-  // Organizations - super admin/admin have full access, evaluation-admin has view-only
+  // Organizations - super admin/admin have full access, program-admin and evaluation-admin have view-only
   if (hasFullAccess(role) && hasService('list_organization')) {
     items.push({ label: 'Organizations', href: '/organizations', icon: 'Building2' });
-  } else if (role === 'evaluation-admin' && hasService('list_organization')) {
+  } else if ((role === 'program-admin' || role === 'evaluation-admin') && hasService('list_organization')) {
     items.push({ label: 'Organizations', href: '/organizations', icon: 'Building2' });
   }
 

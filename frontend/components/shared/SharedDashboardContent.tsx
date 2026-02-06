@@ -4,6 +4,7 @@
 // but WITHOUT the ProgramAdminLayout wrapper, so it can be embedded in unified tab pages
 
 import React, { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
 import {
@@ -42,6 +43,7 @@ interface UserData {
 }
 
 export default function SharedDashboardContent() {
+  const { currentUser: authUser, isLoading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [participants, setParticipants] = useState<any[]>([]);
@@ -65,8 +67,10 @@ export default function SharedDashboardContent() {
   const [trendsLoading, setTrendsLoading] = useState(false);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (!authLoading && authUser) {
+      loadDashboardData();
+    }
+  }, [authLoading, authUser]);
 
   useEffect(() => {
     if (currentUser) {
@@ -78,25 +82,24 @@ export default function SharedDashboardContent() {
     try {
       setLoading(true);
       
-      const userResponse = await fetch('/api/auth/me');
-      if (!userResponse.ok) {
+      // Use authUser from AuthContext instead of fetching
+      if (!authUser) {
         window.location.href = '/login';
         return;
       }
       
-      const userData = await userResponse.json();
-      setCurrentUser(userData.user);
+      setCurrentUser(authUser as UserData);
       
       // Check if user is moderator or manager (restrict to their program only)
-      const userRole = userData.user.role?.toLowerCase() || '';
+      const userRole = authUser.role?.toLowerCase() || '';
       const isRestrictedRole = userRole.includes('moderator') || userRole.includes('manager');
       setIsModeratorOrManager(isRestrictedRole);
       
       try {
         // For moderators/managers: only load their assigned program
         // For admins: load all programs
-        const programsData = isRestrictedRole && userData.user.programId
-          ? await programsApi.getAll({ program_id: userData.user.programId })
+        const programsData = isRestrictedRole && authUser.programId
+          ? await programsApi.getAll({ program_id: authUser.programId })
           : await programsApi.getAll();
         setPrograms(programsData);
         

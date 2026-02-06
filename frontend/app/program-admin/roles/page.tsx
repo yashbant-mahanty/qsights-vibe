@@ -1,7 +1,7 @@
 "use client";
-// Version: 2.0 - Fixed UUID routing for default users vs custom roles
+// Version: 2.1 - Fixed hydration error for category icons
 
-import React, { useState, useEffect, Suspense, useMemo } from "react";
+import React, { useState, useEffect, Suspense, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ProgramAdminLayout from "@/components/program-admin-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,80 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Eye, EyeOff, RefreshCw, Filter, Users, UserCog, Network, ChevronLeft, ChevronRight } from "lucide-react";
+import { 
+  Plus, 
+  Pencil, 
+  Trash2, 
+  Eye, 
+  EyeOff, 
+  RefreshCw, 
+  Filter, 
+  Users, 
+  UserCog, 
+  Network, 
+  ChevronLeft, 
+  ChevronRight,
+  LayoutDashboard,
+  Building2,
+  FolderTree,
+  UserCheck,
+  FileText,
+  Activity,
+  BarChart3,
+  Brain,
+  Settings,
+  ClipboardCheck,
+  MessageSquare,
+  Shield,
+  User,
+  Lock
+} from "lucide-react";
+
+// Component to render category icons - using inline SVG to avoid library issues
+const CategoryIcon = ({ category, className = "" }: { category: string; className?: string }) => {
+  const iconClass = `w-4 h-4 ${className}`;
+  
+  switch (category) {
+    case "Overview":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
+    case "Organizations":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>;
+    case "Programs":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>;
+    case "Group Management":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
+    case "Participants":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+    case "Activities":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>;
+    case "Questionnaires":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
+    case "Communications":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>;
+    case "Reports":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
+    case "AI Reports":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>;
+    case "Evaluation":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>;
+    case "Settings":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+    case "User":
+    case "Users":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>;
+    case "Roles":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+    case "Permissions":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>;
+    case "Special Access":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>;
+    case "Authentication":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>;
+    default:
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+  }
+};
+
 import {
   Dialog,
   DialogContent,
@@ -30,6 +103,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { API_URL } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import ManagerAssignmentModal from "@/components/manager-assignment-modal";
 import HierarchyTreeModal from "@/components/hierarchy-tree-modal";
 import HierarchyMappingModal from "@/components/hierarchy-mapping-modal";
@@ -116,6 +190,10 @@ const AVAILABLE_SERVICES = [
   { id: "filter_report", name: "Filter Report", category: "Reports" },
   { id: "view_report", name: "View Report", category: "Reports" },
   
+  // AI Report Builder
+  { id: "ai-reports-view", name: "AI Report Builder - View", category: "AI Reports" },
+  { id: "report-builder-view", name: "AI Report Builder - Access", category: "AI Reports" },
+  
   // Evaluation
   { id: "list_evaluation", name: "List Evaluation", category: "Evaluation" },
   { id: "add_evaluation", name: "Add Evaluation", category: "Evaluation" },
@@ -153,6 +231,37 @@ const AVAILABLE_SERVICES = [
   
   // User Profile
   { id: "profile", name: "Profile", category: "User" },
+  
+  // === NEW HYPHEN-BASED SERVICE IDS (for backward compatibility) ===
+  // These match the services created when programs are set up
+  { id: "programs-view", name: "Programs - View", category: "Programs" },
+  { id: "programs-create", name: "Programs - Create", category: "Programs" },
+  { id: "programs-edit", name: "Programs - Edit", category: "Programs" },
+  { id: "programs-delete", name: "Programs - Delete", category: "Programs" },
+  
+  { id: "participants-view", name: "Participants - View", category: "Participants" },
+  { id: "participants-create", name: "Participants - Create", category: "Participants" },
+  { id: "participants-edit", name: "Participants - Edit", category: "Participants" },
+  { id: "participants-delete", name: "Participants - Delete", category: "Participants" },
+  
+  { id: "questionnaires-view", name: "Questionnaires - View", category: "Questionnaires" },
+  { id: "questionnaires-create", name: "Questionnaires - Create", category: "Questionnaires" },
+  { id: "questionnaires-edit", name: "Questionnaires - Edit", category: "Questionnaires" },
+  { id: "questionnaires-delete", name: "Questionnaires - Delete", category: "Questionnaires" },
+  
+  { id: "activities-view", name: "Activities - View", category: "Activities" },
+  { id: "activities-create", name: "Activities - Create", category: "Activities" },
+  { id: "activities-edit", name: "Activities - Edit", category: "Activities" },
+  { id: "activities-delete", name: "Activities - Delete", category: "Activities" },
+  { id: "activities-send-notification", name: "Activities - Send Notification", category: "Activities" },
+  { id: "activities-set-reminder", name: "Activities - Set Reminder", category: "Activities" },
+  { id: "activities-landing-config", name: "Activities - Landing Config", category: "Activities" },
+  
+  { id: "reports-view", name: "Reports - View", category: "Reports" },
+  { id: "reports-export", name: "Reports - Export", category: "Reports" },
+  
+  { id: "evaluation-view", name: "Evaluation - View", category: "Evaluation" },
+  { id: "evaluation-manage", name: "Evaluation - Manage", category: "Evaluation" },
 ];
 
 interface Role {
@@ -179,6 +288,9 @@ interface ProgramOption {
 function RolesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { currentUser: authUser, isLoading: authLoading } = useAuth(); // Use AuthContext instead of separate API call
+  const hasInitialized = useRef(false); // Prevent double initialization
+  const [isMounted, setIsMounted] = useState(false); // Track client-side mount to prevent hydration errors
   const [activeTab, setActiveTab] = useState<"program-users" | "system-roles" | "hierarchy-mapping">("program-users");
   const [showForm, setShowForm] = useState(false);
   const [showMappingModal, setShowMappingModal] = useState(false);
@@ -207,7 +319,6 @@ function RolesPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [createFormProgramId, setCreateFormProgramId] = useState<string>("");
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
   
@@ -233,67 +344,60 @@ function RolesPage() {
   const [availableChildUsers, setAvailableChildUsers] = useState<Role[]>([]);
   const [hierarchyMappings, setHierarchyMappings] = useState<any[]>([]);
 
-  // Fetch roles on mount and when tab changes
+  // Fetch roles on mount and when tab changes - uses AuthContext instead of separate API call
+  useEffect(() => {
+    // Set mounted on client side to prevent hydration errors
+    setIsMounted(true);
+  }, []);
+
   useEffect(() => {
     const initializeData = async () => {
+      // Wait for AuthContext to load user
+      if (authLoading || !authUser) {
+        return;
+      }
+      
+      // Prevent double initialization - only run once when user is ready
+      if (hasInitialized.current) {
+        return;
+      }
+      hasInitialized.current = true;
+      
       try {
-        // Fetch user data first
-        const response = await fetch('/api/auth/me', {
-          credentials: 'include'
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setCurrentUser(data.user);
-          console.log('🔍 User loaded for roles page:', { role: data.user.role, programId: data.user.programId });
-          
-          // CRITICAL: Only program-admin and super-admin can access Roles & Services
-          if (!['super-admin', 'program-admin'].includes(data.user.role)) {
-            console.warn('⚠️ Unauthorized access attempt to Roles page by:', data.user.role);
-            window.location.href = data.user.role === 'program-manager' ? '/program-manager' : '/dashboard';
-            return;
-          }
-          
-          // If not super-admin and trying to access system-roles, redirect to program-users
-          if (data.user.role !== 'super-admin' && activeTab === 'system-roles') {
-            setActiveTab('program-users');
-            return;
-          }
-          
-          // Now load data with user context available
-          await loadProgramsWithUser(data.user);
-          await loadRolesWithUser(data.user);
+        console.log('🔍 User loaded for roles page:', { role: authUser.role, programId: authUser.programId });
+        
+        // CRITICAL: Only program-admin and super-admin can access Roles & Services
+        if (!['super-admin', 'program-admin'].includes(authUser.role)) {
+          console.warn('⚠️ Unauthorized access attempt to Roles page by:', authUser.role);
+          window.location.href = authUser.role === 'program-manager' ? '/program-manager' : '/dashboard';
+          return;
         }
+        
+        // If not super-admin and trying to access system-roles, redirect to program-users
+        if (authUser.role !== 'super-admin' && activeTab === 'system-roles') {
+          setActiveTab('program-users');
+          return;
+        }
+        
+        // Now load data with user context available
+        await loadProgramsWithUser(authUser);
+        await loadRolesWithUser(authUser);
       } catch (error) {
         console.error('Error initializing roles page:', error);
       }
     };
     
     initializeData();
-    
-    // Load hierarchy mappings when on hierarchy-mapping tab
+  }, [authLoading, authUser]);
+
+  // Load hierarchy mappings when tab changes
+  useEffect(() => {
     if (activeTab === 'hierarchy-mapping') {
       loadHierarchyMappings();
     }
   }, [activeTab]);
 
-  const checkUserRole = async () => {
-    try {
-      const response = await fetch('/api/auth/me', {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentUser(data.user);
-        
-        // If not super-admin and trying to access system-roles, redirect to program-users
-        if (data.user.role !== 'super-admin' && activeTab === 'system-roles') {
-          setActiveTab('program-users');
-        }
-      }
-    } catch (error) {
-      console.error('Error checking user role:', error);
-    }
-  };
+  // checkUserRole is no longer needed - using authUser from AuthContext
 
   // Handle query parameters
   useEffect(() => {
@@ -313,12 +417,28 @@ function RolesPage() {
     setCurrentPage(1); // Reset to first page when filter changes
   }, [selectedProgramFilter, allRoles]);
 
-  // Pagination calculations
-  const totalPages = Math.ceil(roles.length / itemsPerPage);
+  // Separate Program Users and System Roles
+  const programUserRoles = useMemo(() => {
+    return roles.filter(role => role.is_default_user === true);
+  }, [roles]);
+
+  const systemRoles = useMemo(() => {
+    return roles.filter(role => role.is_default_user === false);
+  }, [roles]);
+
+  // Determine which roles to display based on active tab
+  // Always default to program-users to avoid hydration mismatches
+  const displayRoles = useMemo(() => {
+    if (!isMounted) return programUserRoles; // During SSR, always use program users
+    return activeTab === 'program-users' ? programUserRoles : systemRoles;
+  }, [activeTab, programUserRoles, systemRoles, isMounted]);
+
+  // Pagination calculations based on the displayed roles
+  const totalPages = Math.ceil(displayRoles.length / itemsPerPage);
   const paginatedRoles = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return roles.slice(startIndex, startIndex + itemsPerPage);
-  }, [roles, currentPage, itemsPerPage]);
+    return displayRoles.slice(startIndex, startIndex + itemsPerPage);
+  }, [displayRoles, currentPage, itemsPerPage]);
 
   const getAuthHeaders = () => {
     const cookies = document.cookie.split(';');
@@ -332,6 +452,22 @@ function RolesPage() {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
+  };
+
+  // Helper function to safely parse services (handles both array and JSON string)
+  const parseServices = (services: any): string[] => {
+    if (!services) return [];
+    if (Array.isArray(services)) return services;
+    if (typeof services === 'string') {
+      try {
+        const parsed = JSON.parse(services);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        console.error('Failed to parse services JSON:', e);
+        return [];
+      }
+    }
+    return [];
   };
 
   const getProgramId = () => {
@@ -379,8 +515,8 @@ function RolesPage() {
       
       // Check user role and programId
       let url = `${API_URL}/programs`;
-      if (currentUser && currentUser.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(currentUser.role)) {
-        url = `${API_URL}/programs?program_id=${currentUser.programId}`;
+      if (authUser && authUser.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(authUser.role)) {
+        url = `${API_URL}/programs?program_id=${authUser.programId}`;
       }
       
       const response = await fetch(url, {
@@ -498,7 +634,7 @@ function RolesPage() {
                 program_id: prog.id,
                 created_at: user.created_at,
                 is_default_user: true,
-                default_services: user.default_services || [], // Include default_services from database
+                default_services: parseServices(user.default_services), // Safely parse services
                 program: { id: prog.id, name: prog.name }
               }));
               allProgramRoles.push(...mappedUsers);
@@ -517,7 +653,7 @@ function RolesPage() {
                 program_id: prog.id,
                 created_at: role.created_at,
                 is_default_user: false,
-                services: role.services || [], // Include services from database for custom roles
+                services: parseServices(role.services), // Safely parse services
                 program: { id: prog.id, name: prog.name }
               }));
               allProgramRoles.push(...mappedRoles);
@@ -557,8 +693,8 @@ function RolesPage() {
       
       // Fetch programs (filtered by user's program for program roles)
       let programsUrl = `${API_URL}/programs`;
-      if (currentUser && currentUser.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(currentUser.role)) {
-        programsUrl = `${API_URL}/programs?program_id=${currentUser.programId}`;
+      if (authUser && authUser.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(authUser.role)) {
+        programsUrl = `${API_URL}/programs?program_id=${authUser.programId}`;
       }
       
       const programsResponse = await fetch(programsUrl, {
@@ -815,6 +951,7 @@ function RolesPage() {
     console.log('Role ID:', role.id, 'Type:', typeof role.id);
     console.log('Program ID:', role.program_id, 'Type:', typeof role.program_id);
     console.log('Is default user:', role.is_default_user);
+    console.log('Role name:', role.role_name);
     
     setEditingRole(role);
     setEditUsername(role.username);
@@ -825,19 +962,31 @@ function RolesPage() {
     // Set services from the role data directly (no need to fetch)
     // For default users: use default_services field
     // For custom roles: use services field
-    const servicesField = (role as any).default_services || (role as any).services;
-    console.log('📋 Services field found:', servicesField);
-    console.log('📋 Services count:', Array.isArray(servicesField) ? servicesField.length : 0);
-    console.log('📋 First 10 services:', Array.isArray(servicesField) ? servicesField.slice(0, 10) : []);
+    let servicesField = role.is_default_user ? (role as any).default_services : (role as any).services;
     
-    if (servicesField && Array.isArray(servicesField)) {
-      setEditSelectedServices(servicesField);
-    } else {
-      setEditSelectedServices([]);
+    // Fallback: try both fields if the expected one is not available
+    if (!servicesField) {
+      servicesField = (role as any).default_services || (role as any).services;
     }
+    
+    console.log('📋 Services field raw:', servicesField);
+    console.log('📋 Services type:', typeof servicesField);
+    console.log('📋 Services is array:', Array.isArray(servicesField));
+    
+    // Parse services safely (handles array, JSON string, or null)
+    const finalServices = parseServices(servicesField);
+    
+    console.log('📋 Final services count:', finalServices.length);
+    console.log('📋 First 10 services:', finalServices.slice(0, 10));
+    console.log('📋 All services:', finalServices);
+    
+    setEditSelectedServices(finalServices);
     
     // Fetch available services for this role to filter the checkboxes
     await fetchAvailableServices(role.role_name);
+    
+    // Log after fetch to verify services are still set
+    console.log('📋 Edit selected services state after fetch:', finalServices);
     
     setShowEditModal(true);
   };
@@ -1083,10 +1232,12 @@ function RolesPage() {
   };
 
   const handleSelectAll = () => {
-    if (selectedRoleIds.length === roles.length) {
+    // Use displayRoles based on active tab
+    const currentDisplayRoles = activeTab === 'program-users' ? programUserRoles : systemRoles;
+    if (selectedRoleIds.length === currentDisplayRoles.length && currentDisplayRoles.length > 0) {
       setSelectedRoleIds([]);
     } else {
-      setSelectedRoleIds(roles.map(r => r.id));
+      setSelectedRoleIds(currentDisplayRoles.map(r => r.id));
     }
   };
 
@@ -1237,14 +1388,16 @@ function RolesPage() {
     }
   };
 
-  // Group services by category
-  const servicesByCategory = AVAILABLE_SERVICES.reduce((acc, service) => {
-    if (!acc[service.category]) {
-      acc[service.category] = [];
-    }
-    acc[service.category].push(service);
-    return acc;
-  }, {} as Record<string, typeof AVAILABLE_SERVICES>);
+  // Group services by category - memoized to prevent re-renders
+  const servicesByCategory = useMemo(() => {
+    return AVAILABLE_SERVICES.reduce((acc, service) => {
+      if (!acc[service.category]) {
+        acc[service.category] = [];
+      }
+      acc[service.category].push(service);
+      return acc;
+    }, {} as Record<string, typeof AVAILABLE_SERVICES>);
+  }, []); // Empty dependency array since AVAILABLE_SERVICES is constant
 
   return (
     <ProgramAdminLayout>
@@ -1292,21 +1445,26 @@ function RolesPage() {
         <Tabs value={activeTab} onValueChange={(value) => {
           setActiveTab(value as "program-users" | "system-roles");
           setShowForm(false);
+          setCurrentPage(1); // Reset pagination when switching tabs
         }} className="w-full">
           <TabsList className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200 flex-wrap gap-1 mb-6">
             <TabsTrigger 
               value="program-users" 
               className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-100 hover:text-gray-900"
             >
-              <Users className="w-4 h-4 mr-2" />
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
               Program Users
             </TabsTrigger>
-            {currentUser?.role === 'super-admin' && (
+            {isMounted && authUser?.role === 'super-admin' && (
               <TabsTrigger 
                 value="system-roles" 
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
               >
-                <UserCog className="w-4 h-4 mr-2" />
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
                 System Roles
               </TabsTrigger>
             )}
@@ -1314,7 +1472,9 @@ function RolesPage() {
               value="hierarchy-mapping" 
               className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-green-600 data-[state=active]:shadow-lg data-[state=active]:shadow-green-100 hover:text-gray-900"
             >
-              <Network className="w-4 h-4 mr-2" />
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
               Hierarchy Mapping
             </TabsTrigger>
           </TabsList>
@@ -1393,11 +1553,14 @@ function RolesPage() {
             <CardContent>
               {loadingRoles ? (
                 <div className="text-center py-8 text-gray-500">Loading roles...</div>
-              ) : roles.length === 0 ? (
+              ) : displayRoles.length === 0 ? (
                 <div className="text-center py-12">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Roles Yet</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No {activeTab === 'program-users' ? 'Program Users' : 'System Roles'} Yet</h3>
                   <p className="text-gray-600 mb-4">
-                    Click "Create New Role" above to create your first custom role
+                    {activeTab === 'program-users' 
+                      ? 'No program users found. These are predefined roles like Program Admin, Manager, Moderator, and Evaluation Admin.'
+                      : 'Click "Create New Role" above to create your first custom system role'
+                    }
                   </p>
                 </div>
               ) : (
@@ -1408,7 +1571,7 @@ function RolesPage() {
                         <TableHead className="w-12">
                           <input
                             type="checkbox"
-                            checked={selectedRoleIds.length === paginatedRoles.length && paginatedRoles.length > 0}
+                            checked={displayRoles.length > 0 && selectedRoleIds.length === displayRoles.length}
                             onChange={handleSelectAll}
                             className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                           />
@@ -1479,14 +1642,14 @@ function RolesPage() {
               )}
               
               {/* Pagination */}
-              {roles.length > 0 && (
+              {displayRoles.length > 0 && (
                 <div className="px-6 py-4 border-t border-gray-200">
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       <div className="text-sm text-gray-600">
-                        Showing {roles.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to{" "}
-                        {Math.min(currentPage * itemsPerPage, roles.length)} of{" "}
-                        {roles.length} roles
+                        Showing {displayRoles.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                        {Math.min(currentPage * itemsPerPage, displayRoles.length)} of{" "}
+                        {displayRoles.length} {activeTab === 'program-users' ? 'program users' : 'system roles'}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500">Per page:</span>
@@ -1578,7 +1741,7 @@ function RolesPage() {
           </TabsContent>
 
           {/* System Roles Tab Content */}
-          {currentUser?.role === 'super-admin' && (
+          {isMounted && authUser?.role === 'super-admin' && (
             <TabsContent value="system-roles" className="space-y-6">
               {/* Info Banner */}
               {!showForm && (
@@ -1606,7 +1769,7 @@ function RolesPage() {
                     <div className="flex items-center justify-between">
                       <CardTitle>System Roles</CardTitle>
                       <div className="text-sm text-gray-500">
-                        {roles.length} {roles.length === 1 ? "role" : "roles"}
+                        {systemRoles.length} {systemRoles.length === 1 ? "role" : "roles"}
                       </div>
                     </div>
                   </CardHeader>
@@ -1617,7 +1780,7 @@ function RolesPage() {
                           <TableRow>
                             <TableHead className="w-12">
                               <Checkbox
-                                checked={roles.length > 0 && selectedRoleIds.length === roles.length}
+                                checked={systemRoles.length > 0 && selectedRoleIds.length === systemRoles.length}
                                 onCheckedChange={handleSelectAll}
                               />
                             </TableHead>
@@ -1639,14 +1802,14 @@ function RolesPage() {
                                 </div>
                               </TableCell>
                             </TableRow>
-                          ) : roles.length === 0 ? (
+                          ) : systemRoles.length === 0 ? (
                             <TableRow>
                               <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                                 No system roles found. Create one to get started.
                               </TableCell>
                             </TableRow>
                           ) : (
-                            roles.map((role) => (
+                            systemRoles.map((role) => (
                               <TableRow key={role.id}>
                                 <TableCell>
                                   <Checkbox
@@ -1937,7 +2100,10 @@ function RolesPage() {
                   <div className="mt-4 space-y-6">
                     {Object.entries(servicesByCategory).map(([category, services]) => (
                       <div key={category} className="border rounded-lg p-4">
-                        <h3 className="font-semibold text-gray-900 mb-3">{category}</h3>
+                        <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <CategoryIcon category={category} className="w-5 h-5 text-qsights-primary flex-shrink-0" />
+                          {category}
+                        </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                           {services.map((service) => (
                             <div key={service.id} className="flex items-center space-x-2">
@@ -2017,7 +2183,7 @@ function RolesPage() {
                       type={showPassword ? "text" : "password"}
                       value={editPassword}
                       onChange={(e) => setEditPassword(e.target.value)}
-                      placeholder="Leave blank to keep current"
+                      placeholder="Enter new password (leave blank to keep current)"
                     />
                     <button
                       type="button"
@@ -2042,7 +2208,7 @@ function RolesPage() {
                   </Button>
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  Leave blank to keep the current password
+                  ⚠️ Passwords cannot be retrieved for security reasons. Leave blank to keep the current password, or generate a new one.
                 </p>
               </div>
               
@@ -2050,12 +2216,31 @@ function RolesPage() {
               <div className="border-t pt-4">
                 <Label className="text-base font-semibold mb-3 block">
                   Selected Services ({editSelectedServices.length} selected)
-                  {isSystemRole && !allowCustomServices && editingRole?.is_default_user !== false && availableServicesForRole.length > 0 && (
+                  {(() => {
+                    // Debug logging
+                    console.log('🔍 SERVICE INDICATOR DEBUG:', {
+                      is_default_user: editingRole?.is_default_user,
+                      allowCustomServices,
+                      availableServicesCount: availableServicesForRole.length,
+                      activeTab,
+                      roleName: editingRole?.role_name
+                    });
+                    return null;
+                  })()}
+                  {/* Default Program Users (is_default_user === true) with restricted services - show restriction warning */}
+                  {editingRole?.is_default_user === true && !allowCustomServices && availableServicesForRole.length > 0 && (
                     <span className="text-xs font-normal text-yellow-600 ml-2">
-                      ⚠️ System role - only {availableServicesForRole.length} predefined services available
+                      ⚠️ Default Program User - only {availableServicesForRole.length} predefined services can be selected
                     </span>
                   )}
-                  {(allowCustomServices || !isSystemRole || editingRole?.is_default_user === false) && (
+                  {/* System Users (super-admin, admin) with custom services allowed */}
+                  {allowCustomServices && activeTab === 'system-roles' && (
+                    <span className="text-xs font-normal text-green-600 ml-2">
+                      ✓ Custom services allowed
+                    </span>
+                  )}
+                  {/* Custom Program Roles (is_default_user === false) - allow all services */}
+                  {editingRole?.is_default_user === false && (
                     <span className="text-xs font-normal text-green-600 ml-2">
                       ✓ Custom services allowed
                     </span>
@@ -2063,19 +2248,37 @@ function RolesPage() {
                 </Label>
                 <div className="space-y-4 max-h-96 overflow-y-auto">
                   {Object.entries(servicesByCategory).map(([category, services]) => {
-                    // For system roles (default users), show all but disable non-available
-                    // For custom roles or super-admin, all services are enabled
-                    const shouldRestrictServices = isSystemRole && !allowCustomServices && editingRole?.is_default_user !== false;
+                    // Default Program Users (is_default_user === true): Only allow predefined services from role_service_definitions
+                    // Custom Program Roles (is_default_user === false): Allow any services
+                    // System Users (super-admin, admin): Allow any services (allow_custom_services = true)
+                    const isProgramUser = editingRole?.is_default_user === true;
+                    // Restrict services for Default Program Users who don't have custom services allowed
+                    const shouldRestrictServices = isProgramUser && !allowCustomServices && availableServicesForRole.length > 0;
                     
                     return (
                       <div key={category} className="border rounded-lg p-3">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-2">{category}</h3>
+                        <h3 className="font-semibold text-sm text-gray-900 mb-2 flex items-center gap-2">
+                          <CategoryIcon category={category} className="w-4 h-4 text-qsights-primary flex-shrink-0" />
+                          {category}
+                        </h3>
                         <div className="grid grid-cols-1 gap-2">
                           {services.map((service) => {
                             const isAvailable = !shouldRestrictServices || 
                                               availableServicesForRole.length === 0 || 
                                               availableServicesForRole.includes(service.id);
                             const isChecked = editSelectedServices.includes(service.id);
+                            
+                            // Debug logging for first 3 services per category
+                            if (services.indexOf(service) < 3) {
+                              console.log(`🔍 [${category}] Service ${service.id}:`, {
+                                isProgramUser,
+                                shouldRestrictServices,
+                                isChecked,
+                                isAvailable,
+                                isInPredefined: availableServicesForRole.includes(service.id),
+                                predefinedCount: availableServicesForRole.length
+                              });
+                            }
                             
                             return (
                               <div key={service.id} className={`flex items-center space-x-2 ${

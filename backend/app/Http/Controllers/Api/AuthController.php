@@ -199,9 +199,24 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
+        // Debug logging
+        \Log::info('[AuthController::me] Request received', [
+            'has_auth_header' => $request->hasHeader('Authorization'),
+            'auth_header' => $request->header('Authorization') ? substr($request->header('Authorization'), 0, 30) . '...' : null,
+            'bearer_token' => $request->bearerToken() ? substr($request->bearerToken(), 0, 20) . '...' : null,
+        ]);
+        
         $user = $request->user();
+        
+        \Log::info('[AuthController::me] User loaded', [
+            'user_found' => $user ? true : false,
+            'user_id' => $user ? $user->id : null,
+            'user_email' => $user ? $user->email : null,
+            'user_role' => $user ? $user->role : null,
+        ]);
 
         if (!$user) {
+            \Log::warning('[AuthController::me] User not authenticated - returning 401');
             return response()->json([
                 'message' => 'Unauthenticated'
             ], 401);
@@ -211,39 +226,95 @@ class AuthController extends Controller
         $services = [];
         $allowedProgramIds = null; // For system users with program restrictions
         
-        // Check program_roles table for both system roles (program_id = null) and program roles
-        $programRole = DB::table('program_roles')
-            ->where('email', $user->email)
-            ->where(function($query) use ($user) {
-                // Match system roles (program_id = null) OR match specific program
-                $query->whereNull('program_id')
-                      ->orWhere('program_id', $user->program_id);
-            })
-            ->first();
-        
-        if ($programRole && $programRole->services) {
-            $roleServices = json_decode($programRole->services, true) ?? [];
-            // For system-user and program-user roles, ONLY use services from program_roles
-            // (don't merge with default_services)
-            if ($user->role === 'system-user' || $user->role === 'program-user') {
-                $services = $roleServices;
-                
-                // For system users, also get allowed_program_ids
-                if ($user->role === 'system-user' && isset($programRole->allowed_program_ids)) {
-                    $allowedProgramIds = json_decode($programRole->allowed_program_ids, true);
+        // Super Admin gets all services by default (hardcoded list for backward compatibility)
+        if ($user->role === 'super-admin') {
+            $services = [
+                "Overview",
+                "Organizations",
+                "Programs",
+                "Group Management",
+                "Participants",
+                "Activities",
+                "Questionnaires",
+                "Communications",
+                "Reports",
+                "AI Reports",
+                "Evaluation",
+                "Settings",
+                "Users",
+                "Roles",
+                "Permissions",
+                "Special Access",
+                "Authentication"
+            ];
+        } 
+        // Admin gets all services by default
+        elseif ($user->role === 'admin') {
+            $services = [
+                "Overview",
+                "Organizations",
+                "Programs",
+                "Group Management",
+                "Participants",
+                "Activities",
+                "Questionnaires",
+                "Communications",
+                "Reports",
+                "AI Reports",
+                "Evaluation",
+                "Settings",
+                "Users",
+                "Roles",
+                "Permissions",
+                "Special Access",
+                "Authentication"
+            ];
+        }
+        // Program-scoped roles (program-admin, program-manager, program-moderator, evaluation-admin) use default_services from database
+        elseif (in_array($user->role, ['program-admin', 'program-manager', 'program-moderator', 'evaluation-admin'])) {
+            // Load services from default_services column (predefined services from role_service_definitions)
+            if ($user->default_services) {
+                $services = is_array($user->default_services) ? $user->default_services : json_decode($user->default_services, true);
+            } else {
+                // Fallback to empty array if no default_services set
+                $services = [];
+            }
+        } 
+        else {
+            // Check program_roles table for both system roles (program_id = null) and program roles
+            $programRole = DB::table('program_roles')
+                ->where('email', $user->email)
+                ->where(function($query) use ($user) {
+                    // Match system roles (program_id = null) OR match specific program
+                    $query->whereNull('program_id')
+                          ->orWhere('program_id', $user->program_id);
+                })
+                ->first();
+            
+            if ($programRole && $programRole->services) {
+                $roleServices = json_decode($programRole->services, true) ?? [];
+                // For system-user and program-user roles, ONLY use services from program_roles
+                // (don't merge with default_services)
+                if ($user->role === 'system-user' || $user->role === 'program-user') {
+                    $services = $roleServices;
+                    
+                    // For system users, also get allowed_program_ids
+                    if ($user->role === 'system-user' && isset($programRole->allowed_program_ids)) {
+                        $allowedProgramIds = json_decode($programRole->allowed_program_ids, true);
+                    }
+                } else {
+                    // For other roles, use default_services as base if available
+                    if ($user->default_services) {
+                        $services = $user->default_services;
+                    }
+                    // Merge with role services (role services take precedence)
+                    $services = array_unique(array_merge($services, $roleServices));
                 }
             } else {
-                // For other roles, use default_services as base if available
+                // No program role found, use default_services if available
                 if ($user->default_services) {
                     $services = $user->default_services;
                 }
-                // Merge with role services (role services take precedence)
-                $services = array_unique(array_merge($services, $roleServices));
-            }
-        } else {
-            // No program role found, use default_services if available
-            if ($user->default_services) {
-                $services = $user->default_services;
             }
         }
 

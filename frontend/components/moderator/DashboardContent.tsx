@@ -15,8 +15,10 @@ import {
   UserCheck,
 } from "lucide-react";
 import { activitiesApi, participantsApi } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function DashboardContent() {
+  const { currentUser: authUser, isLoading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [activities, setActivities] = useState<any[]>([]);
   const [stats, setStats] = useState({
@@ -27,28 +29,24 @@ export default function DashboardContent() {
   });
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (!authLoading && authUser) {
+      loadDashboardData();
+    }
+  }, [authLoading, authUser]);
 
   async function loadDashboardData() {
     try {
       setLoading(true);
       
-      const userResponse = await fetch('/api/auth/me');
-      if (!userResponse.ok) {
-        return;
-      }
-      
-      const userData = await userResponse.json();
-      
-      if (!userData.user.programId) {
+      // Use authUser from AuthContext instead of fetching
+      if (!authUser?.programId) {
         setLoading(false);
         return;
       }
 
       const [participantsData, activitiesData] = await Promise.all([
-        participantsApi.getAll({ program_id: userData.user.programId }).catch(() => []),
-        activitiesApi.getAll({ program_id: userData.user.programId }).catch(() => []),
+        participantsApi.getAll({ program_id: authUser.programId }).catch(() => []),
+        activitiesApi.getAll({ program_id: authUser.programId }).catch(() => []),
       ]);
 
       setActivities(activitiesData.slice(0, 5)); // Show only 5 activities

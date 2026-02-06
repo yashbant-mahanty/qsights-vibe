@@ -19,6 +19,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Helper to get backend token from cookies (same as api.ts)
+function getBackendToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  
+  const cookies = document.cookie.split(';');
+  const tokenCookie = cookies.find(c => c.trim().startsWith('backendToken='));
+  
+  if (!tokenCookie) return null;
+  
+  return decodeURIComponent(tokenCookie.split('=')[1]);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Load cached user immediately for instant rendering
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -45,12 +57,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasAttemptedLoad.current = true;
 
     try {
-      // Call Laravel backend directly with cookie credentials
+      // Get the backend token from cookies
+      const token = getBackendToken();
+      
+      // If no token, don't make the API call - just use cached user
+      if (!token) {
+        // Keep cached user if available, otherwise clear
+        if (!currentUser) {
+          setCurrentUser(null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('qsights_current_user');
+          }
+        }
+        return;
+      }
+
+      // Call Laravel backend directly with token
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
       const response = await fetch(`${API_URL}/auth/me`, {
         credentials: "include",
         headers: {
           'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
         }
       });
       if (response.ok) {

@@ -108,7 +108,7 @@ export default function ProgramAdminDashboard() {
       }
 
       // Fetch initial data
-      await loadFilteredData(userData.user);
+      await loadFilteredData(authUser as UserData);
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);

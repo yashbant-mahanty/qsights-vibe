@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,49 @@ const iconMap: { [key: string]: any } = {
   ClipboardCheck,
 };
 
-// Search options for different pages
+// Memoized sidebar item component to prevent re-renders
+const SidebarItem = React.memo(
+  ({ item, isActive, sidebarOpen }: { item: any; isActive: boolean; sidebarOpen: boolean }) => {
+    // Get icon component safely - use a default if not found
+    const IconComponent = React.useMemo(() => {
+      return iconMap[item.icon] || LayoutDashboard;
+    }, [item.icon]);
+    
+    return (
+      <Link
+        href={item.href}
+        prefetch={true}
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg group ${
+          !sidebarOpen && "justify-center"
+        } ${
+          isActive 
+            ? "bg-qsights-dark text-white" 
+            : "text-gray-700 hover:bg-qsights-cyan/10 hover:text-qsights-dark"
+        }`}
+        title={!sidebarOpen ? item.label : ""}
+      >
+        <IconComponent className="w-5 h-5 flex-shrink-0" />
+        {sidebarOpen && (
+          <span className="text-sm font-medium">{item.label}</span>
+        )}
+      </Link>
+    );
+  },
+  // Custom comparison function - only re-render if these props actually change
+  (prevProps, nextProps) => {
+    return (
+      prevProps.item.href === nextProps.item.href &&
+      prevProps.item.icon === nextProps.item.icon &&
+      prevProps.isActive === nextProps.isActive &&
+      prevProps.sidebarOpen === nextProps.sidebarOpen
+    );
+  }
+);
+
+SidebarItem.displayName = 'SidebarItem';
+
+// Search options for different pages - Define as constant outside to avoid recreation
+const defaultSearchConfig = { placeholder: 'Search...', items: [] };
 const searchablePages: { [key: string]: { placeholder: string; items: any[] } } = {
   '/organizations': { placeholder: 'Search organizations...', items: [] },
   '/group-heads': { placeholder: 'Search group heads...', items: [] },
@@ -85,16 +127,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
         setLogoLoading(false);
       }
       
-      // Load cached sidebar items
+      // Load cached sidebar items - just store them without icon components
       const cached = sessionStorage.getItem('qsights_sidebar_items');
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          const remapped = parsed.map((item: any) => ({
-            ...item,
-            icon: iconMap[item.iconName] || LayoutDashboard
-          }));
-          setSidebarItems(remapped);
+          setSidebarItems(parsed);
         } catch (e) {
           console.error('Failed to parse cached sidebar items:', e);
         }
@@ -131,29 +169,30 @@ export default function AppLayout({ children }: AppLayoutProps) {
     loadLogo();
   }, []);
 
+  // Memoize navigation items - use stable dependencies to prevent unnecessary recalculations
+  // Using services?.join(',') instead of JSON.stringify to create a stable string reference
+  const servicesKey = currentUser?.services?.join(',') || '';
+  const navigationItems = useMemo(() => {
+    if (!currentUser) return [];
+    
+    const userServices = currentUser.services || [];
+    return getNavigationItems(currentUser.role as UserRole, userServices);
+  }, [currentUser?.role, servicesKey]);
+
   useEffect(() => {
-    if (currentUser) {
-      // Get navigation items based on user role and services
-      const userServices = currentUser.services || [];
-      const navItems = getNavigationItems(currentUser.role as UserRole, userServices);
-      const mappedItems = navItems.map(item => ({
-        ...item,
-        icon: iconMap[item.icon] || LayoutDashboard,
-        iconName: item.icon // Store icon name for caching
-      }));
-      setSidebarItems(mappedItems);
+    if (navigationItems.length > 0) {
+      setSidebarItems(navigationItems);
       // Cache for instant load on navigation
       if (typeof window !== 'undefined') {
-        sessionStorage.setItem('qsights_sidebar_items', JSON.stringify(navItems.map(item => ({
-          ...item,
-          iconName: item.icon
-        }))));
+        sessionStorage.setItem('qsights_sidebar_items', JSON.stringify(navigationItems));
       }
     }
-  }, [currentUser]);
+  }, [navigationItems]);
 
-  // Get current page search config
-  const currentPageSearch = searchablePages[pathname] || { placeholder: 'Search...', items: [] };
+  // Get current page search config - memoize to prevent new object on every render
+  const currentPageSearch = useMemo(() => {
+    return searchablePages[pathname] || defaultSearchConfig;
+  }, [pathname]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -224,24 +263,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
             sidebarItems.map((item, index) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
               return (
-                <Link
-                  key={index}
-                  href={item.href}
-                  prefetch={true}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg group ${
-                    !sidebarOpen && "justify-center"
-                  } ${
-                    isActive 
-                      ? "bg-qsights-dark text-white" 
-                      : "text-gray-700 hover:bg-qsights-cyan/10 hover:text-qsights-dark"
-                  }`}
-                  title={!sidebarOpen ? item.label : ""}
-                >
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  {sidebarOpen && (
-                    <span className="text-sm font-medium">{item.label}</span>
-                  )}
-                </Link>
+                <SidebarItem
+                  key={`${item.href}-${index}`}
+                  item={item}
+                  isActive={isActive}
+                  sidebarOpen={sidebarOpen}
+                />
               );
             })
           ) : (

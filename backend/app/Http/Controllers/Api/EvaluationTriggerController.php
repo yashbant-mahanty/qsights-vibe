@@ -24,14 +24,18 @@ class EvaluationTriggerController extends Controller
                 'template_id' => 'required|string',
                 'template_name' => 'required|string|max:255',
                 'template_questions' => 'required|array',
-                'evaluator_ids' => 'required|array|min:1',
-                'evaluator_ids.*' => 'uuid|exists:evaluation_staff,id',
+                'questionnaire_id' => 'nullable|integer',
+                'evaluator_data' => 'required|array|min:1',
+                'evaluator_data.*.evaluator_id' => 'required|uuid|exists:evaluation_staff,id',
+                'evaluator_data.*.subordinate_ids' => 'required|array|min:1',
+                'evaluator_data.*.subordinate_ids.*' => 'uuid|exists:evaluation_staff,id',
                 'program_id' => 'required|uuid',
                 'email_subject' => 'nullable|string',
                 'email_body' => 'nullable|string',
                 'start_date' => 'nullable|date',
                 'end_date' => 'nullable|date',
                 'scheduled_trigger_at' => 'nullable|date',
+                'scheduled_timezone' => 'nullable|string',
             ]);
             
             $triggeredCount = 0;
@@ -39,7 +43,10 @@ class EvaluationTriggerController extends Controller
             $skippedCount = 0;
             $skippedEvaluators = [];
             
-            foreach ($validated['evaluator_ids'] as $evaluatorId) {
+            foreach ($validated['evaluator_data'] as $evaluatorData) {
+                $evaluatorId = $evaluatorData['evaluator_id'];
+                $subordinateIds = $evaluatorData['subordinate_ids'];
+                
                 // Check for duplicate active evaluation
                 // Only skip if there's an active evaluation for the SAME template that hasn't ended yet
                 $existingActive = DB::table('evaluation_triggered')
@@ -73,17 +80,16 @@ class EvaluationTriggerController extends Controller
                     continue;
                 }
                 
-                // Get subordinates for this evaluator
-                $subordinates = DB::table('evaluation_hierarchy as eh')
-                    ->join('evaluation_staff as es', 'eh.staff_id', '=', 'es.id')
-                    ->where('eh.reports_to_id', $evaluatorId)
-                    ->where('eh.is_active', true)
-                    ->whereNull('eh.deleted_at')
+                // Get ONLY the selected subordinates for this evaluator
+                $subordinates = DB::table('evaluation_staff as es')
+                    ->whereIn('es.id', $subordinateIds)
                     ->whereNull('es.deleted_at')
                     ->select('es.id', 'es.name', 'es.email', 'es.employee_id')
                     ->get();
                 
-                if ($subordinates->isEmpty()) {
+                // Validate that all selected subordinates exist and are not deleted
+                if ($subordinates->isEmpty() || $subordinates->count() !== count($subordinateIds)) {
+                    \Log::warning("Some selected subordinates not found or deleted for evaluator {$evaluatorId}");
                     continue;
                 }
                 
@@ -92,7 +98,11 @@ class EvaluationTriggerController extends Controller
                 $accessToken = Str::random(64);
                 
                 // Check if scheduled for future
-                $scheduledAt = $validated['scheduled_trigger_at'] ?? null;
+                // Convert scheduled time to UTC if provided (frontend sends in user's timezone)
+                $scheduledAt = null;
+                if (!empty($validated['scheduled_trigger_at'])) {
+                    $scheduledAt = \Carbon\Carbon::parse($validated['scheduled_trigger_at'], $validated['scheduled_timezone'] ?? 'UTC')->utc()->toDateTimeString();
+                }
                 $shouldSendNow = !$scheduledAt || \Carbon\Carbon::parse($scheduledAt)->isPast();
                 
                 DB::table('evaluation_triggered')->insert([
@@ -374,6 +384,41 @@ class EvaluationTriggerController extends Controller
                 if ($hasActiveStaff) {
                     // Update subordinates_count to reflect only active staff
                     $eval->subordinates_count = $activeCount;
+                    
+                    // Add formatted datetime fields with timezone info (all stored in UTC)
+                    if ($eval->scheduled_trigger_at) {
+                        $scheduled = \Carbon\Carbon::parse($eval->scheduled_trigger_at);
+                        $eval->scheduled_display = [
+                            'utc' => $scheduled->format('Y-m-d H:i:s') . ' UTC',
+                            'ist' => $scheduled->timezone('Asia/Kolkata')->format('D, M d Y, h:i A') . ' IST',
+                            'day' => $scheduled->timezone('Asia/Kolkata')->format('l'),
+                            'date' => $scheduled->timezone('Asia/Kolkata')->format('M d, Y'),
+                            'time' => $scheduled->timezone('Asia/Kolkata')->format('h:i A'),
+                        ];
+                    }
+                    
+                    if ($eval->email_sent_at) {
+                        $sent = \Carbon\Carbon::parse($eval->email_sent_at);
+                        $eval->email_sent_display = [
+                            'utc' => $sent->format('Y-m-d H:i:s') . ' UTC',
+                            'ist' => $sent->timezone('Asia/Kolkata')->format('D, M d Y, h:i A') . ' IST',
+                            'day' => $sent->timezone('Asia/Kolkata')->format('l'),
+                            'date' => $sent->timezone('Asia/Kolkata')->format('M d, Y'),
+                            'time' => $sent->timezone('Asia/Kolkata')->format('h:i A'),
+                        ];
+                    }
+                    
+                    if ($eval->triggered_at) {
+                        $triggered = \Carbon\Carbon::parse($eval->triggered_at);
+                        $eval->triggered_display = [
+                            'utc' => $triggered->format('Y-m-d H:i:s') . ' UTC',
+                            'ist' => $triggered->timezone('Asia/Kolkata')->format('D, M d Y, h:i A') . ' IST',
+                            'day' => $triggered->timezone('Asia/Kolkata')->format('l'),
+                            'date' => $triggered->timezone('Asia/Kolkata')->format('M d, Y'),
+                            'time' => $triggered->timezone('Asia/Kolkata')->format('h:i A'),
+                        ];
+                    }
+                    
                     // Remove subordinates field from response (not needed in frontend)
                     unset($eval->subordinates);
                     $evaluations[] = $eval;
@@ -858,8 +903,14 @@ class EvaluationTriggerController extends Controller
                     'p.name as program_name'
                 );
             
-            if ($programId) {
-                $query->where('et.program_id', $programId);
+            // Super admin sees all programs if no program_id specified
+            // Other roles (evaluation-admin, program-admin) must filter by program
+            if ($programId || !in_array($user->role, ['super-admin', 'admin'])) {
+                // If programId is provided, use it; otherwise use user's program_id
+                $effectiveProgramId = $programId ?? $user->program_id;
+                if ($effectiveProgramId) {
+                    $query->where('et.program_id', $effectiveProgramId);
+                }
             }
             
             // Apply filters
@@ -970,8 +1021,14 @@ class EvaluationTriggerController extends Controller
                 ->whereNull('p.deleted_at')
                 ->select('evaluation_triggered.*'); // Explicitly select only evaluation_triggered columns
             
-            if ($programId) {
-                $query->where('evaluation_triggered.program_id', $programId);
+            // Super admin sees all programs if no program_id specified
+            // Other roles (evaluation-admin, program-admin) must filter by program
+            if ($programId || !in_array($user->role, ['super-admin', 'admin'])) {
+                // If programId is provided, use it; otherwise use user's program_id
+                $effectiveProgramId = $programId ?? $user->program_id;
+                if ($effectiveProgramId) {
+                    $query->where('evaluation_triggered.program_id', $effectiveProgramId);
+                }
             }
             
             // Get all evaluations and filter by active staff
@@ -1048,7 +1105,7 @@ class EvaluationTriggerController extends Controller
             $completionRate = $totalTriggered > 0 ? round(($completed / $totalTriggered) * 100, 1) : 0;
             
             // Get department-wise breakdown (only for completed with active staff)
-            $departmentBreakdown = DB::table('evaluation_triggered as et')
+            $departmentQuery = DB::table('evaluation_triggered as et')
                 ->join('programs as p', 'et.program_id', '=', 'p.id')
                 ->join('evaluation_staff as es', 'et.evaluator_id', '=', 'es.id')
                 ->join('evaluation_roles as er', 'es.role_id', '=', 'er.id')
@@ -1057,11 +1114,17 @@ class EvaluationTriggerController extends Controller
                 ->whereNull('p.deleted_at')
                 ->whereNull('es.deleted_at')
                 ->whereNull('er.deleted_at')
-                ->when($programId, function($q) use ($programId) {
-                    $q->where('et.program_id', $programId);
-                })
-                ->select('et.id', 'et.subordinates', 'er.category as department')
-                ->get();
+                ->select('et.id', 'et.subordinates', 'er.category as department');
+            
+            // Apply same program filter logic as main query
+            if ($programId || !in_array($user->role, ['super-admin', 'admin'])) {
+                $effectiveProgramId = $programId ?? $user->program_id;
+                if ($effectiveProgramId) {
+                    $departmentQuery->where('et.program_id', $effectiveProgramId);
+                }
+            }
+            
+            $departmentBreakdown = $departmentQuery->get();
             
             // Filter departments by active staff
             $deptCounts = [];
@@ -1153,8 +1216,12 @@ class EvaluationTriggerController extends Controller
                 ->whereNull('p.deleted_at')  // Filter out deleted programs
                 ->whereRaw("subordinates::text LIKE ?", ['%' . $staffId . '%']);
             
-            if ($programId) {
-                $query->where('evaluation_triggered.program_id', $programId);
+            // Super admin sees all programs if no program_id specified
+            if ($programId || !in_array($user->role, ['super-admin', 'admin'])) {
+                $effectiveProgramId = $programId ?? $user->program_id;
+                if ($effectiveProgramId) {
+                    $query->where('evaluation_triggered.program_id', $effectiveProgramId);
+                }
             }
             
             $evaluations = $query->orderBy('completed_at', 'desc')->get();
@@ -1258,8 +1325,12 @@ class EvaluationTriggerController extends Controller
                     DB::raw('SUM(et.subordinates_count) as total_subordinates_evaluated')
                 );
             
-            if ($programId) {
-                $query->where('et.program_id', $programId);
+            // Super admin sees all programs if no program_id specified
+            if ($programId || !in_array($user->role, ['super-admin', 'admin'])) {
+                $effectiveProgramId = $programId ?? $user->program_id;
+                if ($effectiveProgramId) {
+                    $query->where('et.program_id', $effectiveProgramId);
+                }
             }
             
             $evaluators = $query->orderBy('et.evaluator_name')->get();
@@ -1294,8 +1365,12 @@ class EvaluationTriggerController extends Controller
                 ->whereNull('evaluation_triggered.deleted_at')
                 ->whereNull('p.deleted_at');
             
-            if ($programId) {
-                $query->where('evaluation_triggered.program_id', $programId);
+            // Super admin sees all programs if no program_id specified
+            if ($programId || !in_array($user->role, ['super-admin', 'admin'])) {
+                $effectiveProgramId = $programId ?? $user->program_id;
+                if ($effectiveProgramId) {
+                    $query->where('evaluation_triggered.program_id', $effectiveProgramId);
+                }
             }
             
             if ($evaluatorId) {

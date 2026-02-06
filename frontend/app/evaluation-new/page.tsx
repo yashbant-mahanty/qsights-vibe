@@ -8,7 +8,7 @@ import {
   Star, TrendingUp, MessageSquare, UserCheck, Smile, List, X,
   Mail, AlertCircle, Loader2, Power, RefreshCw, Calendar, BarChart3,
   Download, Filter, Eye, FileText, ChevronUp, Award, Target, 
-  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart, FileQuestion, Upload
+  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart, FileQuestion, Upload, ClipboardList
 } from 'lucide-react';
 import { 
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -425,6 +425,7 @@ function EvaluationNewPageContent() {
   // Trigger state
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedEvaluators, setSelectedEvaluators] = useState<string[]>([]);
+  const [selectedSubordinates, setSelectedSubordinates] = useState<Record<string, string[]>>({}); // evaluatorId -> subordinateIds[]
   const [triggering, setTriggering] = useState(false);
   const [showTriggerModal, setShowTriggerModal] = useState(false);
   const [emailSubject, setEmailSubject] = useState('');
@@ -1476,6 +1477,17 @@ function EvaluationNewPageContent() {
       return;
     }
     
+    // Validate that at least one evaluator has subordinates selected
+    const evaluatorsWithSelectedSubs = selectedEvaluators.filter(evalId => {
+      const subs = selectedSubordinates[evalId] || [];
+      return subs.length > 0;
+    });
+    
+    if (evaluatorsWithSelectedSubs.length === 0) {
+      showToast.error('Please select at least one subordinate for evaluation');
+      return;
+    }
+    
     // Prepare email preview
     const template = evaluationTemplates.find(t => t.id === selectedTemplate);
     const customQ = getSelectedCustomQuestionnaire();
@@ -1584,6 +1596,14 @@ function EvaluationNewPageContent() {
       
       console.log('[Evaluation] Triggering with program_id:', effectiveProgramId, 'selectedFilter:', selectedProgramFilter, 'mappings:', mappings.length);
       
+      // Prepare evaluator data with selected subordinates
+      const evaluatorData = selectedEvaluators.map(evaluatorId => ({
+        evaluator_id: evaluatorId,
+        subordinate_ids: selectedSubordinates[evaluatorId] || []
+      })).filter(data => data.subordinate_ids.length > 0); // Only include evaluators with subordinates
+      
+      console.log('[Evaluation] Sending evaluator data:', evaluatorData);
+      
       const response = await fetchWithAuth('/evaluation/trigger', {
         method: 'POST',
         body: JSON.stringify({
@@ -1591,7 +1611,7 @@ function EvaluationNewPageContent() {
           template_name: triggerTemplateName,
           template_questions: triggerTemplateQuestions,
           questionnaire_id: questionnaireId,
-          evaluator_ids: selectedEvaluators,
+          evaluator_data: evaluatorData, // New: send evaluators with their selected subordinates
           program_id: effectiveProgramId,
           email_subject: emailSubject,
           email_body: emailBody,
@@ -1618,6 +1638,7 @@ function EvaluationNewPageContent() {
         // Clear selection but keep custom questionnaires (they're stored in DB now)
         setSelectedTemplate(null);
         setSelectedEvaluators([]);
+        setSelectedSubordinates({});
         sessionStorage.removeItem('evaluation_selected_template');
         setShowTriggerModal(false);
         setActiveTab('history');
@@ -2749,6 +2770,7 @@ function EvaluationNewPageContent() {
                         onChange={(e) => {
                           setEvaluatorDeptFilter(e.target.value);
                           setSelectedEvaluators([]); // Reset selection when filter changes
+                          setSelectedSubordinates({}); // Reset subordinate selection
                         }}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
@@ -2783,9 +2805,22 @@ function EvaluationNewPageContent() {
                               checked={filteredEvaluators.length > 0 && filteredEvaluators.every(e => selectedEvaluators.includes(e.evaluator_id))}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedEvaluators([...new Set([...selectedEvaluators, ...filteredEvaluators.map(m => m.evaluator_id)])]);
+                                  const newEvaluators = [...new Set([...selectedEvaluators, ...filteredEvaluators.map(m => m.evaluator_id)])];
+                                  setSelectedEvaluators(newEvaluators);
+                                  // Select all subordinates for each evaluator
+                                  const newSubordinates = { ...selectedSubordinates };
+                                  filteredEvaluators.forEach(m => {
+                                    newSubordinates[m.evaluator_id] = m.subordinates.map(s => s.staff_id);
+                                  });
+                                  setSelectedSubordinates(newSubordinates);
                                 } else {
                                   setSelectedEvaluators(selectedEvaluators.filter(id => !filteredEvaluators.some(e => e.evaluator_id === id)));
+                                  // Remove subordinate selections for deselected evaluators
+                                  const newSubordinates = { ...selectedSubordinates };
+                                  filteredEvaluators.forEach(m => {
+                                    delete newSubordinates[m.evaluator_id];
+                                  });
+                                  setSelectedSubordinates(newSubordinates);
                                 }
                               }}
                               className="w-4 h-4 text-blue-600 rounded"
@@ -2795,37 +2830,116 @@ function EvaluationNewPageContent() {
                             </span>
                           </label>
                     
-                          {filteredEvaluators.map((mapping) => (
-                            <label
-                              key={mapping.evaluator_id}
-                              className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition ${
-                                selectedEvaluators.includes(mapping.evaluator_id)
-                                  ? 'border-blue-500 bg-blue-50'
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedEvaluators.includes(mapping.evaluator_id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedEvaluators([...selectedEvaluators, mapping.evaluator_id]);
-                                  } else {
-                                    setSelectedEvaluators(selectedEvaluators.filter(id => id !== mapping.evaluator_id));
-                                  }
-                                }}
-                                className="w-4 h-4 text-blue-600 rounded"
-                              />
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-900">{mapping.evaluator_name}</p>
-                                <p className="text-sm text-gray-500">{mapping.evaluator_dept} • {mapping.evaluator_role}</p>
+                          {filteredEvaluators.map((mapping) => {
+                            const isSelected = selectedEvaluators.includes(mapping.evaluator_id);
+                            const evaluatorSubordinates = selectedSubordinates[mapping.evaluator_id] || [];
+                            const allSubordinateIds = mapping.subordinates.map(s => s.staff_id);
+                            const allSelected = evaluatorSubordinates.length === allSubordinateIds.length && allSubordinateIds.length > 0;
+                            
+                            return (
+                              <div key={mapping.evaluator_id} className="space-y-2">
+                                <label
+                                  className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition ${
+                                    isSelected
+                                      ? 'border-blue-500 bg-blue-50'
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedEvaluators([...selectedEvaluators, mapping.evaluator_id]);
+                                        // By default, select all subordinates
+                                        setSelectedSubordinates({
+                                          ...selectedSubordinates,
+                                          [mapping.evaluator_id]: allSubordinateIds
+                                        });
+                                      } else {
+                                        setSelectedEvaluators(selectedEvaluators.filter(id => id !== mapping.evaluator_id));
+                                        // Remove subordinates selection
+                                        const newSubordinates = { ...selectedSubordinates };
+                                        delete newSubordinates[mapping.evaluator_id];
+                                        setSelectedSubordinates(newSubordinates);
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-blue-600 rounded"
+                                  />
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900">{mapping.evaluator_name}</p>
+                                    <p className="text-sm text-gray-500">{mapping.evaluator_dept} • {mapping.evaluator_role}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-lg font-bold text-blue-600">{mapping.subordinates.length}</p>
+                                    <p className="text-xs text-gray-500">subordinates</p>
+                                  </div>
+                                </label>
+                                
+                                {/* Subordinates List - Only shown when evaluator is selected */}
+                                {isSelected && (
+                                  <div className="ml-8 pl-4 border-l-2 border-blue-200 space-y-2">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <p className="text-sm font-medium text-gray-700">Select Subordinates to Evaluate:</p>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (allSelected) {
+                                            // Deselect all
+                                            setSelectedSubordinates({
+                                              ...selectedSubordinates,
+                                              [mapping.evaluator_id]: []
+                                            });
+                                          } else {
+                                            // Select all
+                                            setSelectedSubordinates({
+                                              ...selectedSubordinates,
+                                              [mapping.evaluator_id]: allSubordinateIds
+                                            });
+                                          }
+                                        }}
+                                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                      >
+                                        {allSelected ? 'Deselect All' : 'Select All'}
+                                      </button>
+                                    </div>
+                                    {mapping.subordinates.map((sub) => (
+                                      <label
+                                        key={sub.staff_id}
+                                        className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={evaluatorSubordinates.includes(sub.staff_id)}
+                                          onChange={(e) => {
+                                            if (e.target.checked) {
+                                              setSelectedSubordinates({
+                                                ...selectedSubordinates,
+                                                [mapping.evaluator_id]: [...evaluatorSubordinates, sub.staff_id]
+                                              });
+                                            } else {
+                                              setSelectedSubordinates({
+                                                ...selectedSubordinates,
+                                                [mapping.evaluator_id]: evaluatorSubordinates.filter(id => id !== sub.staff_id)
+                                              });
+                                            }
+                                          }}
+                                          className="w-4 h-4 text-blue-600 rounded"
+                                        />
+                                        <div className="flex-1">
+                                          <p className="text-sm text-gray-900">{sub.name}</p>
+                                          <p className="text-xs text-gray-500">{sub.role}</p>
+                                        </div>
+                                      </label>
+                                    ))}
+                                    {evaluatorSubordinates.length === 0 && (
+                                      <p className="text-xs text-amber-600 italic p-2">⚠️ No subordinates selected - this evaluator won't receive evaluation</p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                              <div className="text-right">
-                                <p className="text-lg font-bold text-blue-600">{mapping.subordinates.length}</p>
-                                <p className="text-xs text-gray-500">subordinates</p>
-                              </div>
-                            </label>
-                          ))}
+                            );
+                          })}
                         </>
                       );
                     })()}
@@ -2844,6 +2958,8 @@ function EvaluationNewPageContent() {
                         : (selectedTemplate ? evaluationTemplates.find(t => t.id === selectedTemplate)?.name : 'No form selected')}
                       {' • '}
                       {selectedEvaluators.length} evaluator(s) selected
+                      {' • '}
+                      {Object.values(selectedSubordinates).reduce((sum, subs) => sum + subs.length, 0)} subordinate(s) to evaluate
                     </p>
                   </div>
                   <button
@@ -2891,7 +3007,8 @@ function EvaluationNewPageContent() {
                             <th className="pb-3 font-medium">Evaluator</th>
                             <th className="pb-3 font-medium">Subordinates</th>
                             <th className="pb-3 font-medium">Status</th>
-                            <th className="pb-3 font-medium">Scheduled</th>
+                            <th className="pb-3 font-medium">Scheduled For</th>
+                            <th className="pb-3 font-medium">Email Delivered</th>
                             <th className="pb-3 font-medium">Triggered</th>
                             <th className="pb-3 font-medium text-right">Actions</th>
                           </tr>
@@ -2919,13 +3036,47 @@ function EvaluationNewPageContent() {
                               </td>
                               <td className="py-4 text-gray-500">
                                 {evaluation.scheduled_trigger_at ? (
-                                  <span className="text-blue-600">{formatDate(evaluation.scheduled_trigger_at)}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-blue-600 font-medium">
+                                      {evaluation.scheduled_display?.date || formatDate(evaluation.scheduled_trigger_at)}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {evaluation.scheduled_display?.day || ''} {evaluation.scheduled_display?.time || ''}
+                                    </span>
+                                    <span className="text-xs text-blue-500">
+                                      {evaluation.scheduled_display?.ist?.split(',')[0] || 'IST'}
+                                    </span>
+                                  </div>
                                 ) : (
                                   <span className="text-gray-400">Immediate</span>
                                 )}
                               </td>
                               <td className="py-4 text-gray-500">
-                                {formatDate(evaluation.triggered_at)}
+                                {evaluation.email_sent_at ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-green-600 font-medium">
+                                      {evaluation.email_sent_display?.date || formatDate(evaluation.email_sent_at)}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {evaluation.email_sent_display?.day || ''} {evaluation.email_sent_display?.time || ''}
+                                    </span>
+                                    <span className="text-xs text-green-500">
+                                      {evaluation.email_sent_display?.ist?.split(',')[0] || 'IST'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-orange-500">Pending</span>
+                                )}
+                              </td>
+                              <td className="py-4 text-gray-500">
+                                <div className="flex flex-col">
+                                  <span className="text-gray-700">
+                                    {evaluation.triggered_display?.date || formatDate(evaluation.triggered_at)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {evaluation.triggered_display?.time || ''}
+                                  </span>
+                                </div>
                               </td>
                               <td className="py-4">
                                 <div className="flex items-center justify-end gap-2">

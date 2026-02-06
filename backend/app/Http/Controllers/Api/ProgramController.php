@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class ProgramController extends Controller
@@ -269,124 +270,32 @@ class ProgramController extends Controller
     /**
      * Get default services/permissions for a role.
      * 
-     * IMPORTANT: These are default Program role services
-     * - Program Admin: Full access within program (like Super Admin but scoped)
-     * - Program Manager: View/Edit only (no Create/Delete for questionnaires & events)
-     * - Program Moderator: View-only access to events and reports
+     * IMPORTANT: Loads services from role_service_definitions table
+     * This ensures consistency between user creation and role definitions
      */
     private function getDefaultServicesForRole(string $role): array
     {
-        $defaults = [
-            'program-admin' => [
-                // Dashboard
-                'dashboard',
-                
-                // Programs - Full access
-                'programs-view',
-                'programs-create',
-                'programs-edit',
-                'programs-delete',
-                
-                // Participants - Full access
-                'participants-view',
-                'participants-create',
-                'participants-edit',
-                'participants-delete',
-                
-                // Questionnaires - Full access (like Super Admin, program-scoped)
-                'questionnaires-view',
-                'questionnaires-create',
-                'questionnaires-edit',
-                'questionnaires-delete',
-                
-                // Activities/Events - Full access (like Super Admin, program-scoped)
-                'activities-view',
-                'activities-create',
-                'activities-edit',
-                'activities-delete',
-                'activities-send-notification',
-                'activities-set-reminder',
-                'activities-landing-config',
-                
-                // Reports - Full access
-                'reports-view',
-                'reports-export',
-                
-                // Evaluation - NO ACCESS (only evaluation-admin has access)
-                // Removed: evaluation-view, evaluation-manage
-            ],
-            'program-manager' => [
-                // Dashboard
-                'dashboard',
-                
-                // Programs - View only
-                'programs-view',
-                
-                // Participants - View and Edit
-                'participants-view',
-                'participants-edit',
-                
-                // Questionnaires - View and Edit only (NO create, NO delete)
-                'questionnaires-view',
-                'questionnaires-edit',
-                
-                // Activities/Events - Create and Manage
-                'activities-view',
-                'activities-create',
-                'activities-edit',
-                'activities-send-notification',
-                'activities-landing-config',
-                
-                // Reports - View and Export
-                'reports-view',
-                'reports-export',
-                
-                // Evaluation - NO ACCESS (only evaluation-admin has access)
-                // Removed: evaluation-view, evaluation-manage
-            ],
-            'program-moderator' => [
-                // Dashboard
-                'dashboard',
-                
-                // Activities/Events - Run only (view to run them)
-                'activities-view',
-                
-                // Reports - Limited (view and export)
-                'reports-view',
-                'reports-export',
-                
-                // Evaluation - NO ACCESS (only evaluation-admin has access)
-                // Removed: evaluation-view, evaluation-manage
-            ],
-            'evaluation-admin' => [
-                // Dashboard
-                'dashboard',
-                
-                // Organizations - View only (using dash-based service keys to match other roles)
-                'list_organization',
-                
-                // Programs - NO ACCESS (hidden from evaluation-admin navigation)
-                // Removed: programs-view
-                
-                // Questionnaires - Full access (dash-based)
-                'questionnaires-view',
-                'questionnaires-create',
-                'questionnaires-edit',
-                'questionnaires-delete',
-                
-                // Activities/Events - NO ACCESS (evaluation-admin doesn't see Events)
-                // Removed: activities-view, activities-create, etc.
-                
-                // Reports/Analytics - NO ACCESS (evaluation-admin doesn't see Reports & Analytics)
-                // Removed: reports-view, reports-export
-                
-                // Evaluation - Full access (program-scoped, ownership-based)
-                'evaluation-view',
-                'evaluation-manage',
-            ],
-        ];
-
-        return $defaults[$role] ?? [];
+        try {
+            // Load services from role_service_definitions table
+            $roleDefinition = DB::table('role_service_definitions')
+                ->where('role_name', $role)
+                ->where('is_system_role', false)
+                ->first();
+            
+            if ($roleDefinition && !empty($roleDefinition->available_services)) {
+                // Decode JSONB to array
+                $services = json_decode($roleDefinition->available_services, true);
+                return is_array($services) ? $services : [];
+            }
+            
+            // Fallback: return empty array if not found
+            \Log::warning("Role definition not found for: {$role}");
+            return [];
+            
+        } catch (\Exception $e) {
+            \Log::error("Error loading role services for {$role}: " . $e->getMessage());
+            return [];
+        }
     }
 
     /**
@@ -736,11 +645,20 @@ class ProgramController extends Controller
         try {
             $authUser = $request->user();
             
-            // Only super-admin and admin can update services
-            if (!in_array($authUser->role, ['super-admin', 'admin'])) {
+            // Super-admin, admin, and program-admin can update services
+            // Program-admin can only update users in their own program
+            if (!in_array($authUser->role, ['super-admin', 'admin', 'program-admin'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthorized. Only super-admin and admin can update user services.',
+                    'message' => 'Unauthorized. Only super-admin, admin, and program-admin can update user services.',
+                ], 403);
+            }
+            
+            // If program-admin, verify they're updating users in their own program
+            if ($authUser->role === 'program-admin' && $authUser->program_id !== $programId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You can only update users in your own program.',
                 ], 403);
             }
             

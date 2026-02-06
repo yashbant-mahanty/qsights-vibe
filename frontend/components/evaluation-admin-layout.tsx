@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -26,13 +26,54 @@ interface EvaluationAdminLayoutProps {
   children: React.ReactNode;
 }
 
-// Icon mapping for dynamic navigation
+// Icon mapping for dynamic navigation - define outside component
 const iconMap: { [key: string]: any } = {
   LayoutDashboard,
   Building2,
   FileText,
   ClipboardCheck,
 };
+
+// Memoized sidebar item component to prevent re-renders
+const SidebarItem = React.memo(
+  ({ item, isActive, sidebarOpen }: { item: any; isActive: boolean; sidebarOpen: boolean }) => {
+    // Get icon component safely - use a default if not found
+    const IconComponent = React.useMemo(() => {
+      return iconMap[item.iconName] || iconMap[item.icon] || LayoutDashboard;
+    }, [item.iconName, item.icon]);
+    
+    return (
+      <Link
+        href={item.href}
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
+          !sidebarOpen && "justify-center"
+        } ${
+          isActive 
+            ? "bg-qsights-dark text-white" 
+            : "text-gray-700 hover:bg-qsights-cyan/10 hover:text-qsights-dark"
+        }`}
+        title={!sidebarOpen ? item.label : ""}
+      >
+        <IconComponent className="w-5 h-5 flex-shrink-0" />
+        {sidebarOpen && (
+          <span className="text-sm font-medium">{item.label}</span>
+        )}
+      </Link>
+    );
+  },
+  // Custom comparison function - only re-render if these props actually change
+  (prevProps, nextProps) => {
+    return (
+      prevProps.item.href === nextProps.item.href &&
+      prevProps.item.icon === nextProps.item.icon &&
+      prevProps.item.iconName === nextProps.item.iconName &&
+      prevProps.isActive === nextProps.isActive &&
+      prevProps.sidebarOpen === nextProps.sidebarOpen
+    );
+  }
+);
+
+SidebarItem.displayName = 'SidebarItem';
 
 export default function EvaluationAdminLayout({ children }: EvaluationAdminLayoutProps) {
   const { currentUser, isLoading } = useAuth();
@@ -46,11 +87,7 @@ export default function EvaluationAdminLayout({ children }: EvaluationAdminLayou
       const cached = sessionStorage.getItem('qsights_evaluation_admin_sidebar');
       if (cached) {
         try {
-          const parsed = JSON.parse(cached);
-          return parsed.map((item: any) => ({
-            ...item,
-            icon: iconMap[item.iconName] || LayoutDashboard
-          }));
+          return JSON.parse(cached);
         } catch (e) {}
       }
     }
@@ -96,35 +133,45 @@ export default function EvaluationAdminLayout({ children }: EvaluationAdminLayou
     loadLogo();
   }, []);
 
+  // Create a stable key for user based on role and services
+  const userRole = currentUser?.role || '';
+  const servicesKey = currentUser?.services?.join(',') || '';
+  const userKey = `${userRole}:${servicesKey}`;
+  const lastUserKeyRef = useRef<string>('');
+
+  // Use useMemo for navigation items to prevent recreation
+  const navigationItems = useMemo(() => {
+    if (!currentUser) return null;
+    
+    const userServices = currentUser.services || [];
+    const navItems = getNavigationItems(currentUser.role as UserRole, userServices);
+    
+    // Filter out Settings for non-super-admin roles
+    const filteredItems = navItems.filter(item => {
+      if (item.href === '/settings' && currentUser.role !== 'super-admin') {
+        return false;
+      }
+      return true;
+    });
+    
+    // Return plain objects with icon name strings, not component references
+    return filteredItems.map(item => ({
+      ...item,
+      iconName: item.icon  // Store icon name as string
+    }));
+  }, [userRole, servicesKey]);
+
+  // Only update sidebar items when navigation items actually change
   useEffect(() => {
-    if (currentUser) {
-      // Set sidebar items based on user role and services
-      const userServices = currentUser.services || [];
-      const navItems = getNavigationItems(currentUser.role as UserRole, userServices);
-      
-      // Filter out Settings for non-super-admin roles
-      const filteredItems = navItems.filter(item => {
-        if (item.href === '/settings' && currentUser.role !== 'super-admin') {
-          return false;
-        }
-        return true;
-      });
-      
-      const mappedItems = filteredItems.map(item => ({
-        ...item,
-        icon: iconMap[item.icon] || LayoutDashboard,
-        iconName: item.icon
-      }));
-      setSidebarItems(mappedItems);
+    if (navigationItems && userKey !== lastUserKeyRef.current) {
+      lastUserKeyRef.current = userKey;
+      setSidebarItems(navigationItems);
       // Cache for instant load on navigation
       if (typeof window !== 'undefined') {
-        sessionStorage.setItem('qsights_evaluation_admin_sidebar', JSON.stringify(filteredItems.map(item => ({
-          ...item,
-          iconName: item.icon
-        }))));
+        sessionStorage.setItem('qsights_evaluation_admin_sidebar', JSON.stringify(navigationItems));
       }
     }
-  }, [currentUser]);
+  }, [navigationItems, userKey]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -191,23 +238,12 @@ export default function EvaluationAdminLayout({ children }: EvaluationAdminLayou
               ? pathname === item.href 
               : pathname.startsWith(item.href);
             return (
-              <Link
+              <SidebarItem
                 key={index}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
-                  !sidebarOpen && "justify-center"
-                } ${
-                  isActive 
-                    ? "bg-qsights-dark text-white" 
-                    : "text-gray-700 hover:bg-qsights-cyan/10 hover:text-qsights-dark"
-                }`}
-                title={!sidebarOpen ? item.label : ""}
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && (
-                  <span className="text-sm font-medium">{item.label}</span>
-                )}
-              </Link>
+                item={item}
+                isActive={isActive}
+                sidebarOpen={sidebarOpen}
+              />
             );
           })}
         </nav>
