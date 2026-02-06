@@ -27,8 +27,8 @@ class Program extends Model
     ];
 
     protected $casts = [
-        'start_date' => 'date',
-        'end_date' => 'date',
+        'start_date' => 'datetime',
+        'end_date' => 'datetime',
         'is_multilingual' => 'boolean',
         'languages' => 'array',
     ];
@@ -89,6 +89,7 @@ class Program extends Model
 
     /**
      * Check if program is expired based on end date
+     * A program expires at the END of its end_date
      */
     public function isExpired(): bool
     {
@@ -96,7 +97,7 @@ class Program extends Model
             return false;
         }
 
-        return Carbon::parse($this->end_date)->isPast();
+        return Carbon::parse($this->end_date)->endOfDay()->isPast();
     }
 
     /**

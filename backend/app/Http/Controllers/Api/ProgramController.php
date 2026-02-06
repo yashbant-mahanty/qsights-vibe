@@ -443,7 +443,8 @@ class ProgramController extends Controller
      */
     private function checkAndUpdateExpiry(Program $program)
     {
-        if ($program->end_date && Carbon::parse($program->end_date)->isPast() && $program->status !== 'expired') {
+        // A program expires at the END of its end_date, not the beginning
+        if ($program->end_date && Carbon::parse($program->end_date)->endOfDay()->isPast() && $program->status !== 'expired') {
             $program->update(['status' => 'expired']);
         }
     }
@@ -453,9 +454,12 @@ class ProgramController extends Controller
      */
     private function updateExpiredPrograms()
     {
+        // A program expires at the END of its end_date, not at midnight
         Program::where('status', '!=', 'expired')
             ->whereNotNull('end_date')
-            ->where('end_date', '<', Carbon::now())
+            ->where(function($query) {
+                $query->whereRaw("end_date + interval '1 day' <= ?", [Carbon::now()]);
+            })
             ->update(['status' => 'expired']);
     }
 

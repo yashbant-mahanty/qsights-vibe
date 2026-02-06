@@ -227,14 +227,15 @@ export default function EditActivityPage() {
         
         // If user is program-admin, program-manager, or program-moderator, filter by their program
         if (user && user.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(user.role)) {
-          // For program-level roles, only show their assigned program
-          const allPrograms = await programsApi.getAll();
+          // For program-level roles, only show their assigned program (including all statuses)
+          const allPrograms = await programsApi.getAll({ all_statuses: true });
           data = allPrograms.filter((p: any) => p.id === user.programId);
         } else {
-          data = await programsApi.getAll();
+          // For other roles, show all programs regardless of status (including expired)
+          data = await programsApi.getAll({ all_statuses: true });
         }
       } else {
-        data = await programsApi.getAll();
+        data = await programsApi.getAll({ all_statuses: true });
       }
       setAvailablePrograms(data);
     } catch (err) {
