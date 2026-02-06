@@ -357,7 +357,7 @@ export default function EditActivityPage() {
         senderEmail: activity.sender_email || "",
         description: activity.description || "",
         type: activity.type || "survey",
-        programId: activity.program_id ? String(activity.program_id) : "",
+        programId: activity.program_id ? String(activity.program_id).trim() : "",
         startDate: parseDate(activity.start_date),
         endDate: parseDate(activity.end_date),
         managerName: activity.manager_name || "",
@@ -385,6 +385,9 @@ export default function EditActivityPage() {
       });
 
       console.log('[LOAD] Loaded registration_flow from API:', activity.registration_flow);
+      console.log('[LOAD] Loaded program_id from API:', activity.program_id, 'Type:', typeof activity.program_id);
+      console.log('[LOAD] Set programId to:', activity.program_id ? String(activity.program_id).trim() : "");
+      console.log('[LOAD] Available programs:', availablePrograms.map(p => ({ id: p.id, name: p.name })));
 
       // Load selected questionnaires
       console.log('[Edit Activity] activity.questionnaire_id:', activity.questionnaire_id);

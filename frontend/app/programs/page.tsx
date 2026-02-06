@@ -407,6 +407,7 @@ export default function ProgramsPage() {
     const configs: { [key: string]: { label: string; color: string } } = {
       active: { label: "Active", color: "bg-green-100 text-green-700" },
       inactive: { label: "Inactive", color: "bg-gray-100 text-gray-700" },
+      expired: { label: "Expired", color: "bg-red-100 text-red-700" },
       completed: { label: "Completed", color: "bg-blue-100 text-blue-700" },
       draft: { label: "Draft", color: "bg-yellow-100 text-yellow-700" },
       archived: { label: "Archived", color: "bg-orange-100 text-orange-700" },
@@ -495,6 +496,8 @@ export default function ProgramsPage() {
                 >
                   <option value="all">All Status</option>
                   <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="expired">Expired</option>
                   <option value="completed">Completed</option>
                   <option value="draft">Draft</option>
                   <option value="archived">Archived</option>
@@ -866,12 +869,14 @@ export default function ProgramsPage() {
                 <div className="space-y-2 pl-6">
                   <select
                     value={editFormData.status}
-                    onChange={(e) => setEditFormData(prev => ({ ...prev, status: e.target.value as 'active' | 'inactive' | 'completed' }))}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, status: e.target.value as any }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
+                    <option value="expired">Expired</option>
                     <option value="completed">Completed</option>
+                    <option value="draft">Draft</option>
                   </select>
                 </div>
               </div>
