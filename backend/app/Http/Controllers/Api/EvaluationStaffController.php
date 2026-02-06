@@ -949,16 +949,17 @@ class EvaluationStaffController extends Controller
                 return;
             }
             
-            // Find the "Trainee Evaluation - NJ" questionnaire
+            // Find the "Trainee Evaluation - NJ" questionnaire (ID: 22)
             $questionnaire = DB::table('questionnaires')
-                ->where('name', 'ILIKE', '%Trainee Evaluation%NJ%')
+                ->where('id', 22)
                 ->where('program_id', $programId)
                 ->whereNull('deleted_at')
                 ->first();
             
             if (!$questionnaire) {
                 \Log::warning('Trainee Evaluation - NJ questionnaire not found', [
-                    'program_id' => $programId
+                    'program_id' => $programId,
+                    'questionnaire_id' => 22
                 ]);
                 return;
             }
