@@ -131,21 +131,13 @@ export default function DashboardPage() {
         return;
       }
       
-      const [orgsData, progsData, actsData, partsData, questData, dashStats, orgPerf, subMetrics] = await Promise.all([
-        organizationsApi.getAll().catch((e) => { console.error('Orgs error:', e); return []; }),
-        programsApi.getAll().catch((e) => { console.error('Programs error:', e); return []; }),
-        activitiesApi.getAll().catch((e) => { console.error('Activities error:', e); return []; }),
-        participantsApi.getAll().catch((e) => { console.error('Participants error:', e); return []; }),
-        questionnairesApi.getAll().catch((e) => { console.error('Questionnaires error:', e); return []; }),
+      // Only load essential dashboard data - remove unnecessary API calls
+      const [dashStats, orgPerf, subMetrics] = await Promise.all([
         dashboardApi.getGlobalStatistics().catch((e) => { console.error('Dashboard stats error:', e); return null; }),
         dashboardApi.getOrganizationPerformance().catch((e) => { console.error('Org performance error:', e); return { data: [] }; }),
         dashboardApi.getSubscriptionMetrics().catch((e) => { console.error('Subscription metrics error:', e); return null; }),
       ]);
-      setOrganizations(orgsData || []);
-      setPrograms(progsData || []);
-      setActivities(actsData || []);
-      setParticipants(partsData || []);
-      setQuestionnaires(questData || []);
+      
       setGlobalStats(dashStats);
       // Extract data array from response
       const orgPerfData = Array.isArray(orgPerf?.data) ? orgPerf.data : (Array.isArray(orgPerf) ? orgPerf : []);
@@ -226,13 +218,29 @@ export default function DashboardPage() {
 
   // Send Reminder Functions
   async function handleSendReminder() {
+    // Lazy load activities only when needed
     if (activities.length === 0) {
-      toast({
-        title: "No Events",
-        description: "No events available to send reminders for",
-        variant: "warning"
-      });
-      return;
+      try {
+        const actsData = await activitiesApi.getAll();
+        setActivities(actsData || []);
+        
+        if (!actsData || actsData.length === 0) {
+          toast({
+            title: "No Events",
+            description: "No events available to send reminders for",
+            variant: "warning"
+          });
+          return;
+        }
+      } catch (error) {
+        console.error('Error loading activities:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load events",
+          variant: "error"
+        });
+        return;
+      }
     }
 
     // Set default date to tomorrow

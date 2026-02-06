@@ -11,6 +11,7 @@ use App\Models\Response;
 use App\Models\GroupHead;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
@@ -19,10 +20,11 @@ class DashboardController extends Controller
      */
     public function globalStatistics()
     {
-        // Global counts - only active, non-deleted records
-        $totalOrganizations = Organization::where('status', 'active')
-            ->whereNull('deleted_at')
-            ->count();
+        return Cache::remember('dashboard:global_statistics', 300, function () {
+            // Global counts - only active, non-deleted records
+            $totalOrganizations = Organization::where('status', 'active')
+                ->whereNull('deleted_at')
+                ->count();
         
         $totalGroupHeads = GroupHead::where('status', 'active')
             ->whereNull('deleted_at')
@@ -116,28 +118,31 @@ class DashboardController extends Controller
             ? round(($activitiesWithResponses / $liveActivities) * 100, 2) 
             : 0;
         
-        return response()->json([
-            'organizations' => $totalOrganizations,
-            'group_heads' => $totalGroupHeads,
-            'programs' => $totalPrograms,
-            'activities' => $totalActivities,
-            'participants' => $totalParticipants,
-            'active_participants' => $activeParticipants,
-            'inactive_participants' => $inactiveParticipants,
-            'guest_participants' => $guestParticipants,
-            'responses' => $totalResponses,
-            'authenticated_responses' => $authenticatedResponses,
-            'guest_responses' => $guestResponses,
-            'activity_types' => [
-                'surveys' => $surveys,
-                'polls' => $polls,
-                'assessments' => $assessments,
-            ],
-            'platform_engagement' => $platformEngagement,
-            'activities_with_responses' => $activitiesWithResponses,
-            'live_activities' => $liveActivities,
-            'activity_completion_rate' => $activityCompletionRate,
-        ]);
+            return [
+                'organizations' => $totalOrganizations,
+                'group_heads' => $totalGroupHeads,
+                'programs' => $totalPrograms,
+                'activities' => $totalActivities,
+                'participants' => $totalParticipants,
+                'active_participants' => $activeParticipants,
+                'inactive_participants' => $inactiveParticipants,
+                'guest_participants' => $guestParticipants,
+                'responses' => $totalResponses,
+                'authenticated_responses' => $authenticatedResponses,
+                'guest_responses' => $guestResponses,
+                'activity_types' => [
+                    'surveys' => $surveys,
+                    'polls' => $polls,
+                    'assessments' => $assessments,
+                ],
+                'platform_engagement' => $platformEngagement,
+                'activities_with_responses' => $activitiesWithResponses,
+                'live_activities' => $liveActivities,
+                'activity_completion_rate' => $activityCompletionRate,
+            ];
+        });
+        
+        return response()->json(Cache::get('dashboard:global_statistics'));
     }
     
     /**
@@ -145,11 +150,12 @@ class DashboardController extends Controller
      */
     public function organizationPerformance()
     {
-        // Get all active organizations with their performance metrics
-        $organizations = Organization::where('status', 'active')
-            ->whereNull('deleted_at')
-            ->get()
-            ->map(function ($org) {
+        return Cache::remember('dashboard:organization_performance', 300, function () {
+            // Get all active organizations with their performance metrics
+            $organizations = Organization::where('status', 'active')
+                ->whereNull('deleted_at')
+                ->get(['id', 'name'])
+                ->map(function ($org) {
                 // Count active group heads for this organization
                 $groupHeadsCount = GroupHead::where('organization_id', $org->id)
                     ->where('status', 'active')
@@ -221,12 +227,15 @@ class DashboardController extends Controller
                     'effectiveness' => $effectiveness,
                 ];
             })
-            ->sortByDesc('effectiveness')
-            ->values();
+                ->sortByDesc('effectiveness')
+                ->values();
+            
+            return [
+                'data' => $organizations
+            ];
+        });
         
-        return response()->json([
-            'data' => $organizations
-        ]);
+        return response()->json(Cache::get('dashboard:organization_performance'));
     }
 
     /**
@@ -234,8 +243,16 @@ class DashboardController extends Controller
      */
     public function subscriptionMetrics()
     {
-        // Get all activities with subscription data (all statuses)
-        $activities = Activity::with(['program.groupHead.user'])
+        return Cache::remember('dashboard:subscription_metrics', 300, function () {
+            // Get all activities with subscription data (all statuses)
+            $activities = Activity::with([
+                'program:id,name,group_head_id',
+                'program.groupHead:id,user_id,organization_id',
+                'program.groupHead.user:id,name'
+            ])
+            ->select('id', 'name', 'type', 'code', 'description', 'status', 'program_id', 'start_date', 'end_date', 
+                     'configuration_date', 'configuration_price', 'subscription_price', 'subscription_frequency', 
+                     'tax_percentage', 'number_of_participants', 'deleted_at')
             ->whereNull('deleted_at')
             ->whereNotNull('subscription_price')
             ->get();
@@ -343,20 +360,23 @@ class DashboardController extends Controller
             ];
         })->values();
 
-        return response()->json([
-            'total_subscription_revenue' => round($totalSubscriptionRevenue, 2),
-            'total_configuration_price' => round($totalConfigurationPrice, 2),
-            'average_subscription_price' => $averageSubscriptionPrice,
-            'total_participants' => $totalRegisteredParticipants,
-            'authenticated_participants' => $authenticatedParticipants,
-            'anonymous_participants' => $anonymousParticipants,
-            'average_tax_percentage' => $averageTaxPercentage,
-            'total_tax_amount' => round($totalTaxAmount, 2),
-            'total_revenue_with_tax' => round($totalRevenueWithTax, 2),
-            'activities_with_subscription' => $activities->count(),
-            'frequency_breakdown' => $frequencyBreakdown,
-            'activity_details' => $activityDetails,
-        ]);
+            return [
+                'total_subscription_revenue' => round($totalSubscriptionRevenue, 2),
+                'total_configuration_price' => round($totalConfigurationPrice, 2),
+                'average_subscription_price' => $averageSubscriptionPrice,
+                'total_participants' => $totalRegisteredParticipants,
+                'authenticated_participants' => $authenticatedParticipants,
+                'anonymous_participants' => $anonymousParticipants,
+                'average_tax_percentage' => $averageTaxPercentage,
+                'total_tax_amount' => round($totalTaxAmount, 2),
+                'total_revenue_with_tax' => round($totalRevenueWithTax, 2),
+                'activities_with_subscription' => $activities->count(),
+                'frequency_breakdown' => $frequencyBreakdown,
+                'activity_details' => $activityDetails,
+            ];
+        });
+        
+        return response()->json(Cache::get('dashboard:subscription_metrics'));
     }
 
     /**
