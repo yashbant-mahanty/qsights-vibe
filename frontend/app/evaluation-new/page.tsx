@@ -5052,19 +5052,22 @@ function EvaluationNewPageContent() {
 
         {/* Staff Modal */}
         {showStaffModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">{editingStaff ? 'Edit Staff' : 'Add Staff'}</h3>
-                <button onClick={() => {
-                  setShowStaffModal(false);
-                  setEditingStaff(null);
-                  setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
-                }} className="text-gray-400 hover:text-gray-600">
-                  <X className="h-5 w-5" />
-                </button>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl w-full max-w-md my-8 shadow-2xl">
+              <div className="sticky top-0 bg-white rounded-t-xl px-6 pt-6 pb-4 border-b z-10">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">{editingStaff ? 'Edit Staff' : 'Add Staff'}</h3>
+                  <button onClick={() => {
+                    setShowStaffModal(false);
+                    setEditingStaff(null);
+                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
+                  }} className="text-gray-400 hover:text-gray-600 transition">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
-              <div className="space-y-4">
+              <div className="px-6 py-4 max-h-[calc(90vh-180px)] overflow-y-auto">
+                <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
                   <select
@@ -5179,25 +5182,28 @@ function EvaluationNewPageContent() {
                     )}
                   </div>
                 )}
+                </div>
               </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  onClick={() => {
-                    setShowStaffModal(false);
-                    setEditingStaff(null);
-                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
-                  }}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddStaff}
-                  disabled={loading}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : (editingStaff ? 'Update Staff' : 'Add Staff')}
-                </button>
+              <div className="sticky bottom-0 bg-white rounded-b-xl px-6 py-4 border-t">
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => {
+                      setShowStaffModal(false);
+                      setEditingStaff(null);
+                      setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
+                    }}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddStaff}
+                    disabled={loading}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+                  >
+                    {loading ? 'Saving...' : (editingStaff ? 'Update Staff' : 'Add Staff')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
