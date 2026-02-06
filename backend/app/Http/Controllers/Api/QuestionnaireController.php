@@ -131,6 +131,29 @@ class QuestionnaireController extends Controller
             'sections.*.questions.*.order' => 'nullable|integer',
         ]);
 
+        // Validate questionnaire dates are within program date boundaries
+        if (isset($validated['scheduled_start']) || isset($validated['scheduled_end'])) {
+            $program = \App\Models\Program::findOrFail($validated['program_id']);
+            
+            if (isset($validated['scheduled_start']) && $program->start_date && $validated['scheduled_start'] < $program->start_date) {
+                return response()->json([
+                    'message' => 'Questionnaire start date cannot be before program start date',
+                    'errors' => [
+                        'scheduled_start' => ['Questionnaire start date (' . date('Y-m-d', strtotime($validated['scheduled_start'])) . ') cannot be before program start date (' . date('Y-m-d', strtotime($program->start_date)) . ')']
+                    ]
+                ], 422);
+            }
+            
+            if (isset($validated['scheduled_end']) && $program->end_date && $validated['scheduled_end'] > $program->end_date) {
+                return response()->json([
+                    'message' => 'Questionnaire end date cannot be after program end date',
+                    'errors' => [
+                        'scheduled_end' => ['Questionnaire end date (' . date('Y-m-d', strtotime($validated['scheduled_end'])) . ') cannot be after program end date (' . date('Y-m-d', strtotime($program->end_date)) . ')']
+                    ]
+                ], 422);
+            }
+        }
+
         DB::beginTransaction();
         try {
             // Create questionnaire
@@ -277,6 +300,33 @@ class QuestionnaireController extends Controller
                 'request_sample' => array_slice($request->all(), 0, 5)
             ]);
             throw $ve;
+        }
+
+        // Validate questionnaire dates are within program date boundaries (if dates are being updated)
+        if (isset($validated['program_id']) || isset($validated['scheduled_start']) || isset($validated['scheduled_end'])) {
+            $programId = $validated['program_id'] ?? $questionnaire->program_id;
+            $scheduledStart = $validated['scheduled_start'] ?? $questionnaire->scheduled_start;
+            $scheduledEnd = $validated['scheduled_end'] ?? $questionnaire->scheduled_end;
+            
+            $program = \App\Models\Program::findOrFail($programId);
+            
+            if ($scheduledStart && $program->start_date && $scheduledStart < $program->start_date) {
+                return response()->json([
+                    'message' => 'Questionnaire start date cannot be before program start date',
+                    'errors' => [
+                        'scheduled_start' => ['Questionnaire start date (' . date('Y-m-d', strtotime($scheduledStart)) . ') cannot be before program start date (' . date('Y-m-d', strtotime($program->start_date)) . ')']
+                    ]
+                ], 422);
+            }
+            
+            if ($scheduledEnd && $program->end_date && $scheduledEnd > $program->end_date) {
+                return response()->json([
+                    'message' => 'Questionnaire end date cannot be after program end date',
+                    'errors' => [
+                        'scheduled_end' => ['Questionnaire end date (' . date('Y-m-d', strtotime($scheduledEnd)) . ') cannot be after program end date (' . date('Y-m-d', strtotime($program->end_date)) . ')']
+                    ]
+                ], 422);
+            }
         }
 
         DB::beginTransaction();

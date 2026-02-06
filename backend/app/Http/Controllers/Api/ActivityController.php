@@ -273,6 +273,27 @@ class ActivityController extends Controller
             'questions_to_randomize' => 'nullable|integer|min:0',
         ]);
 
+        // Validate activity dates are within program date boundaries
+        $program = \App\Models\Program::findOrFail($validated['program_id']);
+        
+        if ($program->start_date && $validated['start_date'] < $program->start_date) {
+            return response()->json([
+                'message' => 'Activity start date cannot be before program start date',
+                'errors' => [
+                    'start_date' => ['Activity start date (' . date('Y-m-d', strtotime($validated['start_date'])) . ') cannot be before program start date (' . date('Y-m-d', strtotime($program->start_date)) . ')']
+                ]
+            ], 422);
+        }
+        
+        if ($program->end_date && $validated['end_date'] > $program->end_date) {
+            return response()->json([
+                'message' => 'Activity end date cannot be after program end date',
+                'errors' => [
+                    'end_date' => ['Activity end date (' . date('Y-m-d', strtotime($validated['end_date'])) . ') cannot be after program end date (' . date('Y-m-d', strtotime($program->end_date)) . ')']
+                ]
+            ], 422);
+        }
+
         $activity = Activity::create([
             'id' => Str::uuid(),
             'program_id' => $validated['program_id'],
@@ -439,6 +460,33 @@ class ActivityController extends Controller
             'questions_to_randomize',
             'max_retakes',
         ];
+
+        // Validate activity dates are within program date boundaries (if dates are being updated)
+        if (isset($validated['program_id']) || isset($validated['start_date']) || isset($validated['end_date'])) {
+            $programId = $validated['program_id'] ?? $activity->program_id;
+            $startDate = $validated['start_date'] ?? $activity->start_date;
+            $endDate = $validated['end_date'] ?? $activity->end_date;
+            
+            $program = \App\Models\Program::findOrFail($programId);
+            
+            if ($program->start_date && $startDate < $program->start_date) {
+                return response()->json([
+                    'message' => 'Activity start date cannot be before program start date',
+                    'errors' => [
+                        'start_date' => ['Activity start date (' . date('Y-m-d', strtotime($startDate)) . ') cannot be before program start date (' . date('Y-m-d', strtotime($program->start_date)) . ')']
+                    ]
+                ], 422);
+            }
+            
+            if ($program->end_date && $endDate > $program->end_date) {
+                return response()->json([
+                    'message' => 'Activity end date cannot be after program end date',
+                    'errors' => [
+                        'end_date' => ['Activity end date (' . date('Y-m-d', strtotime($endDate)) . ') cannot be after program end date (' . date('Y-m-d', strtotime($program->end_date)) . ')']
+                    ]
+                ], 422);
+            }
+        }
 
         // Check if activity is live or approved, and user is NOT super-admin
         // Only super-admin can edit locked fields after activity goes live or gets approved
