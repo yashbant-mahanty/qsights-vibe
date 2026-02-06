@@ -484,6 +484,15 @@ class EvaluationStaffController extends Controller
                         ->whereNull('deleted_at')
                         ->update(['deleted_at' => now()]);
                     
+                    // Delete evaluation triggers where this staff is involved
+                    DB::table('evaluation_triggered')
+                        ->where(function($q) use ($id) {
+                            $q->where('staff_id', $id)
+                              ->orWhere('evaluator_id', $id);
+                        })
+                        ->whereNull('deleted_at')
+                        ->update(['deleted_at' => now()]);
+                    
                     // Delete associated user account if exists
                     if ($staff->user_id) {
                         DB::table('users')->where('id', $staff->user_id)->delete();
@@ -493,9 +502,10 @@ class EvaluationStaffController extends Controller
                     // Delete staff
                     DB::table('evaluation_staff')->where('id', $id)->update(['deleted_at' => now()]);
                     
-                    $this->logAudit('evaluation_staff', $id, 'deleted_cascade', 'Staff member deleted with cascade (assignments: ' . $assignmentCount . ', hierarchy: ' . $hierarchyCount . ')', $user, $staff->program_id);
-                    
                     DB::commit();
+                    
+                    // Log audit outside transaction to avoid rollback issues
+                    $this->logAudit('evaluation_staff', $id, 'deleted_cascade', 'Staff member deleted with cascade (assignments: ' . $assignmentCount . ', hierarchy: ' . $hierarchyCount . ')', $user, $staff->program_id);
                     
                     return response()->json([
                         'success' => true,
@@ -520,9 +530,10 @@ class EvaluationStaffController extends Controller
                 // Delete staff
                 DB::table('evaluation_staff')->where('id', $id)->update(['deleted_at' => now()]);
                 
-                $this->logAudit('evaluation_staff', $id, 'deleted', 'Staff member deleted', $user, $staff->program_id);
-                
                 DB::commit();
+                
+                // Log audit outside transaction to avoid rollback issues
+                $this->logAudit('evaluation_staff', $id, 'deleted', 'Staff member deleted', $user, $staff->program_id);
             } catch (\Exception $e) {
                 DB::rollBack();
                 throw $e;
@@ -547,7 +558,8 @@ class EvaluationStaffController extends Controller
                 'id' => Str::uuid()->toString(),
                 'entity_type' => $entityType,
                 'entity_id' => $entityId,
-                'program_id' => $programId,
+                // Note: organization_id is in the table, but we don't have it in evaluation context
+                'organization_id' => null,
                 'action' => $action,
                 'action_description' => $description,
                 'user_id' => $user->id,
