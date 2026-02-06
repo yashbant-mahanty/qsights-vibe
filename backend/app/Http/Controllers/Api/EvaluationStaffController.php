@@ -957,6 +957,19 @@ class EvaluationStaffController extends Controller
     private function scheduleNewJoineeEvaluation($staffId, $validated, $programId, $user)
     {
         try {
+            // Fetch staff details from database
+            $staff = DB::table('evaluation_staff')
+                ->where('id', $staffId)
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if (!$staff) {
+                \Log::warning('Staff not found for new joinee evaluation', [
+                    'staff_id' => $staffId
+                ]);
+                return;
+            }
+            
             // Get the staff's reporting manager (evaluator) from hierarchy
             $hierarchy = DB::table('evaluation_hierarchy')
                 ->where('staff_id', $staffId)
@@ -1004,7 +1017,7 @@ class EvaluationStaffController extends Controller
             
             // Calculate trigger date: joining_date + X days (default 30)
             $triggerDays = $validated['new_joinee_days'] ?? 30;
-            $joiningDate = new \DateTime($validated['joining_date']);
+            $joiningDate = new \DateTime($staff->joining_date);
             $triggerDate = clone $joiningDate;
             $triggerDate->modify("+{$triggerDays} days");
             
@@ -1058,9 +1071,9 @@ class EvaluationStaffController extends Controller
                 'staff_id' => $staffId,
                 'subordinates' => json_encode([[
                     'staff_id' => $staffId,
-                    'staff_name' => $validated['name'],
-                    'staff_email' => $validated['email'],
-                    'employee_id' => $validated['employee_id'] ?? ''
+                    'staff_name' => $staff->name,
+                    'staff_email' => $staff->email,
+                    'employee_id' => $staff->employee_id ?? ''
                 ]]),
                 'subordinates_count' => 1,
                 'access_token' => $accessToken,
@@ -1073,15 +1086,15 @@ class EvaluationStaffController extends Controller
                 'scheduled_timezone' => 'Asia/Kolkata',
                 'is_auto_scheduled' => true,
                 'auto_schedule_type' => 'new_joinee',
-                'email_subject' => "Trainee Evaluation Required - {$validated['name']}",
-                'email_body' => "Hello {$evaluator->name},\n\nYour new team member {$validated['name']} has completed {$triggerDays} days. Please evaluate their performance using the Trainee Evaluation form.\n\nJoining Date: {$validated['joining_date']}\nEvaluation Period: {$triggerDays} days\n\nPlease complete the evaluation by {$endDate->format('Y-m-d')}.\n\nBest regards,\nQSights Team",
+                'email_subject' => "Trainee Evaluation Required - {$staff->name}",
+                'email_body' => "Hello {$evaluator->name},\n\nYour new team member {$staff->name} has completed {$triggerDays} days. Please evaluate their performance using the Trainee Evaluation form.\n\nJoining Date: {$staff->joining_date}\nEvaluation Period: {$triggerDays} days\n\nPlease complete the evaluation by {$endDate->format('Y-m-d')}.\n\nBest regards,\nQSights Team",
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
             
             \Log::info('Auto-scheduled new joinee evaluation', [
                 'staff_id' => $staffId,
-                'staff_name' => $validated['name'],
+                'staff_name' => $staff->name,
                 'evaluator_name' => $evaluator->name,
                 'trigger_date' => $triggerDate->format('Y-m-d'),
                 'trigger_days' => $triggerDays,
