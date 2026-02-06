@@ -190,66 +190,107 @@ Instructions:
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5" />
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pb-4 border-b">
+          <DialogTitle className="flex items-center gap-3 text-xl">
+            <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+              <FileSpreadsheet className="w-5 h-5 text-white" />
+            </div>
             Bulk Import - Department, Role & Staff
           </DialogTitle>
-          <DialogDescription>
-            Import multiple departments, roles, and staff members from a CSV file
+          <DialogDescription className="text-base mt-2">
+            Import multiple departments, roles, and staff members with their email addresses from a CSV file
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-5 pt-4">
           {/* Download Sample Section */}
-          <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
-            <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              Step 1: Download Sample Template
-            </h3>
-            <p className="text-sm text-gray-600 mb-3">
-              Download the sample CSV/Excel template to see the required format
-            </p>
-            <div className="flex gap-2">
-              <Button onClick={downloadSampleCSV} variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Download CSV Sample
-              </Button>
-              <Button onClick={downloadSampleExcel} variant="outline" size="sm">
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Download Excel Template
-              </Button>
+          <div className="rounded-xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3">
+              <h3 className="font-semibold text-white flex items-center gap-2 text-base">
+                <Download className="w-4 h-4" />
+                Step 1: Download Sample Template
+              </h3>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-gray-700 mb-4">
+                Download the sample template to see the required format before uploading your data
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button 
+                  onClick={downloadSampleCSV} 
+                  variant="outline" 
+                  size="sm"
+                  className="bg-white hover:bg-blue-50 border-blue-300 text-blue-700 font-medium"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download CSV Sample
+                </Button>
+                <Button 
+                  onClick={downloadSampleExcel} 
+                  variant="outline" 
+                  size="sm"
+                  className="bg-white hover:bg-blue-50 border-blue-300 text-blue-700 font-medium"
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Download Excel Template
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* Format Instructions */}
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              <strong>CSV Format:</strong>
-              <ul className="mt-2 space-y-1 text-sm">
-                <li>• <strong>Column 1 (Department):</strong> Department name (same name for multiple roles)</li>
-                <li>• <strong>Column 2 (Role):</strong> Role name within the department</li>
-                <li>• <strong>Column 3 (Staff):</strong> Staff names separated by commas: "Name1, Name2, Name3"</li>
-                <li>• <strong>Column 4 (Email):</strong> Email addresses separated by commas (same order as names): "email1@domain.com, email2@domain.com"</li>
-              </ul>
-              <p className="mt-2 text-sm font-medium">Example:</p>
-              <pre className="mt-1 text-xs bg-gray-100 p-2 rounded">
-ITES,AGM,"Yash, Ram, Richa","yash@example.com, ram@example.com, richa@example.com"{' \n'}
-ITES,AVP,"Lokesh, Rachita","lokesh@example.com, rachita@example.com"{' \n'}
-ITES,Leads,"Arun, Ashwin","arun@example.com, ashwin@example.com"
-              </pre>
-            </AlertDescription>
-          </Alert>
+          <div className="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 overflow-hidden">
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3">
+              <h3 className="font-semibold text-white flex items-center gap-2 text-base">
+                <AlertCircle className="w-4 h-4" />
+                CSV Format Requirements
+              </h3>
+            </div>
+            <div className="p-4">
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-white rounded-lg p-3 border border-amber-200">
+                    <p className="text-sm font-semibold text-gray-900 mb-1">Column 1: Department</p>
+                    <p className="text-xs text-gray-600">Department name (same for multiple roles)</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-amber-200">
+                    <p className="text-sm font-semibold text-gray-900 mb-1">Column 2: Role</p>
+                    <p className="text-xs text-gray-600">Role name within the department</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-amber-200">
+                    <p className="text-sm font-semibold text-gray-900 mb-1">Column 3: Staff</p>
+                    <p className="text-xs text-gray-600">Comma-separated: "Name1, Name2, Name3"</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-amber-200">
+                    <p className="text-sm font-semibold text-gray-900 mb-1">Column 4: Email</p>
+                    <p className="text-xs text-gray-600">Comma-separated (same order as names)</p>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg p-3 border border-amber-200">
+                  <p className="text-xs font-semibold text-gray-900 mb-2">Example Format:</p>
+                  <div className="bg-gray-50 rounded p-2 font-mono text-xs overflow-x-auto">
+                    <div className="text-gray-800 whitespace-nowrap">
+                      <div className="text-blue-600 font-semibold mb-1">Department,Role,Staff,Email</div>
+                      <div>ITES,AGM,"Yash, Ram","yash@example.com, ram@example.com"</div>
+                      <div>ITES,AVP,"Lokesh, Rachita","lokesh@example.com, rachita@example.com"</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Upload Section */}
-          <div className="border rounded-lg p-4">
-            <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-              <Upload className="w-4 h-4" />
-              Step 2: Upload Your CSV File
-            </h3>
-            <div className="flex gap-2">
+          <div className="rounded-xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-500 to-indigo-600 px-4 py-3">
+              <h3 className="font-semibold text-white flex items-center gap-2 text-base">
+                <Upload className="w-4 h-4" />
+                Step 2: Upload Your CSV File
+              </h3>
+            </div>
+            <div className="p-4">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -257,20 +298,28 @@ ITES,Leads,"Arun, Ashwin","arun@example.com, ashwin@example.com"
                 onChange={handleFileSelect}
                 className="hidden"
               />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                variant="outline"
-                disabled={uploading}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                {selectedFile ? 'Change File' : 'Select CSV File'}
-              </Button>
-              {selectedFile && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                  {selectedFile.name}
-                </div>
-              )}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  variant="outline"
+                  disabled={uploading}
+                  className="bg-white hover:bg-purple-50 border-purple-300 text-purple-700 font-medium"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {selectedFile ? 'Change File' : 'Select CSV File'}
+                </Button>
+                {selectedFile && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border-2 border-green-300">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-gray-900">{selectedFile.name}</span>
+                      <span className="text-xs text-gray-500">
+                        {(selectedFile.size / 1024).toFixed(2)} KB
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -278,17 +327,17 @@ ITES,Leads,"Arun, Ashwin","arun@example.com, ashwin@example.com"
           <Button
             onClick={handleUpload}
             disabled={!selectedFile || uploading}
-            className="w-full"
+            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg"
             size="lg"
           >
             {uploading ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Importing...
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Importing Data...
               </>
             ) : (
               <>
-                <Upload className="w-4 h-4 mr-2" />
+                <Upload className="w-5 h-5 mr-2" />
                 Import Data
               </>
             )}
@@ -296,38 +345,62 @@ ITES,Leads,"Arun, Ashwin","arun@example.com, ashwin@example.com"
 
           {/* Import Result */}
           {importResult && (
-            <div className={`border rounded-lg p-4 ${importResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              <div className="flex items-start gap-2">
-                {importResult.success ? (
-                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                ) : (
-                  <XCircle className="w-5 h-5 text-red-600 mt-0.5" />
-                )}
-                <div className="flex-1">
-                  <h4 className={`font-semibold ${importResult.success ? 'text-green-900' : 'text-red-900'}`}>
+            <div className={`rounded-xl border-2 overflow-hidden ${
+              importResult.success 
+                ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50' 
+                : 'border-red-300 bg-gradient-to-br from-red-50 to-pink-50'
+            }`}>
+              <div className={`px-4 py-3 ${
+                importResult.success 
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+                  : 'bg-gradient-to-r from-red-500 to-pink-600'
+              }`}>
+                <div className="flex items-center gap-2 text-white">
+                  {importResult.success ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : (
+                    <XCircle className="w-5 h-5" />
+                  )}
+                  <h4 className="font-semibold text-base">
                     {importResult.success ? 'Import Successful!' : 'Import Failed'}
                   </h4>
-                  <p className={`text-sm mt-1 ${importResult.success ? 'text-green-700' : 'text-red-700'}`}>
-                    {importResult.summary}
-                  </p>
-                  {importResult.success && (
-                    <div className="mt-2 space-y-1 text-sm text-green-700">
-                      <div>✓ Created {importResult.created.departments} departments</div>
-                      <div>✓ Created {importResult.created.roles} roles</div>
-                      <div>✓ Created {importResult.created.staff} staff members</div>
-                    </div>
-                  )}
-                  {importResult.errors.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-sm font-medium text-red-800">Errors:</p>
-                      <ul className="mt-1 space-y-1 text-sm text-red-700">
-                        {importResult.errors.map((error, idx) => (
-                          <li key={idx}>• {error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </div>
+              </div>
+              <div className="p-4">
+                <p className={`text-sm font-medium mb-3 ${
+                  importResult.success ? 'text-green-800' : 'text-red-800'
+                }`}>
+                  {importResult.summary}
+                </p>
+                {importResult.success && (
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div className="bg-white rounded-lg p-3 border-2 border-green-200 text-center">
+                      <div className="text-2xl font-bold text-green-600">{importResult.created.departments}</div>
+                      <div className="text-xs text-gray-600 mt-1">Departments</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border-2 border-green-200 text-center">
+                      <div className="text-2xl font-bold text-green-600">{importResult.created.roles}</div>
+                      <div className="text-xs text-gray-600 mt-1">Roles</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border-2 border-green-200 text-center">
+                      <div className="text-2xl font-bold text-green-600">{importResult.created.staff}</div>
+                      <div className="text-xs text-gray-600 mt-1">Staff</div>
+                    </div>
+                  </div>
+                )}
+                {importResult.errors.length > 0 && (
+                  <div className="bg-white rounded-lg p-3 border-2 border-red-200">
+                    <p className="text-sm font-semibold text-red-900 mb-2">Errors Found:</p>
+                    <ul className="space-y-1">
+                      {importResult.errors.map((error, idx) => (
+                        <li key={idx} className="text-xs text-red-700 flex items-start gap-2">
+                          <span className="text-red-500 font-bold">•</span>
+                          <span>{error}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           )}
