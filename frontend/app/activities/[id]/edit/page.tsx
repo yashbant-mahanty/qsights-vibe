@@ -357,7 +357,7 @@ export default function EditActivityPage() {
         senderEmail: activity.sender_email || "",
         description: activity.description || "",
         type: activity.type || "survey",
-        programId: activity.program_id || "",
+        programId: activity.program_id ? String(activity.program_id) : "",
         startDate: parseDate(activity.start_date),
         endDate: parseDate(activity.end_date),
         managerName: activity.manager_name || "",

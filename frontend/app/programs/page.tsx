@@ -188,14 +188,24 @@ export default function ProgramsPage() {
 
   function handleEdit(prog: Program) {
     setSelectedProgram(prog);
+    
+    // Helper to extract date in YYYY-MM-DD format
+    const formatDateForInput = (dateString: string | undefined) => {
+      if (!dateString) return '';
+      // If it's already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
+      // If it has time component, extract just the date part
+      return dateString.split('T')[0];
+    };
+    
     setEditFormData({
       name: prog.name,
       code: prog.code || String(prog.id).padStart(8, '0'),
       description: prog.description || '',
       organization_id: prog.organization_id,
       group_head_id: prog.group_head_id || '',
-      start_date: prog.start_date || '',
-      end_date: prog.end_date || '',
+      start_date: formatDateForInput(prog.start_date),
+      end_date: formatDateForInput(prog.end_date),
       status: prog.status,
       logoUrl: prog.logo || '',
     });
@@ -396,11 +406,12 @@ export default function ProgramsPage() {
   const getStatusConfig = (status: string) => {
     const configs: { [key: string]: { label: string; color: string } } = {
       active: { label: "Active", color: "bg-green-100 text-green-700" },
+      inactive: { label: "Inactive", color: "bg-gray-100 text-gray-700" },
       completed: { label: "Completed", color: "bg-blue-100 text-blue-700" },
-      draft: { label: "Draft", color: "bg-gray-100 text-gray-700" },
+      draft: { label: "Draft", color: "bg-yellow-100 text-yellow-700" },
       archived: { label: "Archived", color: "bg-orange-100 text-orange-700" },
     };
-    return configs[status] || configs.draft;
+    return configs[status?.toLowerCase()] || configs.draft;
   };
 
   const getProgressColor = (progress: number) => {
