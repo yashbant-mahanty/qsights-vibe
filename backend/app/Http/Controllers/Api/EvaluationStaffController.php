@@ -198,7 +198,8 @@ class EvaluationStaffController extends Controller
                 'metadata' => 'nullable|array',
                 'create_account' => 'nullable|boolean',
                 'is_new_joinee' => 'nullable|boolean',
-                'new_joinee_days' => 'nullable|integer|min:1|max:365'
+                'new_joinee_days' => 'nullable|integer|min:1|max:365',
+                'reporting_manager_id' => 'nullable|uuid|exists:evaluation_staff,id'
             ]);
             
             // Determine program_id based on user role and associated role
@@ -335,6 +336,31 @@ class EvaluationStaffController extends Controller
             
             // Auto-schedule new joinee evaluation if applicable
             if (!empty($validated['is_new_joinee']) && !empty($validated['joining_date'])) {
+                // If reporting_manager_id is provided, create hierarchy first
+                if (!empty($validated['reporting_manager_id'])) {
+                    $hierarchyId = Str::uuid()->toString();
+                    DB::table('evaluation_hierarchy')->insert([
+                        'id' => $hierarchyId,
+                        'staff_id' => $staffId,
+                        'reports_to_id' => $validated['reporting_manager_id'],
+                        'program_id' => $programId,
+                        'relationship_type' => 'direct',
+                        'is_active' => true,
+                        'is_primary' => true,
+                        'evaluation_weight' => 100,
+                        'created_by' => $user->id,
+                        'updated_by' => $user->id,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    
+                    \Log::info('Created hierarchy for new joinee', [
+                        'staff_id' => $staffId,
+                        'manager_id' => $validated['reporting_manager_id']
+                    ]);
+                }
+                
+                // Now schedule the evaluation
                 $this->scheduleNewJoineeEvaluation($staffId, $validated, $programId, $user);
             }
             

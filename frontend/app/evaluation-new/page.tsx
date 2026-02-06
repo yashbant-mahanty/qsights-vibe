@@ -428,7 +428,8 @@ function EvaluationNewPageContent() {
     create_account: false,
     is_new_joinee: false,
     joining_date: '',
-    new_joinee_days: 30
+    new_joinee_days: 30,
+    reporting_manager_id: ''
   });
   
   // Trigger state
@@ -1229,6 +1230,11 @@ function EvaluationNewPageContent() {
       return;
     }
     
+    if (staffForm.is_new_joinee && !staffForm.reporting_manager_id) {
+      showToast.error('Please select reporting manager for new joinee');
+      return;
+    }
+    
     try {
       setLoading(true);
       
@@ -1248,7 +1254,8 @@ function EvaluationNewPageContent() {
           create_account: !editingStaff ? staffForm.create_account : undefined,
           is_new_joinee: !editingStaff ? staffForm.is_new_joinee : undefined,
           joining_date: !editingStaff && staffForm.is_new_joinee ? staffForm.joining_date : undefined,
-          new_joinee_days: !editingStaff && staffForm.is_new_joinee ? staffForm.new_joinee_days : undefined
+          new_joinee_days: !editingStaff && staffForm.is_new_joinee ? staffForm.new_joinee_days : undefined,
+          reporting_manager_id: !editingStaff && staffForm.is_new_joinee && staffForm.reporting_manager_id ? staffForm.reporting_manager_id : undefined
         })
       });
       
@@ -1264,7 +1271,7 @@ function EvaluationNewPageContent() {
             : 'Staff added successfully';
         showToast.success(successMsg);
         setShowStaffModal(false);
-        setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
+        setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30, reporting_manager_id: '' });
         setEditingStaff(null);
         fetchStaff();
       } else {
@@ -5060,7 +5067,7 @@ function EvaluationNewPageContent() {
                   <button onClick={() => {
                     setShowStaffModal(false);
                     setEditingStaff(null);
-                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
+                    setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30, reporting_manager_id: '' });
                   }} className="text-gray-400 hover:text-gray-600 transition">
                     <X className="h-5 w-5" />
                   </button>
@@ -5178,6 +5185,27 @@ function EvaluationNewPageContent() {
                             Manager will receive evaluation {staffForm.new_joinee_days} days after joining date
                           </p>
                         </div>
+                        <div>
+                          <label className="block text-sm font-medium text-green-900 mb-1">Reporting Manager (Evaluator) *</label>
+                          <select
+                            value={staffForm.reporting_manager_id}
+                            onChange={(e) => setStaffForm({ ...staffForm, reporting_manager_id: e.target.value })}
+                            className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                            required={staffForm.is_new_joinee}
+                          >
+                            <option value="">Select Manager</option>
+                            {staff
+                              .filter(s => s.role_id !== staffForm.role_id) // Different role
+                              .map((manager) => (
+                                <option key={manager.id} value={manager.id}>
+                                  {manager.name} - {manager.role_name || 'No Role'}
+                                </option>
+                              ))}
+                          </select>
+                          <p className="text-xs text-green-600 mt-1">
+                            Select the manager who will evaluate this new joinee
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -5190,7 +5218,7 @@ function EvaluationNewPageContent() {
                     onClick={() => {
                       setShowStaffModal(false);
                       setEditingStaff(null);
-                      setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30 });
+                      setStaffForm({ name: '', email: '', employee_id: '', role_id: '', create_account: false, is_new_joinee: false, joining_date: '', new_joinee_days: 30, reporting_manager_id: '' });
                     }}
                     className="px-4 py-2 text-gray-600 hover:text-gray-800 transition"
                   >
