@@ -986,12 +986,31 @@ class EvaluationStaffController extends Controller
             $endDate = clone $triggerDate;
             $endDate->modify('+30 days');
             
-            // Parse questionnaire questions
+            // Fetch questionnaire sections and questions
             $questions = [];
-            if ($questionnaire->questions) {
-                $parsedQuestions = json_decode($questionnaire->questions, true);
-                if (is_array($parsedQuestions)) {
-                    $questions = $parsedQuestions;
+            $sections = DB::table('sections')
+                ->where('questionnaire_id', $questionnaire->id)
+                ->whereNull('deleted_at')
+                ->orderBy('order')
+                ->get();
+            
+            foreach ($sections as $section) {
+                $sectionQuestions = DB::table('questions')
+                    ->where('section_id', $section->id)
+                    ->whereNull('deleted_at')
+                    ->orderBy('order')
+                    ->get();
+                
+                foreach ($sectionQuestions as $q) {
+                    $questions[] = [
+                        'id' => $q->id,
+                        'type' => $q->type,
+                        'title' => $q->title ?? $q->text,
+                        'description' => $q->description,
+                        'is_required' => $q->required ?? false,
+                        'options' => $q->options ? json_decode($q->options, true) : null,
+                        'order' => $q->order
+                    ];
                 }
             }
             
