@@ -44,9 +44,12 @@ import {
 export default function DashboardPage() {
   const router = useRouter();
   const { currentUser, isLoading: authLoading } = useAuth();
+  const [mounted, setMounted] = useState(false);
   
   // Redirect program-level users to their respective dashboards
   useEffect(() => {
+    setMounted(true);
+    
     // Wait for auth to load
     if (authLoading || !currentUser) return;
     
@@ -449,6 +452,11 @@ export default function DashboardPage() {
       }, 100);
     }
   }, [searchQuery, filteredActivityDetails.length]);
+
+  // Prevent hydration mismatch by not rendering until mounted
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <AppLayout>
