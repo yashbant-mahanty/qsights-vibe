@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Token Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .output {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success {
+            color: #4CAF50;
+        }
+        .error {
+            color: #f44336;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <h1>Authentication Token Debugger</h1>
+    
+    <div class="card">
+        <h2>Step 1: Check All localStorage Keys</h2>
+        <p>This will show you ALL keys stored in localStorage, including the auth token.</p>
+        <button onclick="checkAllStorage()">Check All Storage Keys</button>
+        <div id="storageOutput" class="output"></div>
+    </div>
+
+    <div class="card">
+        <h2>Step 2: Login and Get Token</h2>
+        <p>Login to get a fresh token and see what key it's stored under.</p>
+        <input type="email" id="loginEmail" placeholder="Email" value="yashbantrn@gmail.com">
+        <input type="password" id="loginPassword" placeholder="Password">
+        <button onclick="testLogin()">Login</button>
+        <div id="loginOutput" class="output"></div>
+    </div>
+
+    <div class="card">
+        <h2>Step 3: Test API Call with Token</h2>
+        <p>Use the token to make a test API call to fetch activities.</p>
+        <input type="text" id="manualToken" placeholder="Paste token here (or use from login above)">
+        <button onclick="testApiCall()">Test API Call</button>
+        <div id="apiOutput" class="output"></div>
+    </div>
+
+    <div class="card">
+        <h2>Step 4: Test Add Participant</h2>
+        <p>Test adding a participant to an activity.</p>
+        <input type="text" id="activityId" placeholder="Activity ID">
+        <input type="text" id="partName" placeholder="Participant Name" value="Test User">
+        <input type="email" id="partEmail" placeholder="Participant Email" value="test@example.com">
+        <button onclick="testAddParticipant()">Add Participant</button>
+        <div id="addOutput" class="output"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let currentToken = '';
+
+        function checkAllStorage() {
+            const output = document.getElementById('storageOutput');
+            const keys = Object.keys(localStorage);
+            
+            if (keys.length === 0) {
+                output.innerHTML = '<span class="error">No keys found in localStorage!</span>';
+                return;
+            }
+
+            let html = '<h3>All localStorage Keys:</h3>';
+            keys.forEach(key => {
+                const value = localStorage.getItem(key);
+                const display = value.length > 100 ? value.substring(0, 100) + '...' : value;
+                html += `<div><strong>${key}:</strong> ${display}</div>`;
+                
+                // Check if this looks like a token
+                if (key.toLowerCase().includes('token') || key.toLowerCase().includes('auth')) {
+                    html += `<div class="success">👆 This might be your auth token!</div>`;
+                    currentToken = value;
+                }
+            });
+            
+            output.innerHTML = html;
+        }
+
+        async function testLogin() {
+            const output = document.getElementById('loginOutput');
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            output.innerHTML = 'Attempting login...';
+
+            try {
+                // Try Next.js API route
+                const response = await fetch('http://localhost:3000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.token) {
+                    currentToken = data.token;
+                    document.getElementById('manualToken').value = currentToken;
+                    
+                    output.innerHTML = `<span class="success">✓ Login successful!</span>\n\n`;
+                    output.innerHTML += `<strong>Token:</strong> ${currentToken.substring(0, 50)}...\n\n`;
+                    output.innerHTML += `<strong>Check localStorage again to see where it was stored:</strong>`;
+                    
+                    // Check storage again
+                    setTimeout(checkAllStorage, 500);
+                } else {
+                    output.innerHTML = `<span class="error">Login failed:</span>\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                output.innerHTML = `<span class="error">Error:</span>\n${error.message}`;
+            }
+        }
+
+        async function testApiCall() {
+            const output = document.getElementById('apiOutput');
+            const token = document.getElementById('manualToken').value || currentToken;
+
+            if (!token) {
+                output.innerHTML = '<span class="error">No token available. Login first or paste token manually.</span>';
+                return;
+            }
+
+            output.innerHTML = 'Testing API call...';
+
+            try {
+                const response = await fetch(`${API_BASE}/activities`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/json',
+                    },
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    output.innerHTML = `<span class="success">✓ API call successful!</span>\n\n`;
+                    output.innerHTML += `Activities found: ${data.data ? data.data.length : 0}\n\n`;
+                    output.innerHTML += JSON.stringify(data, null, 2);
+                } else {
+                    output.innerHTML = `<span class="error">API call failed (${response.status}):</span>\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                output.innerHTML = `<span class="error">Error:</span>\n${error.message}`;
+            }
+        }
+
+        async function testAddParticipant() {
+            const output = document.getElementById('addOutput');
+            const token = document.getElementById('manualToken').value || currentToken;
+            const activityId = document.getElementById('activityId').value;
+            const name = document.getElementById('partName').value;
+            const email = document.getElementById('partEmail').value;
+
+            if (!token) {
+                output.innerHTML = '<span class="error">No token available. Login first.</span>';
+                return;
+            }
+
+            if (!activityId) {
+                output.innerHTML = '<span class="error">Please provide Activity ID.</span>';
+                return;
+            }
+
+            output.innerHTML = 'Adding participant...';
+
+            try {
+                const response = await fetch(`${API_BASE}/activities/${activityId}/participants/new`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ name, email }),
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    output.innerHTML = `<span class="success">✓ Participant added successfully!</span>\n\n`;
+                    output.innerHTML += JSON.stringify(data, null, 2);
+                } else {
+                    output.innerHTML = `<span class="error">Failed to add participant (${response.status}):</span>\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                output.innerHTML = `<span class="error">Error:</span>\n${error.message}`;
+            }
+        }
+
+        // Auto-check storage on load
+        window.addEventListener('load', checkAllStorage);
+    </script>
+</body>
+</html>

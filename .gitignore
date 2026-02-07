@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+.next/
+build/
+dist/
+
+# Environment files (contains secrets)
+.env
+.env.local
+.env.production
+.env.development
+backend/.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backups folder
+backups/
+
+# Cache
+.cache/
+*.cache
+
+# Testing
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Laravel specific
+backend/storage/logs/*
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/bootstrap/cache/*
+!backend/storage/logs/.gitkeep
+!backend/storage/framework/cache/.gitkeep
+!backend/storage/framework/sessions/.gitkeep
+!backend/storage/framework/views/.gitkeep
+!backend/bootstrap/cache/.gitkeep
+backend/update_sendgrid_settings.php
+
+# Sensitive files - credentials
+*.pem
+QSights-Mumbai-12Aug2019.pem
+backend/.env.production.backup
+backend/test_sendgrid.php
+backend/update_sendgrid_settings.php
+backend/check_sendgrid_sender.php
+backend/diagnose_sendgrid.php
+backend/test_sendgrid_email.php
+
+backend/.env*
+backend/access_token
+**/token*

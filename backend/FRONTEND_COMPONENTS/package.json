@@ -1,0 +1,91 @@
+{
+  "name": "notification-template-manager",
+  "version": "1.0.0",
+  "description": "Complete notification template management system for QSights",
+  "dependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-quill": "^2.0.0",
+    "@mui/material": "^5.14.0",
+    "@mui/icons-material": "^5.14.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0"
+  },
+  "scripts": {
+    "install": "npm install react-quill @mui/material @mui/icons-material axios"
+  },
+  "components": [
+    {
+      "name": "NotificationTemplateManager",
+      "file": "NotificationTemplateManager.jsx",
+      "description": "Main component for listing and managing notification templates",
+      "props": {
+        "activityId": "string (UUID)",
+        "authToken": "string (Bearer token)"
+      }
+    },
+    {
+      "name": "NotificationTemplateEditor",
+      "file": "NotificationTemplateEditor.jsx",
+      "description": "Rich text editor for creating/editing templates with placeholder support",
+      "props": {
+        "open": "boolean",
+        "template": "NotificationTemplate object",
+        "placeholders": "object",
+        "activityId": "string (UUID)",
+        "authToken": "string (Bearer token)",
+        "onSave": "function (async)",
+        "onClose": "function"
+      }
+    },
+    {
+      "name": "NotificationTemplatePreview",
+      "file": "NotificationTemplatePreview.jsx",
+      "description": "Preview modal showing rendered template with sample data",
+      "props": {
+        "open": "boolean",
+        "template": "NotificationTemplate object",
+        "type": "string",
+        "activityId": "string (UUID)",
+        "authToken": "string (Bearer token)",
+        "onClose": "function"
+      }
+    }
+  ],
+  "features": [
+    "List all notification types with custom/default status",
+    "Rich HTML editor with React Quill",
+    "Dynamic placeholder insertion",
+    "Live preview with sample data",
+    "Create, edit, delete templates",
+    "Revert to default templates",
+    "Material-UI styling",
+    "Responsive design",
+    "Complete API integration",
+    "Error handling and loading states"
+  ],
+  "integrationSteps": [
+    "1. Install dependencies: npm install",
+    "2. Copy .jsx files to your project",
+    "3. Import components in Activity page",
+    "4. Pass activityId and authToken props",
+    "5. Add to Activity tabs or settings section"
+  ],
+  "apiEndpoints": [
+    "GET /api/activities/{activityId}/notification-templates",
+    "POST /api/activities/{activityId}/notification-templates",
+    "GET /api/activities/{activityId}/notification-templates/type/{type}",
+    "POST /api/activities/{activityId}/notification-templates/preview",
+    "DELETE /api/activities/{activityId}/notification-templates/{templateId}",
+    "GET /api/notification-templates/types",
+    "GET /api/notification-templates/placeholders"
+  ],
+  "documentation": {
+    "integrationGuide": "INTEGRATION_GUIDE.md",
+    "backendDocs": "NOTIFICATION_TEMPLATE_MANAGER.md",
+    "quickStart": "NOTIFICATION_TEMPLATES_QUICKSTART.md"
+  }
+}

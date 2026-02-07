@@ -1,0 +1,20 @@
+# Exclude SendGrid credentials
+backend/.env
+backend/config/mail.php
+
+# Exclude sensitive tokens
+backend/access_token
+backend/**/*token*
+
+# Exclude build artifacts
+frontend/node_modules/
+frontend/.next/
+backend/vendor/
+
+# Exclude logs
+backend/storage/logs/*.log
+
+# Exclude local backups
+*.tar.gz
+*.sql.gz
+*.bak

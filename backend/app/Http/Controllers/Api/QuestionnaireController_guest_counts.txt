@@ -1,0 +1,15 @@
+// In QuestionnaireController index() method, update withCount:
+
+->withCount([
+    'responses',
+    'responses as authenticated_responses_count' => function ($query) {
+        $query->whereHas('participant', function($q) {
+            $q->where('is_guest', false);
+        });
+    },
+    'responses as guest_responses_count' => function ($query) {
+        $query->whereHas('participant', function($q) {
+            $q->where('is_guest', true);
+        });
+    },
+])

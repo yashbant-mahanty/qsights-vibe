@@ -1,0 +1,74 @@
+CHUNK B11 - REPORTING BACKEND
+Files Created/Modified
+================================================================================
+
+CONTROLLERS (1 file):
+1. app/Http/Controllers/Api/ReportController.php (NEW)
+   - 356 lines
+   - 8 endpoint methods
+   - Participation, completion, drill-down, question analytics
+   - Program overview and export handlers
+
+SERVICES (1 file):
+2. app/Services/ExportService.php (NEW)
+   - 5 export methods
+   - CSV, Excel, PDF generation
+   - Activity and program report exports
+
+EXPORTS (1 file):
+3. app/Exports/ArrayExport.php (NEW)
+   - Excel export utility
+   - Styling support
+
+MODELS (2 files modified):
+4. app/Models/Activity.php (MODIFIED)
+   - Added responses() relationship
+   - Added 4 analytics methods
+   - PostgreSQL compatibility fix for time calculation
+
+5. app/Models/Response.php (MODIFIED)
+   - Added 4 analytics methods
+   - Progress tracking
+   - Answer summary generation
+
+VIEWS (2 files):
+6. resources/views/reports/activity-analytics.blade.php (NEW)
+   - PDF template for activity analytics
+   - Professional layout with metrics and tables
+
+7. resources/views/reports/program-overview.blade.php (NEW)
+   - PDF template for program overview
+   - Activity statistics table
+
+ROUTES (1 file modified):
+8. routes/api.php (MODIFIED)
+   - Added 8 report routes under /api/reports prefix
+   - All protected by auth:sanctum middleware
+
+DOCUMENTATION (1 file):
+9. CHUNK_B11_REPORTING_BACKEND.md (NEW)
+   - Comprehensive documentation
+   - Usage examples
+   - API endpoints
+   - Response formats
+
+TEST FILES (2 files):
+10. test_reports.php (NEW)
+    - Comprehensive test script
+    - Validates all analytics and export functionality
+
+11. CHUNK_B11_FILES.txt (THIS FILE)
+    - File summary
+
+TOTAL FILES:
+- New files: 8
+- Modified files: 3
+- Total: 11 files
+
+STORAGE:
+- storage/app/exports/ (directory for generated reports)
+  - Auto-cleanup enabled for downloads
+
+DEPENDENCIES:
+- barryvdh/laravel-dompdf: v3.1.1 (installed)
+- maatwebsite/excel: Already installed from CHUNK B6

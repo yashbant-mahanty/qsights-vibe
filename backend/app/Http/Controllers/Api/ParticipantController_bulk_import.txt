@@ -1,0 +1,83 @@
+// Update bulkImport method in ParticipantController:
+
+public function bulkImport(Request $request)
+{
+    $request->validate([
+        'file' => 'required|file|mimes:csv,txt',
+        'program_id' => 'required|exists:programs,id',
+        'activity_ids' => 'nullable|array',
+        'activity_ids.*' => 'exists:activities,id',
+    ]);
+
+    $file = $request->file('file');
+    $programId = $request->program_id;
+    $activityIds = $request->activity_ids ?? [];
+
+    // Get program with organization
+    $program = Program::with('organization')->findOrFail($programId);
+
+    // Process CSV
+    $csv = array_map('str_getcsv', file($file->path()));
+    $headers = array_shift($csv);
+
+    $successCount = 0;
+    $skippedCount = 0;
+    $skippedRows = [];
+
+    foreach ($csv as $index => $row) {
+        $rowNumber = $index + 2; // +2 because of 0-index and header row
+        
+        try {
+            if (count($row) !== count($headers)) {
+                throw new \Exception('Column count mismatch');
+            }
+            
+            $data = array_combine($headers, $row);
+            
+            // Validate required fields
+            if (empty($data['email']) || empty($data['name'])) {
+                $skippedRows[] = [
+                    'rowNumber' => $rowNumber,
+                    'reason' => 'Missing required fields (name or email)'
+                ];
+                $skippedCount++;
+                continue;
+            }
+
+            // Create or update participant
+            $participant = Participant::updateOrCreate(
+                ['email' => $data['email']],
+                [
+                    'name' => $data['name'],
+                    'phone' => $data['phone'] ?? null,
+                    'organization_id' => $program->organization_id,
+                    'status' => 'active',
+                    'is_guest' => false, // Bulk imported participants are authenticated
+                ]
+            );
+
+            // Link to program
+            $participant->programs()->syncWithoutDetaching([$programId]);
+
+            // Link to selected activities
+            if (!empty($activityIds)) {
+                $participant->activities()->syncWithoutDetaching($activityIds);
+            }
+
+            $successCount++;
+        } catch (\Exception $e) {
+            $skippedRows[] = [
+                'rowNumber' => $rowNumber,
+                'reason' => $e->getMessage()
+            ];
+            $skippedCount++;
+        }
+    }
+
+    return response()->json([
+        'message' => "Import completed: {$successCount} participants imported, {$skippedCount} skipped",
+        'successCount' => $successCount,
+        'skippedCount' => $skippedCount,
+        'skippedRows' => $skippedRows,
+    ]);
+}

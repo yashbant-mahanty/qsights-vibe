@@ -1,0 +1,12 @@
+// In ProgramController index() method, update withCount:
+
+->withCount([
+    'participants as participants_count',
+    'participants as authenticated_participants_count' => function ($query) {
+        $query->where('is_guest', false);
+    },
+    'participants as guest_participants_count' => function ($query) {
+        $query->where('is_guest', true);
+    },
+    'activities'
+])

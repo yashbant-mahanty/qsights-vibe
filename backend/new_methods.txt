@@ -1,0 +1,68 @@
+
+    
+    /**
+     * Get the new joinee questionnaire setting for a program
+     */
+    public function getNewJoineeQuestionnaire(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $programId = $request->input('program_id', $user->program_id);
+            
+            $setting = DB::table('evaluation_settings')
+                ->where('program_id', $programId)
+                ->where('setting_key', 'new_joinee_questionnaire_id')
+                ->first();
+                
+            return response()->json([
+                'success' => true,
+                'questionnaire_id' => $setting ? $setting->setting_value : null
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to get new joinee questionnaire setting', [
+                'error' => $e->getMessage()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load setting'
+            ], 500);
+        }
+    }
+    
+    /**
+     * Save the new joinee questionnaire setting for a program
+     */
+    public function saveNewJoineeQuestionnaire(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'program_id' => 'required|uuid',
+                'questionnaire_id' => 'required|string'
+            ]);
+            
+            // Upsert the setting
+            DB::table('evaluation_settings')->updateOrInsert(
+                [
+                    'program_id' => $validated['program_id'],
+                    'setting_key' => 'new_joinee_questionnaire_id'
+                ],
+                [
+                    'setting_value' => $validated['questionnaire_id'],
+                    'updated_at' => now()
+                ]
+            );
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'New joinee questionnaire setting saved successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to save new joinee questionnaire setting', [
+                'error' => $e->getMessage()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save setting'
+            ], 500);
+        }
+    }

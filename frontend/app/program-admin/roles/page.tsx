@@ -1,0 +1,2418 @@
+"use client";
+// Version: 2.1 - Fixed hydration error for category icons
+
+import React, { useState, useEffect, Suspense, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import ProgramAdminLayout from "@/components/program-admin-layout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { 
+  Plus, 
+  Pencil, 
+  Trash2, 
+  Eye, 
+  EyeOff, 
+  RefreshCw, 
+  Filter, 
+  Users, 
+  UserCog, 
+  Network, 
+  ChevronLeft, 
+  ChevronRight,
+  LayoutDashboard,
+  Building2,
+  FolderTree,
+  UserCheck,
+  FileText,
+  Activity,
+  BarChart3,
+  Brain,
+  Settings,
+  ClipboardCheck,
+  MessageSquare,
+  Shield,
+  User,
+  Lock
+} from "lucide-react";
+
+// Component to render category icons - using inline SVG to avoid library issues
+const CategoryIcon = ({ category, className = "" }: { category: string; className?: string }) => {
+  const iconClass = `w-4 h-4 ${className}`;
+  
+  switch (category) {
+    case "Overview":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
+    case "Organizations":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>;
+    case "Programs":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>;
+    case "Group Management":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
+    case "Participants":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+    case "Activities":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>;
+    case "Questionnaires":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
+    case "Communications":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>;
+    case "Reports":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
+    case "AI Reports":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>;
+    case "Evaluation":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>;
+    case "Settings":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+    case "User":
+    case "Users":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>;
+    case "Roles":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+    case "Permissions":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>;
+    case "Special Access":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>;
+    case "Authentication":
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>;
+    default:
+      return <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+  }
+};
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { toast } from "@/components/ui/toast";
+import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { API_URL } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import ManagerAssignmentModal from "@/components/manager-assignment-modal";
+import HierarchyTreeModal from "@/components/hierarchy-tree-modal";
+import HierarchyMappingModal from "@/components/hierarchy-mapping-modal";
+
+// Predefined list of services
+const AVAILABLE_SERVICES = [
+  // Dashboard & Overview
+  { id: "dashboard", name: "Dashboard", category: "Overview" },
+  
+  // Organizations
+  { id: "list_organization", name: "List Organizations", category: "Organizations" },
+  { id: "add_organization", name: "Add Organization", category: "Organizations" },
+  { id: "edit_organization", name: "Edit Organization", category: "Organizations" },
+  { id: "disable_organization", name: "Disable Organization", category: "Organizations" },
+  
+  // Programs
+  { id: "list_programs", name: "List Programs", category: "Programs" },
+  { id: "add_programs", name: "Add Programs", category: "Programs" },
+  { id: "edit_programs", name: "Edit Programs", category: "Programs" },
+  { id: "disable_programs", name: "Disable Programs", category: "Programs" },
+  
+  // Group Management
+  { id: "list_group_head", name: "List Group Head", category: "Group Management" },
+  { id: "add_group_head", name: "Add Group Head", category: "Group Management" },
+  { id: "edit_group_head", name: "Edit Group Head", category: "Group Management" },
+  { id: "disable_group_head", name: "Disable Group Head", category: "Group Management" },
+  { id: "add_group", name: "Add Group", category: "Group Management" },
+  { id: "edit_group", name: "Edit Group", category: "Group Management" },
+  { id: "group_map", name: "Group Map", category: "Group Management" },
+  { id: "group_list", name: "Group List", category: "Group Management" },
+  { id: "group_status", name: "Group Status", category: "Group Management" },
+  { id: "bulk_upload", name: "Bulk Upload", category: "Group Management" },
+  
+  // Participants
+  { id: "add_program_participants", name: "Add Program Participants", category: "Participants" },
+  { id: "add_participants", name: "Add Participants", category: "Participants" },
+  { id: "edit_participants", name: "Edit Participants", category: "Participants" },
+  { id: "disable_participants", name: "Disable Participants", category: "Participants" },
+  { id: "list_program_participants", name: "List Program Participants", category: "Participants" },
+  { id: "list_participants", name: "List Participants", category: "Participants" },
+  
+  // Activities/Events
+  { id: "list_activity", name: "List Activity", category: "Activities" },
+  { id: "activity_status", name: "Activity Status", category: "Activities" },
+  { id: "delete_activity_files", name: "Delete Activity Files", category: "Activities" },
+  { id: "activity_files_upload", name: "Activity Files Upload", category: "Activities" },
+  { id: "generate_activity_link", name: "Generate Activity Link", category: "Activities" },
+  { id: "activity_add", name: "Activity Add", category: "Activities" },
+  { id: "activity_files_listing", name: "Activity Files Listing", category: "Activities" },
+  { id: "activity_view_anonymous", name: "Activity View Anonymous", category: "Activities" },
+  
+  // Questionnaires
+  { id: "category_add", name: "Category Add", category: "Questionnaires" },
+  { id: "category_edit", name: "Category Edit", category: "Questionnaires" },
+  { id: "category_list", name: "Category List", category: "Questionnaires" },
+  { id: "category_map", name: "Category Map", category: "Questionnaires" },
+  { id: "category_status", name: "Category Status", category: "Questionnaires" },
+  { id: "question_add", name: "Question Add", category: "Questionnaires" },
+  { id: "question_edit", name: "Question Edit", category: "Questionnaires" },
+  { id: "question_list", name: "Question List", category: "Questionnaires" },
+  { id: "question_bank_list", name: "Question Bank List", category: "Questionnaires" },
+  { id: "question_bank_add", name: "Question Bank Add", category: "Questionnaires" },
+  { id: "question_bank_edit", name: "Question Bank Edit", category: "Questionnaires" },
+  { id: "question_bank_status", name: "Question Bank Status", category: "Questionnaires" },
+  { id: "question_header_list", name: "Question Header List", category: "Questionnaires" },
+  { id: "question_header_add", name: "Question Header Add", category: "Questionnaires" },
+  { id: "question_header_edit", name: "Question Header Edit", category: "Questionnaires" },
+  { id: "question_header_tables", name: "Question Header Tables", category: "Questionnaires" },
+  
+  // Communications
+  { id: "sms_edit", name: "SMS Edit", category: "Communications" },
+  { id: "sms_status", name: "SMS Status", category: "Communications" },
+  { id: "send_sms", name: "Send SMS", category: "Communications" },
+  { id: "email_status", name: "Email Status", category: "Communications" },
+  { id: "send_email", name: "Send Email", category: "Communications" },
+  { id: "list_email", name: "List Email", category: "Communications" },
+  
+  // Reports
+  { id: "report_download", name: "Report Download", category: "Reports" },
+  { id: "edit_dynamic_report", name: "Edit Dynamic Report", category: "Reports" },
+  { id: "dynamic_report_status", name: "Dynamic Report Status", category: "Reports" },
+  { id: "dynamic_report_list", name: "Dynamic Report List", category: "Reports" },
+  { id: "generate_dynamic_report", name: "Generate Dynamic Report", category: "Reports" },
+  { id: "filter_report", name: "Filter Report", category: "Reports" },
+  { id: "view_report", name: "View Report", category: "Reports" },
+  
+  // AI Report Builder
+  { id: "ai-reports-view", name: "AI Report Builder - View", category: "AI Reports" },
+  { id: "report-builder-view", name: "AI Report Builder - Access", category: "AI Reports" },
+  
+  // Evaluation
+  { id: "list_evaluation", name: "List Evaluation", category: "Evaluation" },
+  { id: "add_evaluation", name: "Add Evaluation", category: "Evaluation" },
+  { id: "edit_evaluation", name: "Edit Evaluation", category: "Evaluation" },
+  { id: "disable_evaluation", name: "Disable Evaluation", category: "Evaluation" },
+  { id: "view_evaluation_results", name: "View Evaluation Results", category: "Evaluation" },
+  
+  // Settings
+  { id: "theme_customization", name: "Theme Customization", category: "Settings" },
+  { id: "page_edit", name: "Page Edit", category: "Settings" },
+  { id: "page_list", name: "Page List", category: "Settings" },
+  { id: "page_add", name: "Page Add", category: "Settings" },
+  { id: "settings", name: "Settings", category: "Settings" },
+  
+  // Users & Roles
+  { id: "list_user", name: "List User", category: "Users" },
+  { id: "add_user", name: "Add User", category: "Users" },
+  { id: "edit_user", name: "Edit User", category: "Users" },
+  { id: "map_user", name: "Map User", category: "Users" },
+  { id: "edit_roles", name: "Edit Roles", category: "Roles" },
+  { id: "list_roles", name: "List Roles", category: "Roles" },
+  { id: "add_roles", name: "Add Roles", category: "Roles" },
+  
+  // Permissions & Authentication
+  { id: "edit_read", name: "Edit Read", category: "Permissions" },
+  { id: "login", name: "Login", category: "Authentication" },
+  
+  // Special Access
+  { id: "is_group_head", name: "Is Group Head", category: "Special Access" },
+  { id: "is_organization", name: "Is Organization", category: "Special Access" },
+  { id: "is_manager", name: "Is Manager", category: "Special Access" },
+  { id: "is_moderator", name: "Is Moderator", category: "Special Access" },
+  { id: "is_support_admin", name: "Is Support Admin", category: "Special Access" },
+  { id: "is_admin", name: "Is Admin", category: "Special Access" },
+  
+  // User Profile
+  { id: "profile", name: "Profile", category: "User" },
+  
+  // === NEW HYPHEN-BASED SERVICE IDS (for backward compatibility) ===
+  // These match the services created when programs are set up
+  { id: "programs-view", name: "Programs - View", category: "Programs" },
+  { id: "programs-create", name: "Programs - Create", category: "Programs" },
+  { id: "programs-edit", name: "Programs - Edit", category: "Programs" },
+  { id: "programs-delete", name: "Programs - Delete", category: "Programs" },
+  
+  { id: "participants-view", name: "Participants - View", category: "Participants" },
+  { id: "participants-create", name: "Participants - Create", category: "Participants" },
+  { id: "participants-edit", name: "Participants - Edit", category: "Participants" },
+  { id: "participants-delete", name: "Participants - Delete", category: "Participants" },
+  
+  { id: "questionnaires-view", name: "Questionnaires - View", category: "Questionnaires" },
+  { id: "questionnaires-create", name: "Questionnaires - Create", category: "Questionnaires" },
+  { id: "questionnaires-edit", name: "Questionnaires - Edit", category: "Questionnaires" },
+  { id: "questionnaires-delete", name: "Questionnaires - Delete", category: "Questionnaires" },
+  
+  { id: "activities-view", name: "Activities - View", category: "Activities" },
+  { id: "activities-create", name: "Activities - Create", category: "Activities" },
+  { id: "activities-edit", name: "Activities - Edit", category: "Activities" },
+  { id: "activities-delete", name: "Activities - Delete", category: "Activities" },
+  { id: "activities-send-notification", name: "Activities - Send Notification", category: "Activities" },
+  { id: "activities-set-reminder", name: "Activities - Set Reminder", category: "Activities" },
+  { id: "activities-landing-config", name: "Activities - Landing Config", category: "Activities" },
+  
+  { id: "reports-view", name: "Reports - View", category: "Reports" },
+  { id: "reports-export", name: "Reports - Export", category: "Reports" },
+  
+  { id: "evaluation-view", name: "Evaluation - View", category: "Evaluation" },
+  { id: "evaluation-manage", name: "Evaluation - Manage", category: "Evaluation" },
+];
+
+interface Role {
+  id: string;
+  role_name: string;
+  username: string;
+  email: string;
+  program_id: string;
+  created_at: string;
+  is_default_user?: boolean; // true if from /users endpoint (integer ID), false if from /roles endpoint (UUID)
+  default_services?: string[]; // Services for default users (from users table)
+  services?: string[]; // Services for custom roles (from program_roles table)
+  program?: {
+    id: string;
+    name: string;
+  };
+}
+
+interface ProgramOption {
+  id: string;
+  name: string;
+}
+
+function RolesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { currentUser: authUser, isLoading: authLoading } = useAuth(); // Use AuthContext instead of separate API call
+  const hasInitialized = useRef(false); // Prevent double initialization
+  const [isMounted, setIsMounted] = useState(false); // Track client-side mount to prevent hydration errors
+  const [activeTab, setActiveTab] = useState<"program-users" | "system-roles" | "hierarchy-mapping">("program-users");
+  const [showForm, setShowForm] = useState(false);
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [roleName, setRoleName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(true);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editUsername, setEditUsername] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [editSelectedServices, setEditSelectedServices] = useState<string[]>([]);
+  const [availableServicesForRole, setAvailableServicesForRole] = useState<string[]>([]);
+  const [isSystemRole, setIsSystemRole] = useState(false);
+  const [allowCustomServices, setAllowCustomServices] = useState(false);
+  const [programId, setProgramId] = useState<string>("");
+  const [programs, setPrograms] = useState<ProgramOption[]>([]);
+  const [selectedProgramFilter, setSelectedProgramFilter] = useState<string>("all");
+  const [allRoles, setAllRoles] = useState<Role[]>([]);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
+  const [createFormProgramId, setCreateFormProgramId] = useState<string>("");
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [bulkDeleteModal, setBulkDeleteModal] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  
+  // Hierarchy modal states
+  const [managerAssignmentModal, setManagerAssignmentModal] = useState(false);
+  const [hierarchyTreeModal, setHierarchyTreeModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{ id: number; name: string; programId: string; programName: string } | null>(null);
+  const [treeViewProgramId, setTreeViewProgramId] = useState<string>("");
+  const [treeViewProgramName, setTreeViewProgramName] = useState<string>("");
+
+  // Hierarchy Mapping states
+  const [mappingStep, setMappingStep] = useState<number>(1);
+  const [mappingProgramId, setMappingProgramId] = useState<string>("");
+  const [mappingParentRoleId, setMappingParentRoleId] = useState<string>("");
+  const [mappingParentUserId, setMappingParentUserId] = useState<string>("");
+  const [mappingChildRoleId, setMappingChildRoleId] = useState<string>("");
+  const [mappingChildUserIds, setMappingChildUserIds] = useState<string[]>([]);
+  const [availableParentUsers, setAvailableParentUsers] = useState<Role[]>([]);
+  const [availableChildUsers, setAvailableChildUsers] = useState<Role[]>([]);
+  const [hierarchyMappings, setHierarchyMappings] = useState<any[]>([]);
+
+  // Fetch roles on mount and when tab changes - uses AuthContext instead of separate API call
+  useEffect(() => {
+    // Set mounted on client side to prevent hydration errors
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const initializeData = async () => {
+      // Wait for AuthContext to load user
+      if (authLoading || !authUser) {
+        return;
+      }
+      
+      // Prevent double initialization - only run once when user is ready
+      if (hasInitialized.current) {
+        return;
+      }
+      hasInitialized.current = true;
+      
+      try {
+        console.log('🔍 User loaded for roles page:', { role: authUser.role, programId: authUser.programId });
+        
+        // CRITICAL: Only program-admin and super-admin can access Roles & Services
+        if (!['super-admin', 'program-admin'].includes(authUser.role)) {
+          console.warn('⚠️ Unauthorized access attempt to Roles page by:', authUser.role);
+          window.location.href = authUser.role === 'program-manager' ? '/program-manager' : '/dashboard';
+          return;
+        }
+        
+        // If not super-admin and trying to access system-roles, redirect to program-users
+        if (authUser.role !== 'super-admin' && activeTab === 'system-roles') {
+          setActiveTab('program-users');
+          return;
+        }
+        
+        // Now load data with user context available
+        await loadProgramsWithUser(authUser);
+        await loadRolesWithUser(authUser);
+      } catch (error) {
+        console.error('Error initializing roles page:', error);
+      }
+    };
+    
+    initializeData();
+  }, [authLoading, authUser]);
+
+  // Load hierarchy mappings when tab changes
+  useEffect(() => {
+    if (activeTab === 'hierarchy-mapping') {
+      loadHierarchyMappings();
+    }
+  }, [activeTab]);
+
+  // checkUserRole is no longer needed - using authUser from AuthContext
+
+  // Handle query parameters
+  useEffect(() => {
+    const programIdFromQuery = searchParams.get('programId');
+    if (programIdFromQuery) {
+      setSelectedProgramFilter(programIdFromQuery);
+    }
+  }, [searchParams]);
+
+  // Filter roles when program filter changes
+  useEffect(() => {
+    if (selectedProgramFilter === "all") {
+      setRoles(allRoles);
+    } else {
+      setRoles(allRoles.filter(role => role.program_id === selectedProgramFilter));
+    }
+    setCurrentPage(1); // Reset to first page when filter changes
+  }, [selectedProgramFilter, allRoles]);
+
+  // Separate Program Users and System Roles
+  const programUserRoles = useMemo(() => {
+    return roles.filter(role => role.is_default_user === true);
+  }, [roles]);
+
+  const systemRoles = useMemo(() => {
+    return roles.filter(role => role.is_default_user === false);
+  }, [roles]);
+
+  // Determine which roles to display based on active tab
+  // Always default to program-users to avoid hydration mismatches
+  const displayRoles = useMemo(() => {
+    if (!isMounted) return programUserRoles; // During SSR, always use program users
+    return activeTab === 'program-users' ? programUserRoles : systemRoles;
+  }, [activeTab, programUserRoles, systemRoles, isMounted]);
+
+  // Pagination calculations based on the displayed roles
+  const totalPages = Math.ceil(displayRoles.length / itemsPerPage);
+  const paginatedRoles = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return displayRoles.slice(startIndex, startIndex + itemsPerPage);
+  }, [displayRoles, currentPage, itemsPerPage]);
+
+  const getAuthHeaders = () => {
+    const cookies = document.cookie.split(';');
+    const tokenCookie = cookies.find(c => c.trim().startsWith('backendToken='));
+    if (!tokenCookie) {
+      throw new Error('Not authenticated');
+    }
+    const token = decodeURIComponent(tokenCookie.split('=')[1]);
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+  };
+
+  // Helper function to safely parse services (handles both array and JSON string)
+  const parseServices = (services: any): string[] => {
+    if (!services) return [];
+    if (Array.isArray(services)) return services;
+    if (typeof services === 'string') {
+      try {
+        const parsed = JSON.parse(services);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        console.error('Failed to parse services JSON:', e);
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const getProgramId = () => {
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : null;
+    return user?.programId || 'a0a77496-0fc0-4627-ba5b-9a1ea026623f';
+  };
+
+  const loadProgramsWithUser = async (user: any) => {
+    try {
+      const headers = getAuthHeaders();
+      
+      // Check user role and programId
+      let url = `${API_URL}/programs`;
+      if (user && user.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(user.role)) {
+        url = `${API_URL}/programs?program_id=${user.programId}`;
+        console.log('🔍 Fetching programs with filter:', url);
+      }
+      
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      });
+
+      console.log('Programs response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Programs data:', data);
+        // Handle both array and object with programs property
+        const programsList = Array.isArray(data) ? data : (data.programs || data.data || []);
+        console.log('✅ Programs list loaded:', programsList.length, 'programs');
+        setPrograms(programsList);
+      } else {
+        console.error('Failed to load programs:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error loading programs:', error);
+    }
+  };
+
+  const loadPrograms = async () => {
+    try {
+      const headers = getAuthHeaders();
+      
+      // Check user role and programId
+      let url = `${API_URL}/programs`;
+      if (authUser && authUser.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(authUser.role)) {
+        url = `${API_URL}/programs?program_id=${authUser.programId}`;
+      }
+      
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      });
+
+      console.log('Programs response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Programs data:', data);
+        // Handle both array and object with programs property
+        const programsList = Array.isArray(data) ? data : (data.programs || data.data || []);
+        console.log('Programs list:', programsList);
+        setPrograms(programsList);
+      } else {
+        console.error('Failed to load programs:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error loading programs:', error);
+    }
+  };
+
+  const loadRolesWithUser = async (user: any) => {
+    try {
+      setLoadingRoles(true);
+      const headers = getAuthHeaders();
+      
+      // Fetch programs (filtered by user's program for program roles)
+      let programsUrl = `${API_URL}/programs`;
+      if (user && user.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(user.role)) {
+        programsUrl = `${API_URL}/programs?program_id=${user.programId}`;
+        console.log('🔍 Fetching programs for roles with filter:', programsUrl);
+      }
+      
+      const programsResponse = await fetch(programsUrl, {
+        headers,
+        credentials: 'include',
+      });
+
+      console.log('Programs response for roles:', programsResponse.status);
+
+      if (!programsResponse.ok) {
+        throw new Error('Failed to fetch programs');
+      }
+
+      const programsData = await programsResponse.json();
+      console.log('Programs data for roles:', programsData);
+      
+      // Handle both array and object with programs property
+      const allPrograms = Array.isArray(programsData) ? programsData : (programsData.programs || programsData.data || []);
+      console.log('✅ Programs for roles loaded:', allPrograms.length, 'programs');
+
+      // Fetch roles based on active tab
+      let allRoles: Role[] = [];
+      
+      if (activeTab === 'system-roles') {
+        // For system roles, fetch from /system-roles endpoint (no program association)
+        try {
+          const systemRolesResponse = await fetch(`${API_URL}/system-roles`, {
+            headers,
+            credentials: 'include',
+          });
+
+          if (systemRolesResponse.ok) {
+            const systemRolesData = await systemRolesResponse.json();
+            const rolesList = Array.isArray(systemRolesData) ? systemRolesData : (systemRolesData.roles || systemRolesData.data || []);
+            allRoles = rolesList.map((role: any) => ({
+              id: role.id,
+              role_name: role.role || role.role_name || 'System Role',
+              username: role.username || role.name,
+              email: role.email,
+              program_id: role.program_id || null,
+              created_at: role.created_at,
+              program: role.program || null
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading system roles:', error);
+        }
+      } else {
+        // For program users, fetch from each program
+        const rolesPromises = allPrograms.map(async (prog: ProgramOption) => {
+          try {
+            console.log(`Fetching users and roles for program: ${prog.id}`);
+            
+            // Fetch both default users AND custom roles
+            const [usersResponse, rolesResponse] = await Promise.all([
+              fetch(`${API_URL}/programs/${prog.id}/users`, {
+                headers,
+                credentials: 'include',
+              }),
+              fetch(`${API_URL}/programs/${prog.id}/roles`, {
+                headers,
+                credentials: 'include',
+              })
+            ]);
+
+            console.log(`users response for ${prog.id}:`, usersResponse.status);
+            console.log(`roles response for ${prog.id}:`, rolesResponse.status);
+
+            const allProgramRoles = [];
+
+            // Process default users
+            if (usersResponse.ok) {
+              const usersData = await usersResponse.json();
+              console.log(`users data for ${prog.id}:`, usersData);
+              const usersList = Array.isArray(usersData) ? usersData : (usersData.users || usersData.data || []);
+              const mappedUsers = usersList.map((user: any) => ({
+                id: String(user.id),
+                role_name: user.role || user.role_name || 'User',
+                username: user.username || user.name,
+                email: user.email,
+                program_id: prog.id,
+                created_at: user.created_at,
+                is_default_user: true,
+                default_services: parseServices(user.default_services), // Safely parse services
+                program: { id: prog.id, name: prog.name }
+              }));
+              allProgramRoles.push(...mappedUsers);
+            }
+
+            // Process custom roles
+            if (rolesResponse.ok) {
+              const rolesData = await rolesResponse.json();
+              console.log(`roles data for ${prog.id}:`, rolesData);
+              const rolesList = Array.isArray(rolesData) ? rolesData : (rolesData.roles || rolesData.data || []);
+              const mappedRoles = rolesList.map((role: any) => ({
+                id: role.id,
+                role_name: role.role || role.role_name || 'Role',
+                username: role.username || role.name,
+                email: role.email,
+                program_id: prog.id,
+                created_at: role.created_at,
+                is_default_user: false,
+                services: parseServices(role.services), // Safely parse services
+                program: { id: prog.id, name: prog.name }
+              }));
+              allProgramRoles.push(...mappedRoles);
+            }
+
+            return allProgramRoles;
+          } catch (error) {
+            console.error(`Error loading users/roles for program ${prog.id}:`, error);
+            return [];
+          }
+        });
+
+        const rolesArrays = await Promise.all(rolesPromises);
+        allRoles = rolesArrays.flat();
+      }
+
+      console.log('✅ All roles loaded:', allRoles.length, 'roles');
+
+      // Apply program filter
+      setAllRoles(allRoles);
+      setRoles(allRoles);
+    } catch (error: any) {
+      console.error('Error loading roles:', error);
+      if (error.message === 'Not authenticated') {
+        window.location.href = '/';
+      }
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
+
+
+  const loadRoles = async () => {
+    try {
+      setLoadingRoles(true);
+      const headers = getAuthHeaders();
+      
+      // Fetch programs (filtered by user's program for program roles)
+      let programsUrl = `${API_URL}/programs`;
+      if (authUser && authUser.programId && ['program-admin', 'program-manager', 'program-moderator'].includes(authUser.role)) {
+        programsUrl = `${API_URL}/programs?program_id=${authUser.programId}`;
+      }
+      
+      const programsResponse = await fetch(programsUrl, {
+        headers,
+        credentials: 'include',
+      });
+
+      console.log('Programs response for roles:', programsResponse.status);
+
+      if (!programsResponse.ok) {
+        throw new Error('Failed to fetch programs');
+      }
+
+      const programsData = await programsResponse.json();
+      console.log('Programs data for roles:', programsData);
+      
+      // Handle both array and object with programs property
+      const allPrograms = Array.isArray(programsData) ? programsData : (programsData.programs || programsData.data || []);
+      console.log('All programs:', allPrograms);
+
+      // Fetch roles based on active tab
+      let allRoles: Role[] = [];
+      
+      if (activeTab === 'system-roles') {
+        // For system roles, fetch from /system-roles endpoint (no program association)
+        try {
+          const systemRolesResponse = await fetch(`${API_URL}/system-roles`, {
+            headers,
+            credentials: 'include',
+          });
+
+          if (systemRolesResponse.ok) {
+            const systemRolesData = await systemRolesResponse.json();
+            const rolesList = Array.isArray(systemRolesData) ? systemRolesData : (systemRolesData.roles || systemRolesData.data || []);
+            allRoles = rolesList.map((role: any) => ({
+              id: role.id,
+              role_name: role.role || role.role_name || 'System Role',
+              username: role.username || role.name,
+              email: role.email,
+              program_id: role.program_id || null,
+              created_at: role.created_at,
+              program: role.program || null
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading system roles:', error);
+        }
+      } else {
+        // For program users, fetch from each program
+        const rolesPromises = allPrograms.map(async (prog: ProgramOption) => {
+          try {
+            console.log(`Fetching users and roles for program: ${prog.id}`);
+            
+            // Fetch both default users AND custom roles
+            const [usersResponse, rolesResponse] = await Promise.all([
+              fetch(`${API_URL}/programs/${prog.id}/users`, {
+                headers,
+                credentials: 'include',
+              }),
+              fetch(`${API_URL}/programs/${prog.id}/roles`, {
+                headers,
+                credentials: 'include',
+              })
+            ]);
+
+            console.log(`users response for ${prog.id}:`, usersResponse.status);
+            console.log(`roles response for ${prog.id}:`, rolesResponse.status);
+
+            const allProgramRoles = [];
+
+            // Process default users
+            if (usersResponse.ok) {
+              const usersData = await usersResponse.json();
+              console.log(`users data for ${prog.id}:`, usersData);
+              const usersList = Array.isArray(usersData) ? usersData : (usersData.users || usersData.data || []);
+              console.log(`Sample user from /users endpoint:`, usersList[0]);
+              const mappedUsers = usersList.map((user: any) => ({
+                id: String(user.id), // Convert to string for consistency
+                role_name: user.role || user.role_name || 'User',
+                username: user.username || user.name,
+                email: user.email,
+                program_id: prog.id,
+                created_at: user.created_at,
+                is_default_user: true, // Flag: this is from /users endpoint with integer ID
+                default_services: user.default_services || user.services, // Include services
+                program: { id: prog.id, name: prog.name }
+              }));
+              console.log(`Sample mapped user:`, mappedUsers[0]);
+              allProgramRoles.push(...mappedUsers);
+            }
+
+            // Process custom roles
+            if (rolesResponse.ok) {
+              const rolesData = await rolesResponse.json();
+              console.log(`roles data for ${prog.id}:`, rolesData);
+              const rolesList = Array.isArray(rolesData) ? rolesData : (rolesData.roles || rolesData.data || []);
+              console.log(`Sample role from /roles endpoint:`, rolesList[0]);
+              const mappedRoles = rolesList.map((role: any) => ({
+                id: role.id,
+                role_name: role.role || role.role_name || 'Role',
+                username: role.username || role.name,
+                email: role.email,
+                program_id: prog.id,
+                created_at: role.created_at,
+                is_default_user: false, // Flag: this is from /roles endpoint with UUID
+                services: role.services, // Include services
+                program: { id: prog.id, name: prog.name }
+              }));
+              console.log(`Sample mapped role:`, mappedRoles[0]);
+              allProgramRoles.push(...mappedRoles);
+            }
+
+            return allProgramRoles;
+          } catch (error) {
+            console.error(`Error loading users/roles for program ${prog.id}:`, error);
+            return [];
+          }
+        });
+
+        const rolesArrays = await Promise.all(rolesPromises);
+        allRoles = rolesArrays.flat();
+      }
+
+      console.log('All roles loaded:', allRoles);
+
+      // Apply program filter
+      setAllRoles(allRoles);
+      setRoles(allRoles);
+    } catch (error: any) {
+      console.error('Error loading roles:', error);
+      if (error.message === 'Not authenticated') {
+        window.location.href = '/';
+      }
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
+
+  const loadHierarchyMappings = async () => {
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch(`${API_URL}/hierarchy-mappings`, {
+        headers,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch hierarchy mappings');
+      }
+
+      const data = await response.json();
+      const mappings = Array.isArray(data) ? data : (data.mappings || data.data || []);
+      setHierarchyMappings(mappings);
+    } catch (error) {
+      console.error('Error loading hierarchy mappings:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load hierarchy mappings",
+        variant: "error"
+      });
+    }
+  };
+
+  const handleDeleteMapping = async (mappingId: string) => {
+    if (!confirm('Are you sure you want to remove this hierarchy mapping?')) {
+      return;
+    }
+
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch(`${API_URL}/hierarchy-mappings/${mappingId}`, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete mapping');
+      }
+
+      toast({
+        title: "Success",
+        description: "Hierarchy mapping removed successfully",
+        variant: "success"
+      });
+
+      loadHierarchyMappings();
+    } catch (error: any) {
+      console.error('Error deleting mapping:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete mapping",
+        variant: "error"
+      });
+    }
+  };
+
+  const generatePassword = () => {
+    const length = 12;
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let password = "";
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    return password;
+  };
+
+  const handleAutoGeneratePassword = (isEdit = false) => {
+    const newPassword = generatePassword();
+    if (isEdit) {
+      setEditPassword(newPassword);
+    } else {
+      setPassword(newPassword);
+    }
+  };
+
+  const fetchAvailableServices = async (roleName: string) => {
+    try {
+      const headers = getAuthHeaders();
+      const response = await fetch(`${API_URL}/roles/${roleName}/available-services`, {
+        headers
+      });
+      
+      const data = await response.json();
+      console.log('🔍 Available services response:', data);
+      
+      if (data.success) {
+        setAvailableServicesForRole(data.available_services || []);
+        setIsSystemRole(data.is_system_role || false);
+        setAllowCustomServices(data.allow_custom_services || false);
+        
+        console.log('✅ Available services set:', data.available_services?.length || 0, 'services');
+        console.log('✅ Is system role:', data.is_system_role);
+        console.log('✅ Allow custom services:', data.allow_custom_services);
+      } else {
+        // If role not found in definitions, allow all services (backward compatibility)
+        console.log('⚠️ Role definition not found, allowing all services');
+        setAvailableServicesForRole([]);
+        setIsSystemRole(false);
+        setAllowCustomServices(true);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching available services:', error);
+      // On error, allow all services (backward compatibility)
+      setAvailableServicesForRole([]);
+      setIsSystemRole(false);
+      setAllowCustomServices(true);
+    }
+  };
+
+  const handleEdit = async (role: Role) => {
+    console.log('=== handleEdit called ===');
+    console.log('Role object:', role);
+    console.log('Role ID:', role.id, 'Type:', typeof role.id);
+    console.log('Program ID:', role.program_id, 'Type:', typeof role.program_id);
+    console.log('Is default user:', role.is_default_user);
+    console.log('Role name:', role.role_name);
+    
+    setEditingRole(role);
+    setEditUsername(role.username);
+    setEditEmail(role.email);
+    setEditPassword(""); // Don't show actual password
+    setShowPassword(false);
+    
+    // Set services from the role data directly (no need to fetch)
+    // For default users: use default_services field
+    // For custom roles: use services field
+    let servicesField = role.is_default_user ? (role as any).default_services : (role as any).services;
+    
+    // Fallback: try both fields if the expected one is not available
+    if (!servicesField) {
+      servicesField = (role as any).default_services || (role as any).services;
+    }
+    
+    console.log('📋 Services field raw:', servicesField);
+    console.log('📋 Services type:', typeof servicesField);
+    console.log('📋 Services is array:', Array.isArray(servicesField));
+    
+    // Parse services safely (handles array, JSON string, or null)
+    const finalServices = parseServices(servicesField);
+    
+    console.log('📋 Final services count:', finalServices.length);
+    console.log('📋 First 10 services:', finalServices.slice(0, 10));
+    console.log('📋 All services:', finalServices);
+    
+    setEditSelectedServices(finalServices);
+    
+    // Fetch available services for this role to filter the checkboxes
+    await fetchAvailableServices(role.role_name);
+    
+    // Log after fetch to verify services are still set
+    console.log('📋 Edit selected services state after fetch:', finalServices);
+    
+    setShowEditModal(true);
+  };
+
+  const handleUpdateRole = async () => {
+    if (!editingRole) return;
+
+    console.log('=== handleUpdateRole called ===');
+    console.log('Editing role:', editingRole);
+    console.log('Editing role ID:', editingRole.id, 'Type:', typeof editingRole.id);
+    console.log('Program ID:', editingRole.program_id, 'Type:', typeof editingRole.program_id);
+    console.log('Is default user:', editingRole.is_default_user);
+    console.log('💾 Services being sent:', editSelectedServices);
+    console.log('💾 Services count:', editSelectedServices.length);
+
+    try {
+      setLoading(true);
+      const headers = getAuthHeaders();
+
+      // For default users, update services separately using dedicated endpoint
+      if (editingRole.is_default_user && editSelectedServices.length > 0) {
+        const servicesUrl = `${API_URL}/programs/${editingRole.program_id}/users/${editingRole.id}/services`;
+        console.log('Updating services at URL:', servicesUrl);
+        console.log('Request body:', JSON.stringify({ services: editSelectedServices }, null, 2));
+        
+        const servicesResponse = await fetch(servicesUrl, {
+          method: 'PUT',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ services: editSelectedServices }),
+        });
+
+        if (!servicesResponse.ok) {
+          const error = await servicesResponse.json().catch(() => ({ message: 'Failed to update services' }));
+          console.error('❌ Service update error:', error);
+          throw new Error(error.message || 'Failed to update services');
+        }
+        
+        const successData = await servicesResponse.json();
+        console.log('✅ Services updated successfully:', successData);
+      }
+
+      // Update basic user info (username, email, password)
+      const updateData: any = {
+        username: editUsername,
+        email: editEmail,
+      };
+
+      // Only include password if it's been changed
+      if (editPassword) {
+        updateData.password = editPassword;
+      }
+      
+      // For custom roles, include services in the main update
+      if (!editingRole.is_default_user && editSelectedServices.length > 0) {
+        updateData.service_ids = editSelectedServices;
+      }
+
+      // Determine the correct endpoint based on active tab and user type
+      let url: string;
+      if (activeTab === 'system-roles') {
+        url = `${API_URL}/system-roles/${editingRole.id}`;
+      } else if (editingRole.is_default_user) {
+        // Default program users: use /users endpoint
+        url = `${API_URL}/programs/${editingRole.program_id}/users/${editingRole.id}`;
+      } else {
+        // Custom roles: use /roles endpoint
+        url = `${API_URL}/programs/${editingRole.program_id}/roles/${editingRole.id}`;
+      }
+      console.log('Update URL:', url);
+
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to update role' }));
+        
+        // Handle validation errors with specific field messages
+        if (error.errors) {
+          const errorMessages = Object.entries(error.errors)
+            .map(([field, messages]: [string, any]) => {
+              const messageArray = Array.isArray(messages) ? messages : [messages];
+              return `${field}: ${messageArray.join(', ')}`;
+            })
+            .join('\n');
+          
+          toast({
+            title: "Validation Error",
+            description: errorMessages,
+            variant: "error"
+          });
+          setLoading(false);
+          return;
+        }
+        
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      toast({
+        title: "Success",
+        description: "Role updated successfully!",
+        variant: "success"
+      });
+      setShowEditModal(false);
+      setEditingRole(null);
+      loadRoles();
+    } catch (error: any) {
+      console.error('Error updating role:', error);
+      toast({
+        title: "Error",
+        description: `Failed to update role: ${error.message}`,
+        variant: "error"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (role: Role) => {
+    setRoleToDelete(role);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!roleToDelete) return;
+
+    try {
+      setLoading(true);
+      const headers = getAuthHeaders();
+
+      // Determine the correct endpoint based on active tab and user type
+      let url: string;
+      if (activeTab === 'system-roles') {
+        url = `${API_URL}/system-roles/${roleToDelete.id}`;
+      } else if (roleToDelete.is_default_user) {
+        // Default program users: use /users endpoint
+        url = `${API_URL}/programs/${roleToDelete.program_id}/users/${roleToDelete.id}`;
+      } else {
+        // Custom roles: use /roles endpoint
+        url = `${API_URL}/programs/${roleToDelete.program_id}/roles/${roleToDelete.id}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to delete role' }));
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      toast({
+        title: "Success",
+        description: "Role deleted successfully!",
+        variant: "success"
+      });
+      setDeleteModalOpen(false);
+      setRoleToDelete(null);
+      loadRoles();
+    } catch (error: any) {
+      console.error('Error deleting role:', error);
+      toast({
+        title: "Error",
+        description: `Failed to delete role: ${error.message}`,
+        variant: "error"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    if (selectedRoleIds.length === 0) {
+      toast({
+        title: "No Selection",
+        description: "Please select roles to delete",
+        variant: "warning"
+      });
+      return;
+    }
+    setBulkDeleteModal(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedRoleIds.length === 0) return;
+    
+    try {
+      setLoading(true);
+      const headers = getAuthHeaders();
+
+      // Delete each role individually
+      const deletePromises = selectedRoleIds.map(async (roleId) => {
+        const role = roles.find(r => r.id === roleId);
+        if (!role) return;
+        
+        // Determine the correct endpoint based on active tab
+        let url: string;
+        if (activeTab === 'system-roles') {
+          url = `${API_URL}/system-roles/${roleId}`;
+        } else {
+          // Program users tab always uses /roles endpoint
+          url = `${API_URL}/programs/${role.program_id}/roles/${roleId}`;
+        }
+
+        const response = await fetch(url, {
+          method: 'DELETE',
+          headers,
+          credentials: 'include',
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to delete role ${role.role_name}`);
+        }
+      });
+
+      await Promise.all(deletePromises);
+      
+      toast({
+        title: "Success",
+        description: `${selectedRoleIds.length} role(s) deleted successfully!`,
+        variant: "success"
+      });
+      
+      setSelectedRoleIds([]);
+      setBulkDeleteModal(false);
+      loadRoles();
+    } catch (error: any) {
+      console.error('Error deleting roles:', error);
+      toast({
+        title: "Error",
+        description: `Failed to delete roles: ${error.message}`,
+        variant: "error"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectAll = () => {
+    // Use displayRoles based on active tab
+    const currentDisplayRoles = activeTab === 'program-users' ? programUserRoles : systemRoles;
+    if (selectedRoleIds.length === currentDisplayRoles.length && currentDisplayRoles.length > 0) {
+      setSelectedRoleIds([]);
+    } else {
+      setSelectedRoleIds(currentDisplayRoles.map(r => r.id));
+    }
+  };
+
+  const handleSelectRole = (roleId: string) => {
+    setSelectedRoleIds(prev => 
+      prev.includes(roleId) 
+        ? prev.filter(id => id !== roleId)
+        : [...prev, roleId]
+    );
+  };
+
+  const handleEditRole = (role: Role) => {
+    setEditingRole(role);
+    setEditUsername(role.username);
+    setEditEmail(role.email);
+    setEditPassword(""); // Don't show actual password
+    setShowPassword(false);
+    setShowEditModal(true);
+  };
+
+  const handleDeleteRole = (role: Role) => {
+    setRoleToDelete(role);
+    setDeleteModalOpen(true);
+  };
+
+  const handleServiceToggle = (serviceId: string) => {
+    setSelectedServices(prev =>
+      prev.includes(serviceId)
+        ? prev.filter(id => id !== serviceId)
+        : [...prev, serviceId]
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!roleName || !username || !email || !password) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill all required fields",
+        variant: "warning"
+      });
+      return;
+    }
+
+    if (selectedServices.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please select at least one service",
+        variant: "warning"
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const headers = getAuthHeaders();
+      
+      // Determine endpoint and request data based on tab
+      let endpoint;
+      let requestBody;
+      
+      if (activeTab === 'system-roles') {
+        // System roles: no program association, use /system-roles endpoint
+        endpoint = `${API_URL}/system-roles`;
+        requestBody = {
+          role_name: roleName,
+          username: username,
+          email: email,
+          password: password,
+          service_ids: selectedServices,
+          description: `System-wide role with access to all programs`
+        };
+      } else {
+        // Program users: tied to specific program
+        const progId = createFormProgramId || getProgramId();
+        endpoint = `${API_URL}/programs/${progId}/roles`;
+        requestBody = {
+          role_name: roleName,
+          username: username,
+          email: email,
+          password: password,
+          service_ids: selectedServices,
+          event_ids: [],
+        };
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to create role' }));
+        
+        // Handle validation errors with specific field messages
+        if (error.errors) {
+          const errorMessages = Object.entries(error.errors)
+            .map(([field, messages]: [string, any]) => {
+              const messageArray = Array.isArray(messages) ? messages : [messages];
+              return `${field}: ${messageArray.join(', ')}`;
+            })
+            .join('\n');
+          
+          toast({
+            title: "Validation Error",
+            description: errorMessages,
+            variant: "error"
+          });
+          setLoading(false);
+          return;
+        }
+        
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      toast({
+        title: "Success!",
+        description: `Role created successfully! Login credentials:\nEmail: ${email}\nPassword: ${password}`,
+        variant: "success"
+      });
+      
+      // Reset form
+      setRoleName("");
+      setUsername("");
+      setEmail("");
+      setPassword("");
+      setSelectedServices([]);
+      setCreateFormProgramId("");
+      setShowForm(false);
+      
+      // Reload roles list
+      loadRoles();
+      
+    } catch (error: any) {
+      console.error('Error creating role:', error);
+      toast({
+        title: "Error",
+        description: `Failed to create role: ${error.message}`,
+        variant: "error"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Group services by category - memoized to prevent re-renders
+  const servicesByCategory = useMemo(() => {
+    return AVAILABLE_SERVICES.reduce((acc, service) => {
+      if (!acc[service.category]) {
+        acc[service.category] = [];
+      }
+      acc[service.category].push(service);
+      return acc;
+    }, {} as Record<string, typeof AVAILABLE_SERVICES>);
+  }, []); // Empty dependency array since AVAILABLE_SERVICES is constant
+
+  return (
+    <ProgramAdminLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Roles & Services</h1>
+            <p className="text-gray-600 mt-1">
+              {searchParams.get('programName') 
+                ? `Manage roles for ${decodeURIComponent(searchParams.get('programName')!)}`
+                : 'Create and manage custom roles with specific permissions'
+              }
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* View Hierarchy Tree Button - Only show when program filter is set */}
+            {!showForm && selectedProgramFilter !== "all" && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  const selectedProgram = programs.find(p => p.id === selectedProgramFilter);
+                  if (selectedProgram) {
+                    setTreeViewProgramId(selectedProgram.id);
+                    setTreeViewProgramName(selectedProgram.name);
+                    setHierarchyTreeModal(true);
+                  }
+                }}
+                className="flex items-center gap-2"
+              >
+                <Network className="w-4 h-4" />
+                View Hierarchy
+              </Button>
+            )}
+            {!showForm && (
+              <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Create New Role
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={(value) => {
+          setActiveTab(value as "program-users" | "system-roles");
+          setShowForm(false);
+          setCurrentPage(1); // Reset pagination when switching tabs
+        }} className="w-full">
+          <TabsList className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200 flex-wrap gap-1 mb-6">
+            <TabsTrigger 
+              value="program-users" 
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-100 hover:text-gray-900"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Program Users
+            </TabsTrigger>
+            {isMounted && authUser?.role === 'super-admin' && (
+              <TabsTrigger 
+                value="system-roles" 
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-qsights-cyan data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                System Roles
+              </TabsTrigger>
+            )}
+            <TabsTrigger 
+              value="hierarchy-mapping" 
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-green-600 data-[state=active]:shadow-lg data-[state=active]:shadow-green-100 hover:text-gray-900"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              Hierarchy Mapping
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Program Users Tab Content */}
+          <TabsContent value="program-users" className="space-y-6">
+            {/* Info Banner */}
+            {!showForm && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-blue-900 mb-1">Roles Management</h3>
+                    <p className="text-sm text-blue-800">
+                      Create custom roles with specific permissions for your organization. Assign program-specific access or create system-wide roles for administrators.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+        {/* Program Filter - Only show for Program Users tab */}
+        {!showForm && activeTab === 'program-users' && (
+          <div className="flex items-center gap-4 bg-white p-4 rounded-lg border">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <Label className="text-sm font-medium">Filter by Program:</Label>
+            </div>
+            <select 
+              value={selectedProgramFilter} 
+              onChange={(e) => setSelectedProgramFilter(e.target.value)}
+              className="flex h-10 w-[300px] items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <option value="all">All Programs</option>
+              {programs.map((prog) => (
+                <option key={prog.id} value={prog.id}>
+                  {prog.name}
+                </option>
+              ))}
+            </select>
+            {selectedProgramFilter !== "all" && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setSelectedProgramFilter("all")}
+              >
+                Clear Filter
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Roles List Table */}
+        {!showForm && (
+          <Card>
+            <CardHeader className="border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CardTitle>Existing Roles</CardTitle>
+                  {selectedRoleIds.length > 0 && (
+                    <button
+                      onClick={handleBulkDeleteClick}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete ({selectedRoleIds.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingRoles ? (
+                <div className="text-center py-8 text-gray-500">Loading roles...</div>
+              ) : displayRoles.length === 0 ? (
+                <div className="text-center py-12">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No {activeTab === 'program-users' ? 'Program Users' : 'System Roles'} Yet</h3>
+                  <p className="text-gray-600 mb-4">
+                    {activeTab === 'program-users' 
+                      ? 'No program users found. These are predefined roles like Program Admin, Manager, Moderator, and Evaluation Admin.'
+                      : 'Click "Create New Role" above to create your first custom system role'
+                    }
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
+                          <input
+                            type="checkbox"
+                            checked={displayRoles.length > 0 && selectedRoleIds.length === displayRoles.length}
+                            onChange={handleSelectAll}
+                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                        </TableHead>
+                        <TableHead>Role Title</TableHead>
+                        <TableHead>Username</TableHead>
+                        <TableHead>Programs</TableHead>
+                        <TableHead>Created On</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedRoles.map((role) => (
+                        <TableRow key={role.id}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={selectedRoleIds.includes(role.id)}
+                              onChange={() => handleSelectRole(role.id)}
+                              className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              {role.role_name}
+                              {/* Show badge for default/system roles */}
+                              {['program-admin', 'program-manager', 'program-moderator', 'Group Head'].includes(role.role_name) && (
+                                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{role.username}</TableCell>
+                          <TableCell>
+                            {role.program?.name || 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(role.created_at).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleEdit(role)}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(role)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              
+              {/* Pagination */}
+              {displayRoles.length > 0 && (
+                <div className="px-6 py-4 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm text-gray-600">
+                        Showing {displayRoles.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                        {Math.min(currentPage * itemsPerPage, displayRoles.length)} of{" "}
+                        {displayRoles.length} {activeTab === 'program-users' ? 'program users' : 'system roles'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Per page:</span>
+                        <select
+                          value={itemsPerPage}
+                          onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        title="First page"
+                      >
+                        «
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                      </button>
+                      {(() => {
+                        const pages: (number | string)[] = [];
+                        const maxVisible = 5;
+                        if (totalPages <= maxVisible + 2) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          let start = Math.max(2, currentPage - Math.floor(maxVisible / 2));
+                          let end = Math.min(totalPages - 1, start + maxVisible - 1);
+                          if (end === totalPages - 1) start = Math.max(2, end - maxVisible + 1);
+                          if (start > 2) pages.push('...');
+                          for (let i = start; i <= end; i++) pages.push(i);
+                          if (end < totalPages - 1) pages.push('...');
+                          if (totalPages > 1) pages.push(totalPages);
+                        }
+                        return pages.map((page, idx) => (
+                          page === '...' ? (
+                            <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                          ) : (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page as number)}
+                              className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                currentPage === page
+                                  ? "bg-qsights-dark text-white shadow-sm"
+                                  : "text-gray-700 hover:bg-gray-100 border border-gray-300"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          )
+                        ));
+                      })()}
+                      <button
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        title="Last page"
+                      >
+                        »
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+          </TabsContent>
+
+          {/* System Roles Tab Content */}
+          {isMounted && authUser?.role === 'super-admin' && (
+            <TabsContent value="system-roles" className="space-y-6">
+              {/* Info Banner */}
+              {!showForm && (
+                <div className="bg-qsights-light border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <svg className="w-5 h-5 text-qsights-cyan" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-purple-900 mb-1">System Roles Management</h3>
+                      <p className="text-sm text-purple-800">
+                        Create system-wide roles for administrators with access to all programs and system settings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* System Roles List */}
+              {!showForm && (
+                <Card>
+                  <CardHeader className="border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <CardTitle>System Roles</CardTitle>
+                      <div className="text-sm text-gray-500">
+                        {systemRoles.length} {systemRoles.length === 1 ? "role" : "roles"}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12">
+                              <Checkbox
+                                checked={systemRoles.length > 0 && selectedRoleIds.length === systemRoles.length}
+                                onCheckedChange={handleSelectAll}
+                              />
+                            </TableHead>
+                            <TableHead>Role Name</TableHead>
+                            <TableHead>Username</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Program</TableHead>
+                            <TableHead>Created</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {loadingRoles ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="text-center py-8">
+                                <div className="flex items-center justify-center gap-2">
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                  <span>Loading roles...</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : systemRoles.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                                No system roles found. Create one to get started.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            systemRoles.map((role) => (
+                              <TableRow key={role.id}>
+                                <TableCell>
+                                  <Checkbox
+                                    checked={selectedRoleIds.includes(role.id)}
+                                    onCheckedChange={() => handleSelectRole(role.id)}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    {role.role_name}
+                                    {/* Show badge for default/system roles */}
+                                    {['super-admin', 'admin'].includes(role.role_name) && (
+                                      <span className="px-2 py-0.5 text-xs font-medium bg-cyan-50 text-purple-700 rounded">
+                                        System
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>{role.username}</TableCell>
+                                <TableCell>{role.email}</TableCell>
+                                <TableCell>
+                                  {role.program ? (
+                                    <span className="text-sm text-gray-600">{role.program.name}</span>
+                                  ) : (
+                                    <span className="text-sm text-gray-400">All Programs</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-500">
+                                  {new Date(role.created_at).toLocaleDateString()}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleEditRole(role)}
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDeleteRole(role)}
+                                    >
+                                      <Trash2 className="w-4 h-4 text-red-600" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          )}
+
+          {/* Hierarchy Mapping Tab Content */}
+          <TabsContent value="hierarchy-mapping" className="space-y-6">
+            {/* Info Banner */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-green-900 mb-1">Centralized Hierarchy Management</h3>
+                  <p className="text-sm text-green-700">
+                    Define reporting structures and organizational hierarchy. Map users to managers for streamlined team management and reporting.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <h2 className="text-2xl font-bold">Hierarchy Mappings</h2>
+                <p className="text-gray-600">Manage reporting relationships and organizational structure</p>
+              </div>
+              <Button 
+                onClick={() => {
+                  setShowMappingModal(true);
+                  setMappingStep(1);
+                  setMappingProgramId("");
+                  setMappingParentRoleId("");
+                  setMappingParentUserId("");
+                  setMappingChildRoleId("");
+                  setMappingChildUserIds([]);
+                }}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4" />
+                Create Mapping
+              </Button>
+            </div>
+
+            {/* Mappings List */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Active Hierarchies</CardTitle>
+                <p className="text-sm text-gray-600 mt-1">View and manage existing reporting structures</p>
+              </CardHeader>
+              <CardContent>
+                {hierarchyMappings.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Network className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Hierarchies Defined</h3>
+                    <p className="text-gray-600 mb-4">
+                      Create your first hierarchy mapping to establish reporting relationships
+                    </p>
+                    <Button 
+                      onClick={() => {
+                        setShowMappingModal(true);
+                        setMappingStep(1);
+                      }}
+                      variant="outline"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create First Mapping
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Program</TableHead>
+                          <TableHead>Manager (Parent)</TableHead>
+                          <TableHead>Parent Role</TableHead>
+                          <TableHead>Team Member (Child)</TableHead>
+                          <TableHead>Child Role</TableHead>
+                          <TableHead>Mapped On</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {hierarchyMappings.map((mapping) => (
+                          <TableRow key={mapping.id}>
+                            <TableCell className="font-medium">{mapping.program_name}</TableCell>
+                            <TableCell>{mapping.parent_user_name}</TableCell>
+                            <TableCell><span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">{mapping.parent_role_name}</span></TableCell>
+                            <TableCell>{mapping.child_user_name}</TableCell>
+                            <TableCell><span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded">{mapping.child_role_name}</span></TableCell>
+                            <TableCell className="text-sm text-gray-500">
+                              {new Date(mapping.mapped_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteMapping(mapping.id)}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Create Form - Shared between both tabs */}
+        {showForm && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New Role</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Basic Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="roleName">Role Name *</Label>
+                    <Input
+                      id="roleName"
+                      value={roleName}
+                      onChange={(e) => setRoleName(e.target.value)}
+                      placeholder="e.g., Program Manager"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="username">Username *</Label>
+                    <Input
+                      id="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="e.g., program.manager"
+                      required
+                    />
+                  </div>
+                  {activeTab === 'program-users' && (
+                    <div>
+                      <Label htmlFor="program">Program (Optional)</Label>
+                      <select
+                        id="program"
+                        value={createFormProgramId}
+                        onChange={(e) => setCreateFormProgramId(e.target.value)}
+                        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      >
+                        <option value="">All Programs</option>
+                        {programs.map((prog) => (
+                          <option key={prog.id} value={prog.id}>
+                            {prog.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Select a specific program or leave blank for all programs
+                      </p>
+                    </div>
+                  )}
+                  {activeTab === 'system-roles' && (
+                    <div>
+                      <Label>Access Level</Label>
+                      <div className="flex h-10 items-center px-3 py-2 rounded-md border border-gray-200 bg-gray-50">
+                        <span className="text-sm font-medium text-purple-700">System-wide (All Programs)</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        System roles have access to all programs and administrative features
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password">Password *</Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Minimum 8 characters"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleAutoGeneratePassword(false)}
+                        className="flex items-center gap-1"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Generate
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Services Selection */}
+                <div>
+                  <Label className="text-lg font-semibold">
+                    Select Services ({selectedServices.length} selected)
+                  </Label>
+                  <div className="mt-4 space-y-6">
+                    {Object.entries(servicesByCategory).map(([category, services]) => (
+                      <div key={category} className="border rounded-lg p-4">
+                        <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <CategoryIcon category={category} className="w-5 h-5 text-qsights-primary flex-shrink-0" />
+                          {category}
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {services.map((service) => (
+                            <div key={service.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={service.id}
+                                checked={selectedServices.includes(service.id)}
+                                onCheckedChange={() => handleServiceToggle(service.id)}
+                              />
+                              <Label
+                                htmlFor={service.id}
+                                className="text-sm font-normal cursor-pointer"
+                              >
+                                {service.name}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowForm(false)}
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={loading}>
+                    {loading ? "Creating..." : "Create Role"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Edit Role Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Role: {editingRole?.role_name}</DialogTitle>
+              <DialogDescription>
+                Update user details and manage service permissions for this role.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="edit-username">Username</Label>
+                <Input
+                  id="edit-username"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  placeholder="Enter username"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-email">Communication Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-password">Password</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="edit-password"
+                      type={showPassword ? "text" : "password"}
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="Enter new password (leave blank to keep current)"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleAutoGeneratePassword(true)}
+                    className="flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Generate
+                  </Button>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  ⚠️ Passwords cannot be retrieved for security reasons. Leave blank to keep the current password, or generate a new one.
+                </p>
+              </div>
+              
+              {/* Services Selection */}
+              <div className="border-t pt-4">
+                <Label className="text-base font-semibold mb-3 block">
+                  Selected Services ({editSelectedServices.length} selected)
+                  {(() => {
+                    // Debug logging
+                    console.log('🔍 SERVICE INDICATOR DEBUG:', {
+                      is_default_user: editingRole?.is_default_user,
+                      allowCustomServices,
+                      availableServicesCount: availableServicesForRole.length,
+                      activeTab,
+                      roleName: editingRole?.role_name
+                    });
+                    return null;
+                  })()}
+                  {/* Default Program Users (is_default_user === true) with restricted services - show restriction warning */}
+                  {editingRole?.is_default_user === true && !allowCustomServices && availableServicesForRole.length > 0 && (
+                    <span className="text-xs font-normal text-yellow-600 ml-2">
+                      ⚠️ Default Program User - only {availableServicesForRole.length} predefined services can be selected
+                    </span>
+                  )}
+                  {/* System Users (super-admin, admin) with custom services allowed */}
+                  {allowCustomServices && activeTab === 'system-roles' && (
+                    <span className="text-xs font-normal text-green-600 ml-2">
+                      ✓ Custom services allowed
+                    </span>
+                  )}
+                  {/* Custom Program Roles (is_default_user === false) - allow all services */}
+                  {editingRole?.is_default_user === false && (
+                    <span className="text-xs font-normal text-green-600 ml-2">
+                      ✓ Custom services allowed
+                    </span>
+                  )}
+                </Label>
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {Object.entries(servicesByCategory).map(([category, services]) => {
+                    // Default Program Users (is_default_user === true): Only allow predefined services from role_service_definitions
+                    // Custom Program Roles (is_default_user === false): Allow any services
+                    // System Users (super-admin, admin): Allow any services (allow_custom_services = true)
+                    const isProgramUser = editingRole?.is_default_user === true;
+                    // Restrict services for Default Program Users who don't have custom services allowed
+                    const shouldRestrictServices = isProgramUser && !allowCustomServices && availableServicesForRole.length > 0;
+                    
+                    return (
+                      <div key={category} className="border rounded-lg p-3">
+                        <h3 className="font-semibold text-sm text-gray-900 mb-2 flex items-center gap-2">
+                          <CategoryIcon category={category} className="w-4 h-4 text-qsights-primary flex-shrink-0" />
+                          {category}
+                        </h3>
+                        <div className="grid grid-cols-1 gap-2">
+                          {services.map((service) => {
+                            const isAvailable = !shouldRestrictServices || 
+                                              availableServicesForRole.length === 0 || 
+                                              availableServicesForRole.includes(service.id);
+                            const isChecked = editSelectedServices.includes(service.id);
+                            
+                            // Debug logging for first 3 services per category
+                            if (services.indexOf(service) < 3) {
+                              console.log(`🔍 [${category}] Service ${service.id}:`, {
+                                isProgramUser,
+                                shouldRestrictServices,
+                                isChecked,
+                                isAvailable,
+                                isInPredefined: availableServicesForRole.includes(service.id),
+                                predefinedCount: availableServicesForRole.length
+                              });
+                            }
+                            
+                            return (
+                              <div key={service.id} className={`flex items-center space-x-2 ${
+                                !isAvailable ? 'opacity-50' : ''
+                              }`}>
+                                <Checkbox
+                                  id={`edit-${service.id}`}
+                                  checked={isChecked}
+                                  disabled={!isAvailable}
+                                  onCheckedChange={() => {
+                                    if (isAvailable) {
+                                      setEditSelectedServices(prev =>
+                                        prev.includes(service.id)
+                                          ? prev.filter(id => id !== service.id)
+                                          : [...prev, service.id]
+                                      );
+                                    }
+                                  }}
+                                />
+                                <Label
+                                  htmlFor={`edit-${service.id}`}
+                                  className={`text-sm font-normal ${
+                                    isAvailable ? 'cursor-pointer' : 'cursor-not-allowed text-gray-400'
+                                  }`}
+                                  title={!isAvailable ? `Not available for ${editingRole?.role_name} role` : ''}
+                                >
+                                  {service.name}
+                                  {!isAvailable && isChecked && (
+                                    <span className="ml-2 text-xs text-orange-600">(will be removed)</span>
+                                  )}
+                                </Label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowEditModal(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateRole} disabled={loading}>
+                {loading ? "Updating..." : "Update Role"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Modal */}
+        <DeleteConfirmationModal
+          isOpen={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setRoleToDelete(null);
+          }}
+          onConfirm={confirmDelete}
+          title="Delete Role"
+          message={`Are you sure you want to delete the role "${roleToDelete?.role_name}"? This action cannot be undone.`}
+        />
+
+        {/* Bulk Delete Confirmation Modal */}
+        <DeleteConfirmationModal
+          isOpen={bulkDeleteModal}
+          onClose={() => setBulkDeleteModal(false)}
+          onConfirm={confirmBulkDelete}
+          title="Delete Multiple Roles"
+          message={`Are you sure you want to delete ${selectedRoleIds.length} role(s)? This action cannot be undone.`}
+        />
+
+        {/* Manager Assignment Modal */}
+        {selectedUser && (
+          <ManagerAssignmentModal
+            isOpen={managerAssignmentModal}
+            onClose={() => {
+              setManagerAssignmentModal(false);
+              setSelectedUser(null);
+            }}
+            userId={selectedUser.id}
+            userName={selectedUser.name}
+            programId={selectedUser.programId}
+            programName={selectedUser.programName}
+            onSuccess={() => {
+              loadRoles();
+              toast({
+                title: "Success!",
+                description: "Manager assignment updated successfully",
+                variant: "success"
+              });
+            }}
+          />
+        )}
+
+        {/* Hierarchy Tree Modal */}
+        <HierarchyTreeModal
+          isOpen={hierarchyTreeModal}
+          onClose={() => setHierarchyTreeModal(false)}
+          programId={treeViewProgramId}
+          programName={treeViewProgramName}
+        />
+
+        {/* Hierarchy Mapping Modal */}
+        <HierarchyMappingModal
+          isOpen={showMappingModal}
+          onClose={() => setShowMappingModal(false)}
+          programs={programs}
+          allRoles={allRoles}
+          onSuccess={() => {
+            loadHierarchyMappings();
+            toast({
+              title: "Success!",
+              description: "Hierarchy mapping created successfully",
+              variant: "success"
+            });
+          }}
+        />
+      </div>
+    </ProgramAdminLayout>
+  );
+}
+
+function RolesPageContent() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="text-lg">Loading...</div></div>}>
+      <RolesPage />
+    </Suspense>
+  );
+}
+
+export default RolesPageContent;
