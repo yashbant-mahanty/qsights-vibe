@@ -861,6 +861,21 @@ Route::middleware(['auth:sanctum'])->prefix('evaluation')->group(function () {
         Route::get('/analytics/trends', [App\Http\Controllers\Api\EvaluationAnalyticsController::class, 'trends']);
     });
     
+    // Evaluation Notification Configuration (Admin + Evaluation Admin)
+    Route::middleware(['role:super-admin,admin,program-admin,evaluation-admin'])->prefix('notifications')->group(function () {
+        Route::get('/config', [App\Http\Controllers\Api\EvaluationNotificationConfigController::class, 'getConfig']);
+        Route::put('/config', [App\Http\Controllers\Api\EvaluationNotificationConfigController::class, 'updateConfig']);
+        Route::get('/logs', [App\Http\Controllers\Api\EvaluationNotificationConfigController::class, 'getNotificationLogs']);
+        Route::get('/stats', [App\Http\Controllers\Api\EvaluationNotificationConfigController::class, 'getStats']);
+    });
+    
+    // Bell Notifications (All authenticated users)
+    Route::prefix('bell-notifications')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\EvaluationNotificationConfigController::class, 'getBellNotifications']);
+        Route::patch('/{id}/read', [App\Http\Controllers\Api\EvaluationNotificationConfigController::class, 'markNotificationAsRead']);
+        Route::post('/mark-all-read', [App\Http\Controllers\Api\EvaluationNotificationConfigController::class, 'markAllAsRead']);
+    });
+    
     // Bulk Import (Evaluation Admin and Super Admin only)
     Route::middleware(['role:super-admin,evaluation-admin'])->group(function () {
         Route::post('/bulk-import', [App\Http\Controllers\Api\EvaluationBulkImportController::class, 'import']);

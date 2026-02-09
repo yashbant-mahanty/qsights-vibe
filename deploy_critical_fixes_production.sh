@@ -1,5 +1,56 @@
 #!/bin/bash
 
+###############################################################################
+# ⚠️  DEPRECATION WARNING ⚠️
+#
+# This script uses the OLD deployment workflow.
+#
+# NEW MANDATORY WORKFLOW (as of Feb 7, 2026):
+#   1. Deploy to Pre-Prod first: ./deploy_backend_preprod.sh
+#   2. Test on Pre-Prod for 24+ hours
+#   3. Then deploy to Production: ./deploy_backend_prod.sh
+#
+# This script is kept for reference only.
+# For new deployments, use the new workflow scripts.
+#
+# Documentation:
+#   - DEPLOYMENT_CHECKLIST.md
+#   - DEPLOYMENT_WORKFLOW_GUIDE.md
+#   - DEPLOYMENT_QUICK_REFERENCE.md
+###############################################################################
+
+echo ""
+echo "═══════════════════════════════════════════════════════════"
+echo "⚠️  DEPRECATION WARNING"
+echo "═══════════════════════════════════════════════════════════"
+echo ""
+echo "This script uses the OLD deployment workflow."
+echo ""
+echo "NEW MANDATORY WORKFLOW (as of Feb 7, 2026):"
+echo "  1. Deploy to Pre-Prod: ./deploy_backend_preprod.sh or ./deploy_frontend_preprod.sh"
+echo "  2. Test for 24+ hours"
+echo "  3. Deploy to Production: ./deploy_backend_prod.sh or ./deploy_frontend_prod.sh"
+echo ""
+echo "Read: DEPLOYMENT_QUICK_REFERENCE.md for quick guide"
+echo ""
+read -p "Do you want to continue with this OLD script? (yes/no): " CONTINUE
+
+if [ "$CONTINUE" != "yes" ]; then
+    echo "Deployment cancelled. Please use new workflow scripts."
+    exit 0
+fi
+
+echo ""
+echo "Proceeding with OLD deployment script..."
+echo ""
+sleep 2
+
+###############################################################################
+# Original script continues below
+###############################################################################
+
+
+
 # Critical Fixes Production Deployment
 # Date: February 6, 2026
 # CORRECT PATHS: Frontend -> /var/www/frontend

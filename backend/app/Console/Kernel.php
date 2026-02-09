@@ -19,6 +19,18 @@ class Kernel extends ConsoleKernel
             ->everyFiveMinutes()
             ->withoutOverlapping()
             ->runInBackground();
+        
+        // Send evaluation reminders - runs every hour
+        $schedule->command('evaluations:send-reminders')
+            ->hourly()
+            ->withoutOverlapping()
+            ->runInBackground();
+        
+        // Check for missed deadlines - runs twice daily (morning and evening)
+        $schedule->command('evaluations:check-missed-deadlines')
+            ->twiceDaily(9, 18) // 9 AM and 6 PM
+            ->withoutOverlapping()
+            ->runInBackground();
     }
 
     /**

@@ -8,7 +8,7 @@ import {
   Star, TrendingUp, MessageSquare, UserCheck, Smile, List, X,
   Mail, AlertCircle, Loader2, Power, RefreshCw, Calendar, BarChart3,
   Download, Filter, Eye, FileText, ChevronUp, Award, Target, 
-  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart, FileQuestion, Upload, ClipboardList
+  ThumbsUp, ThumbsDown, Zap, TrendingDown, Activity, PieChart, FileQuestion, Upload, ClipboardList, Bell, Settings
 } from 'lucide-react';
 import { 
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -19,6 +19,7 @@ import { fetchWithAuth } from '@/lib/api';
 import { toast } from '@/components/ui/toast';
 import DeleteConfirmationModal from '@/components/delete-confirmation-modal';
 import BulkImportModal from '@/components/evaluation/BulkImportModal';
+import NotificationsTab from '@/components/evaluation/NotificationsTab';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -1924,7 +1925,7 @@ function EvaluationNewPageContent() {
     return [
       { id: 'setup' as TabType, label: 'Setup', icon: Building2, description: 'Departments, Roles, Staff & Mapping' },
       { id: 'trigger' as TabType, label: 'Trigger', icon: Play, description: 'Send evaluation forms' },
-      { id: 'history' as TabType, label: 'History', icon: History, description: 'View status & results' },
+      { id: 'history' as TabType, label: 'Notification Management', icon: Bell, description: 'History & notification settings' },
       { id: 'reports' as TabType, label: 'Reports', icon: BarChart3, description: 'View evaluation reports' },
     ];
   };
@@ -1933,13 +1934,13 @@ function EvaluationNewPageContent() {
 
   return (
     <AppLayout>
-      {!mounted ? (
+      {!mounted && (
         <div className="flex items-center justify-center min-h-screen">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      ) : null}
+      )}
       {mounted && (
-        <div className="min-h-screen">
+        <div className="min-h-screen" suppressHydrationWarning>
           {/* Header with Tabs */}
           <div className="px-6 pt-6 pb-4">
             <div className="flex items-center justify-between">
@@ -1950,16 +1951,6 @@ function EvaluationNewPageContent() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                {/* Bulk Import Button - Only for Super Admin and Evaluation Admin */}
-                {(user?.role === 'super-admin' || user?.role === 'evaluation-admin') && activeTab === 'setup' && (
-                  <button
-                    onClick={() => setBulkImportOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg font-medium text-sm"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Bulk Import - Department, Role & Staff
-                  </button>
-                )}
                 {user?.role === 'super-admin' && programs.length > 0 && (
                   <div className="flex items-center gap-2">
                     <label className="text-sm font-medium text-gray-700">Program:</label>
@@ -1998,7 +1989,8 @@ function EvaluationNewPageContent() {
                 tab.id === 'my-dashboard' ? 'data-[active=true]:bg-white data-[active=true]:text-green-600 data-[active=true]:shadow-lg data-[active=true]:shadow-green-100' :
                 tab.id === 'setup' ? 'data-[active=true]:bg-white data-[active=true]:text-blue-600 data-[active=true]:shadow-lg data-[active=true]:shadow-blue-100' :
                 tab.id === 'trigger' ? 'data-[active=true]:bg-white data-[active=true]:text-purple-600 data-[active=true]:shadow-lg data-[active=true]:shadow-purple-100' :
-                tab.id === 'history' ? 'data-[active=true]:bg-white data-[active=true]:text-amber-600 data-[active=true]:shadow-lg data-[active=true]:shadow-amber-100' :
+                tab.id === 'history' ? 'data-[active=true]:bg-white data-[active=true]:text-indigo-600 data-[active=true]:shadow-lg data-[active=true]:shadow-indigo-100' :
+                tab.id === 'notifications' ? 'data-[active=true]:bg-white data-[active=true]:text-indigo-600 data-[active=true]:shadow-lg data-[active=true]:shadow-indigo-100' :
                 'data-[active=true]:bg-white data-[active=true]:text-cyan-600 data-[active=true]:shadow-lg data-[active=true]:shadow-cyan-100';
               
               return (
@@ -3673,6 +3665,13 @@ function EvaluationNewPageContent() {
                   })()}
                 </div>
               </div>
+
+              {/* Notification Settings Section - Below History */}
+              <NotificationsTab 
+                programId={selectedProgramFilter !== 'all' ? selectedProgramFilter : programId}
+                userRole={user?.role || ''}
+                programs={programs}
+              />
             </div>
           )}
 
@@ -5875,6 +5874,8 @@ function EvaluationNewPageContent() {
         )}
         </div>
       )}
+
+
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal

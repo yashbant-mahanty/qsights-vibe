@@ -9,9 +9,17 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use App\Models\SystemSetting;
+use App\Services\EvaluationNotificationService;
 
 class EvaluationTriggerController extends Controller
 {
+    protected $notificationService;
+
+    public function __construct(EvaluationNotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Trigger evaluations for selected evaluators
      */
@@ -277,6 +285,27 @@ class EvaluationTriggerController extends Controller
                 $user, 
                 $validated['program_id']
             );
+            
+            // Send notification to admins about triggered evaluations
+            if ($triggeredCount > 0) {
+                try {
+                    // Get the first triggered evaluation details for notification
+                    $firstTriggered = DB::table('evaluation_triggered')
+                        ->where('triggered_by', $user->id)
+                        ->where('program_id', $validated['program_id'])
+                        ->latest('created_at')
+                        ->first();
+                    
+                    if ($firstTriggered) {
+                        $this->notificationService->notifyEvaluationTriggered((array) $firstTriggered);
+                    }
+                } catch (\Exception $notifError) {
+                    \Log::error('Failed to send admin notification after trigger', [
+                        'error' => $notifError->getMessage()
+                    ]);
+                    // Don't fail the request if notification fails
+                }
+            }
             
             return response()->json([
                 'success' => true,
@@ -566,6 +595,19 @@ class EvaluationTriggerController extends Controller
                     'completed_at' => $newStatus === 'completed' ? now() : null,
                     'updated_at' => now()
                 ]);
+            
+            // Send completion notification to admins if evaluation is completed
+            if ($newStatus === 'completed') {
+                try {
+                    $this->notificationService->notifyEvaluationCompleted((array) $evaluation);
+                } catch (\Exception $notifError) {
+                    \Log::error('Failed to send completion notification', [
+                        'error' => $notifError->getMessage(),
+                        'evaluation_id' => $id
+                    ]);
+                    // Don't fail the request if notification fails
+                }
+            }
             
             return response()->json([
                 'success' => true,
