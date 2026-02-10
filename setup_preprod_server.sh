@@ -27,33 +27,20 @@ echo -e "${BLUE}║       Server: $SERVER_IP                             ║${NC
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Check connectivity
-echo -e "${YELLOW}[1/10] Checking Server Connectivity...${NC}"
-if ! ping -c 1 -W 5 "$SERVER_IP" &> /dev/null; then
-    echo -e "${RED}✗ Server is not responding${NC}"
-    echo ""
-    echo -e "${YELLOW}Server appears to be down. Options:${NC}"
-    echo "  1. Run: ./check_and_start_preprod.sh (to start the EC2 instance)"
-    echo "  2. Check AWS console to verify instance status"
-    echo "  3. Verify security groups allow SSH (port 22)"
-    exit 1
-fi
-echo -e "${GREEN}✓ Server is reachable${NC}"
-echo ""
-
-# Verify SSH access
-echo -e "${YELLOW}[2/10] Verifying SSH Access...${NC}"
+# Verify SSH access (primary connectivity check)
+echo -e "${YELLOW}[1/10] Verifying SSH Access...${NC}"
 if ! ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "echo 'SSH OK'" &> /dev/null; then
     echo -e "${RED}✗ Cannot connect via SSH${NC}"
     echo "  • Verify PEM key permissions: chmod 400 $PEM_KEY"
     echo "  • Check security group allows SSH from your IP"
+    echo "  • If instance is stopped, run: ./check_and_start_preprod.sh"
     exit 1
 fi
 echo -e "${GREEN}✓ SSH access verified${NC}"
 echo ""
 
 # Check current setup
-echo -e "${YELLOW}[3/10] Checking Current Server Setup...${NC}"
+echo -e "${YELLOW}[2/10] Checking Current Server Setup...${NC}"
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     echo 'Checking directories...'
     ls -la /var/www/ 2>/dev/null || echo 'No /var/www directory'
