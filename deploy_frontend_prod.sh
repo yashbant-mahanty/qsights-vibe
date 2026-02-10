@@ -23,12 +23,50 @@ SERVER_IP="13.126.210.220"
 SERVER_USER="ubuntu"
 FRONTEND_PATH="/var/www/frontend"
 LOCAL_FRONTEND_PATH="$(pwd)/frontend"
+PREPROD_SERVER_IP="3.110.94.207"
+PREPROD_STATE_FILE="/home/ubuntu/deployments/preprod/last_deployed_commit"
+APPROVAL_FILE="release/PROD_APPROVAL.txt"
 
 echo -e "${RED}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${RED}║           ⚠️  PRODUCTION DEPLOYMENT WARNING ⚠️               ║${NC}"
 echo -e "${RED}║       This will deploy to LIVE PRODUCTION environment       ║${NC}"
 echo -e "${RED}║       Server: 13.126.210.220 (PROD)                         ║${NC}"
 echo -e "${RED}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Hard gate: ensure current commit was deployed to pre-prod
+echo -e "${MAGENTA}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${MAGENTA}         PRE-PROD → PROD GATE (ENFORCED)                       ${NC}"
+echo -e "${MAGENTA}═══════════════════════════════════════════════════════════════${NC}"
+
+LOCAL_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+if [ -z "$LOCAL_COMMIT" ]; then
+    echo -e "${RED}✗ Not a git repository or cannot read commit SHA${NC}"
+    exit 1
+fi
+
+PREPROD_COMMIT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$PREPROD_SERVER_IP" "cat $PREPROD_STATE_FILE 2>/dev/null || true" | tr -d ' \n\r')
+if [ -z "$PREPROD_COMMIT" ]; then
+    echo -e "${RED}✗ Pre-Prod deployment state not found on $PREPROD_SERVER_IP${NC}"
+    echo -e "${YELLOW}Run pre-prod deploy first: ./deploy_backend_preprod.sh and ./deploy_frontend_preprod.sh${NC}"
+    exit 1
+fi
+
+if [ "$PREPROD_COMMIT" != "$LOCAL_COMMIT" ]; then
+    echo -e "${RED}✗ BLOCKED: Current commit is not deployed to Pre-Prod${NC}"
+    echo -e "${YELLOW}Local:   ${NC}$LOCAL_COMMIT"
+    echo -e "${YELLOW}Pre-Prod:${NC} $PREPROD_COMMIT"
+    echo -e "${YELLOW}Deploy this commit to Pre-Prod first, verify, then deploy to Prod.${NC}"
+    exit 1
+fi
+
+if [ ! -f "$APPROVAL_FILE" ] || ! grep -q "$LOCAL_COMMIT" "$APPROVAL_FILE" 2>/dev/null; then
+    echo -e "${RED}✗ BLOCKED: Approval file missing or does not match current commit${NC}"
+    echo -e "${YELLOW}Generate approval after verification:${NC} ./scripts/approve_prod_release.sh"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Gate passed: Pre-Prod commit matches and approval present${NC}"
 echo ""
 
 # MANDATORY: Pre-Prod verification check

@@ -97,78 +97,72 @@ echo ""
 # Create nginx configuration for preprod
 echo -e "${YELLOW}[5/10] Creating Nginx Configuration...${NC}"
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
-sudo tee /etc/nginx/sites-available/preprod.qsights.com > /dev/null << 'EOF'
+PHP_FPM_SOCK=\"\$(ls -1 /var/run/php/php*-fpm.sock 2>/dev/null | head -n 1)\"
+if [ -z \"\$PHP_FPM_SOCK\" ]; then
+  PHP_FPM_SOCK=\"/var/run/php/php8.1-fpm.sock\"
+fi
+
+sudo tee /etc/nginx/sites-available/preprod.qsights.com > /dev/null << EOF
 # QSights Pre-Production Server Configuration
 # Domain: preprod.qsights.com
 # IP: 3.110.94.207
 
-# Redirect HTTP to HTTPS
 server {
     listen 80;
     server_name preprod.qsights.com 3.110.94.207;
-    
-    # Allow direct IP access for testing
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \\\$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_cache_bypass \\\$http_upgrade;
-        proxy_read_timeout 300;
-        proxy_connect_timeout 300;
-        proxy_send_timeout 300;
-    }
-    
-    # Backend API
-    location /api {
-        proxy_pass http://localhost:1199;
-        proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_read_timeout 300;
-        proxy_connect_timeout 300;
-        proxy_send_timeout 300;
-        
-        # CORS headers
-        add_header 'Access-Control-Allow-Origin' '*' always;
-        add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
-        add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
-        
-        if (\\\$request_method = 'OPTIONS') {
-            add_header 'Access-Control-Allow-Origin' '*';
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
-            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
-            add_header 'Access-Control-Max-Age' 1728000;
-            add_header 'Content-Type' 'text/plain; charset=utf-8';
-            add_header 'Content-Length' 0;
-            return 204;
-        }
-    }
-    
-    # Health check endpoint
-    location /health {
-        access_log off;
-        return 200 \"healthy\n\";
-        add_header Content-Type text/plain;
-    }
-}
 
-# HTTPS server (if SSL is configured)
-# server {
-#     listen 443 ssl http2;
-#     server_name preprod.qsights.com;
-#     
-#     ssl_certificate /etc/letsencrypt/live/preprod.qsights.com/fullchain.pem;
-#     ssl_certificate_key /etc/letsencrypt/live/preprod.qsights.com/privkey.pem;
-#     
-#     # Same location blocks as above
-# }
+    # Match production layout as closely as possible
+    root /var/www/QSightsOrg2.0/backend/public;
+    index index.php;
+
+    # Next.js static assets
+    location /_next/static {
+        alias /var/www/frontend/.next/static;
+        expires 365d;
+        access_log off;
+        add_header Cache-Control \"public, immutable\";
+    }
+
+    # Laravel routes
+    location /api {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location /sanctum {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    # Media storage
+    location /storage {
+        alias /var/www/QSightsOrg2.0/backend/storage/app/public;
+        add_header Access-Control-Allow-Origin *;
+    }
+
+    # PHP-FPM
+    location ~ \\.php\$ {
+        fastcgi_pass unix:$PHP_FPM_SOCK;
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
+    }
+
+    # Frontend app
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \"upgrade\";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400;
+        add_header Cache-Control \"no-store, no-cache, must-revalidate\";
+    }
+
+    client_max_body_size 200M;
+}
 EOF
 
 echo 'Nginx configuration created'
@@ -193,8 +187,10 @@ echo -e "${GREEN}✓ Nginx site enabled${NC}"
 echo ""
 
 # Install/Update required packages
-echo -e "${YELLOW}[7/10] Checking Required Packages...${NC}"
+echo -e "${YELLOW}[7/12] Checking Required Packages...${NC}"
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
+    sudo apt-get update -y >/dev/null 2>&1 || true
+
     echo 'Checking Node.js...'
     node --version || echo 'Node.js not found'
     
@@ -212,12 +208,15 @@ ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     
     echo 'Checking Composer...'
     composer --version | head -1 || echo 'Composer not found'
+
+    echo 'Checking cron service...'
+    sudo systemctl is-active cron >/dev/null 2>&1 || sudo systemctl enable --now cron >/dev/null 2>&1 || true
 "
 echo -e "${GREEN}✓ Package check complete${NC}"
 echo ""
 
-# Setup PM2 ecosystem
-echo -e "${YELLOW}[8/10] Creating PM2 Ecosystem Configuration...${NC}"
+# Setup PM2 ecosystem (frontend + queue worker)
+echo -e "${YELLOW}[8/12] Creating PM2 Ecosystem Configuration...${NC}"
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
 cat > /home/ubuntu/ecosystem.preprod.config.js << 'EOF'
 module.exports = {
@@ -242,6 +241,21 @@ module.exports = {
       out_file: '/var/log/qsights/preprod/frontend-out.log',
       merge_logs: true,
       time: true
+        },
+        {
+            name: 'qsights-queue-preprod',
+            cwd: '/var/www/QSightsOrg2.0/backend',
+            script: 'php',
+            args: 'artisan queue:work --sleep=3 --tries=3',
+            instances: 1,
+            exec_mode: 'fork',
+            autorestart: true,
+            watch: false,
+            max_memory_restart: '512M',
+            error_file: '/var/log/qsights/preprod/queue-error.log',
+            out_file: '/var/log/qsights/preprod/queue-out.log',
+            merge_logs: true,
+            time: true
     }
   ]
 };
@@ -252,8 +266,62 @@ echo 'PM2 ecosystem configuration created'
 echo -e "${GREEN}✓ PM2 ecosystem configuration created${NC}"
 echo ""
 
+# Setup Laravel scheduler cron
+echo -e "${YELLOW}[9/12] Setting up Scheduler (cron)...${NC}"
+ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
+        sudo mkdir -p /var/log/qsights/preprod
+        sudo chown -R ubuntu:ubuntu /var/log/qsights/preprod
+
+        # Ensure scheduler cron exists (root cron is simplest for permission consistency)
+        sudo crontab -l 2>/dev/null | grep -q 'php artisan schedule:run' && echo 'Cron already configured' || {
+                (sudo crontab -l 2>/dev/null; echo '* * * * * cd /var/www/QSightsOrg2.0/backend && php artisan schedule:run >> /var/log/qsights/preprod/scheduler.log 2>&1') | sudo crontab -
+                echo 'Cron configured for scheduler'
+        }
+"
+echo -e "${GREEN}✓ Scheduler setup complete${NC}"
+echo ""
+
+# Backup retention / cleanup policy
+echo -e "${YELLOW}[10/12] Setting up Backup Retention...${NC}"
+ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
+        sudo tee /usr/local/bin/qsights_preprod_backup_cleanup.sh > /dev/null << 'EOS'
+#!/bin/bash
+set -e
+
+BACKUP_DIR="/home/ubuntu/backups/preprod"
+LOG_FILE="/var/log/qsights/preprod/backup_cleanup.log"
+
+mkdir -p "$(dirname "$LOG_FILE")"
+
+{
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] cleanup start"
+    cd "$BACKUP_DIR" 2>/dev/null || { echo "backup dir missing: $BACKUP_DIR"; exit 0; }
+
+    # Keep newest 2 tar.gz files per prefix (backend_/frontend_/db_)
+    for prefix in backend_ frontend_ db_; do
+        ls -1t "${prefix}"*.tar.gz 2>/dev/null | tail -n +3 | while read f; do
+            echo "Deleting $f"
+            rm -f -- "$f"
+        done
+    done
+
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] cleanup end"
+} >> "$LOG_FILE" 2>&1
+EOS
+
+        sudo chmod +x /usr/local/bin/qsights_preprod_backup_cleanup.sh
+
+        # Daily cleanup at 03:10 UTC
+        sudo crontab -l 2>/dev/null | grep -q 'qsights_preprod_backup_cleanup.sh' && echo 'Backup cleanup cron already configured' || {
+                (sudo crontab -l 2>/dev/null; echo '10 3 * * * /usr/local/bin/qsights_preprod_backup_cleanup.sh') | sudo crontab -
+                echo 'Backup cleanup cron configured'
+        }
+"
+echo -e "${GREEN}✓ Backup retention configured${NC}"
+echo ""
+
 # Restart services
-echo -e "${YELLOW}[9/10] Restarting Services...${NC}"
+echo -e "${YELLOW}[11/12] Restarting Services...${NC}"
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     echo 'Restarting Nginx...'
     sudo systemctl restart nginx
@@ -263,32 +331,42 @@ ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     sudo systemctl status nginx --no-pager | head -10
     
     echo ''
-    echo 'Note: PM2 processes need to be started after deploying code'
+    echo 'Note: PM2 processes (frontend/queue) can be started after deploying code:'
+    echo '  pm2 start /home/ubuntu/ecosystem.preprod.config.js'
+    echo '  pm2 save'
 "
 echo -e "${GREEN}✓ Services restarted${NC}"
 echo ""
 
 # Final verification
-echo -e "${YELLOW}[10/10] Final Verification...${NC}"
+echo -e "${YELLOW}[12/12] Final Verification...${NC}"
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     echo '=== Directory Structure ==='
-    ls -la /var/www/
+    ls -la /var/www/ 2>/dev/null || true
     echo ''
-    
+
     echo '=== Nginx Status ==='
-    sudo systemctl is-active nginx
+    sudo systemctl is-active nginx || true
     echo ''
-    
+
+    echo '=== PHP-FPM Sockets ==='
+    ls -la /var/run/php/php*-fpm.sock 2>/dev/null || true
+    echo ''
+
     echo '=== Listening Ports ==='
-    sudo netstat -tlnp | grep -E ':(80|443|3000|1199)' || echo 'No services listening yet'
+    sudo ss -tlnp | grep -E ':(80|443|3000)' || echo 'No services listening yet'
     echo ''
-    
+
+    echo '=== Cron (scheduler) ==='
+    sudo crontab -l 2>/dev/null | grep 'schedule:run' || echo 'Cron not configured'
+    echo ''
+
     echo '=== Disk Space ==='
     df -h / | tail -1
     echo ''
-    
+
     echo '=== Memory ==='
-    free -h | grep Mem
+    free -h | grep Mem || true
 "
 echo -e "${GREEN}✓ Verification complete${NC}"
 echo ""

@@ -21,6 +21,7 @@ SERVER_IP="3.110.94.207"
 SERVER_USER="ubuntu"
 BACKEND_PATH="/var/www/QSightsOrg2.0/backend"
 LOCAL_BACKEND_PATH="$(pwd)/backend"
+DEPLOY_STATE_DIR="/home/ubuntu/deployments/preprod"
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║       QSights Pre-Production Backend Deployment             ║${NC}"
@@ -125,8 +126,46 @@ ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
 echo -e "${GREEN}✓ Caches cleared and optimized${NC}"
 echo ""
 
+# Optional migrations
+echo -e "${YELLOW}[8/10] Database Migrations (Optional)${NC}"
+echo -e "${YELLOW}⚠️  This will modify the PRE-PROD database${NC}"
+read -p "Run migrations? (yes/no): " MIGRATE_CONFIRM
+
+if [ "$MIGRATE_CONFIRM" = "yes" ]; then
+    ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
+        cd $BACKEND_PATH
+        sudo php artisan migrate --force
+    "
+    echo -e "${GREEN}✓ Migrations completed${NC}"
+else
+    echo -e "${YELLOW}⊘ Migrations skipped${NC}"
+fi
+echo ""
+
+# Storage link (media)
+echo -e "${YELLOW}[9/10] Media Storage Link${NC}"
+ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
+    cd $BACKEND_PATH
+    sudo php artisan storage:link 2>/dev/null || true
+    sudo chown -R www-data:www-data storage bootstrap/cache
+"
+echo -e "${GREEN}✓ Storage link verified${NC}"
+echo ""
+
+# Record deployed commit (for prod gating)
+echo -e "${YELLOW}[10/10] Recording Deployment State${NC}"
+COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
+    sudo mkdir -p $DEPLOY_STATE_DIR
+    echo '$COMMIT_SHA' | sudo tee $DEPLOY_STATE_DIR/last_deployed_commit >/dev/null
+    date -u +%Y-%m-%dT%H:%M:%SZ | sudo tee $DEPLOY_STATE_DIR/last_deployed_utc >/dev/null
+    sudo chown -R ubuntu:ubuntu $DEPLOY_STATE_DIR
+"
+echo -e "${GREEN}✓ Deployment state recorded (${COMMIT_SHA})${NC}"
+echo ""
+
 # Restart services
-echo -e "${YELLOW}[8/8] Restarting Services${NC}"
+echo -e "${YELLOW}[11/11] Restarting Services${NC}"
 ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     sudo systemctl reload php8.1-fpm
     sudo systemctl reload nginx

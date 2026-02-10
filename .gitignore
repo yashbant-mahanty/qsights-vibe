@@ -39,6 +39,9 @@ _backups/
 # Local archives
 frontend/*.tar.gz
 
+# Local release approval artifacts
+release/PROD_APPROVAL.txt
+
 # Cache
 .cache/
 *.cache

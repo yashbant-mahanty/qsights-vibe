@@ -21,6 +21,7 @@ SERVER_IP="3.110.94.207"
 SERVER_USER="ubuntu"
 FRONTEND_PATH="/var/www/frontend"
 LOCAL_FRONTEND_PATH="$(pwd)/frontend"
+DEPLOY_STATE_DIR="/home/ubuntu/deployments/preprod"
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║       QSights Pre-Production Frontend Deployment            ║${NC}"
@@ -101,7 +102,7 @@ echo ""
 # Create deployment package
 echo -e "${YELLOW}[5/9] Creating Deployment Package${NC}"
 cd "$LOCAL_FRONTEND_PATH"
-tar -czf /tmp/frontend_preprod_deploy.tar.gz .next package.json
+tar -czf /tmp/frontend_preprod_deploy.tar.gz .next package.json package-lock.json 2>/dev/null || tar -czf /tmp/frontend_preprod_deploy.tar.gz .next package.json
 cd ..
 echo -e "${GREEN}✓ Package created${NC}"
 echo ""
@@ -134,8 +135,21 @@ ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
 echo -e "${GREEN}✓ Files extracted${NC}"
 echo ""
 
+# Record deployed commit/build id (for prod gating)
+echo -e "${YELLOW}[9/10] Recording Deployment State${NC}"
+COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
+    sudo mkdir -p $DEPLOY_STATE_DIR
+    echo '$COMMIT_SHA' | sudo tee $DEPLOY_STATE_DIR/last_deployed_commit >/dev/null
+    echo '$BUILD_ID' | sudo tee $DEPLOY_STATE_DIR/last_frontend_build_id >/dev/null
+    date -u +%Y-%m-%dT%H:%M:%SZ | sudo tee $DEPLOY_STATE_DIR/last_frontend_deployed_utc >/dev/null
+    sudo chown -R ubuntu:ubuntu $DEPLOY_STATE_DIR
+"
+echo -e "${GREEN}✓ Deployment state recorded (${COMMIT_SHA}, BUILD_ID=${BUILD_ID})${NC}"
+echo ""
+
 # Restart PM2
-echo -e "${YELLOW}[9/9] Restarting PM2${NC}"
+echo -e "${YELLOW}[10/10] Restarting PM2${NC}"
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     pm2 restart qsights-frontend-preprod 2>/dev/null || pm2 restart qsights-frontend || pm2 start npm --name qsights-frontend-preprod -- start
     pm2 save
