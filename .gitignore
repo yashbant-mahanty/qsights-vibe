@@ -12,6 +12,8 @@ dist/
 .env.local
 .env.production
 .env.development
+.env.*
+.env.preprod
 backend/.env
 
 # IDE
@@ -32,6 +34,10 @@ yarn-error.log*
 
 # Backups folder
 backups/
+_backups/
+
+# Local archives
+frontend/*.tar.gz
 
 # Cache
 .cache/
