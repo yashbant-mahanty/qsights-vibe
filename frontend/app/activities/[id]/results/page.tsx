@@ -30,6 +30,7 @@ import {
   Trash2,
   Calendar,
   Activity as ActivityIcon,
+  Award,
 } from "lucide-react";
 import { activitiesApi, responsesApi, notificationsApi, type Activity } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -294,6 +295,37 @@ function formatAnswerForDisplay(answer: any): string {
   return String(answer);
 }
 
+const OTHER_OPTION_VALUE = '__other__';
+
+function formatAnswerObjectForExport(answerObj: any): string {
+  if (!answerObj) return 'No response';
+
+  const answerValue = answerObj.value_array || answerObj.value;
+  const otherText = typeof answerObj.other_text === 'string' ? answerObj.other_text.trim() : '';
+
+  if (Array.isArray(answerValue)) {
+    const parts = answerValue
+      .map((v: any) => {
+        if (v === OTHER_OPTION_VALUE) {
+          return otherText ? `Other: ${otherText}` : 'Other';
+        }
+        return formatAnswerForDisplay(v);
+      })
+      .filter((p: string) => p && p !== 'No response');
+    return parts.length > 0 ? parts.join(', ') : 'No response';
+  }
+
+  if (answerValue === OTHER_OPTION_VALUE) {
+    return otherText ? `Other: ${otherText}` : 'Other';
+  }
+
+  const base = formatAnswerForDisplay(answerValue);
+  if (otherText) {
+    return `${base} (Other: ${otherText})`;
+  }
+  return base;
+}
+
 // Helper function to format drag & drop responses with item/bucket names
 function formatDragDropResponse(answer: any, questionSettings: any): React.ReactNode {
   if (!answer || typeof answer !== 'object') return formatAnswerForDisplay(answer);
@@ -398,12 +430,71 @@ export default function ActivityResultsPage() {
   const [responsePage, setResponsePage] = useState(1);
   const [responsesPerPage, setResponsesPerPage] = useState(50);
 
+  // Search/filter for response list (includes Other free-text)
+  const [responseSearch, setResponseSearch] = useState('');
+
+  // Search/filter for notification reports
+  const [notificationSearch, setNotificationSearch] = useState('');
+
+  const filteredResponses = useMemo(() => {
+    const q = responseSearch.trim().toLowerCase();
+    if (!q) return responses;
+
+    return (responses || []).filter((r: any) => {
+      const participantName = r?.participant?.name || r?.metadata?.participant_name || '';
+      const participantEmail = r?.participant?.email || r?.metadata?.participant_email || '';
+      const guestIdentifier = r?.guest_identifier || '';
+      const status = r?.status || '';
+      const submittedAt = r?.submitted_at || r?.updated_at || r?.created_at || '';
+
+      let haystack = `${participantName} ${participantEmail} ${guestIdentifier} ${status} ${submittedAt}`.toLowerCase();
+
+      if (Array.isArray(r?.answers)) {
+        for (const ans of r.answers) {
+          try {
+            haystack += ` ${formatAnswerObjectForExport(ans)}`.toLowerCase();
+          } catch {
+            // ignore formatting errors; continue searching other fields
+          }
+          if (typeof ans?.other_text === 'string' && ans.other_text.trim()) {
+            haystack += ` ${ans.other_text.trim()}`.toLowerCase();
+          }
+        }
+      }
+
+      return haystack.includes(q);
+    });
+  }, [responses, responseSearch]);
+
+  // Filter notification reports by search query
+  const filteredNotificationReports = useMemo(() => {
+    const q = notificationSearch.trim().toLowerCase();
+    if (!q) return notificationReports;
+
+    return (notificationReports || []).filter((log: any) => {
+      const participantName = log?.participant_name || log?.user_name || '';
+      const participantEmail = log?.participant_email || '';
+      const notificationType = log?.notification_type || '';
+      const status = log?.status || '';
+      const sentAt = log?.sent_at || '';
+      const deliveredAt = log?.delivered_at || '';
+      const openedAt = log?.opened_at || '';
+
+      const haystack = `${participantName} ${participantEmail} ${notificationType} ${status} ${sentAt} ${deliveredAt} ${openedAt}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [notificationReports, notificationSearch]);
+
+  useEffect(() => {
+    setResponsePage(1);
+  }, [responseSearch]);
+
   // Pagination calculations
-  const totalResponsePages = Math.ceil(responses.length / responsesPerPage);
+  const totalResponsePages = Math.ceil(filteredResponses.length / responsesPerPage);
   const paginatedResponses = useMemo(() => {
     const startIndex = (responsePage - 1) * responsesPerPage;
-    return responses.slice(startIndex, startIndex + responsesPerPage);
-  }, [responses, responsePage, responsesPerPage]);
+    return filteredResponses.slice(startIndex, startIndex + responsesPerPage);
+  }, [filteredResponses, responsePage, responsesPerPage]);
 
   useEffect(() => {
     loadData();
@@ -598,10 +689,7 @@ export default function ActivityResultsPage() {
           if (Array.isArray(response.answers) && response.answers.length > 0) {
             response.answers.forEach((answer: any, idx: number) => {
               const questionLabel = `Q${answer.question_id}`;
-              const answerValue = answer.value_array || answer.value;
-              row[questionLabel] = Array.isArray(answerValue) 
-                ? answerValue.map((v: any) => formatAnswerForDisplay(v)).join(', ') 
-                : formatAnswerForDisplay(answerValue);
+              row[questionLabel] = formatAnswerObjectForExport(answer);
             });
           }
 
@@ -665,11 +753,7 @@ export default function ActivityResultsPage() {
             if (Array.isArray(response.answers)) {
               const answerObj = response.answers.find((a: any) => a.question_id === question.id);
               if (answerObj) {
-                const answerValue = answerObj.value_array || answerObj.value;
-                // Use formatAnswerForDisplay for proper formatting of dial_gauge/slider_scale JSON values
-                row[questionLabel] = Array.isArray(answerValue) 
-                  ? answerValue.map(v => formatAnswerForDisplay(v)).join(', ') 
-                  : formatAnswerForDisplay(answerValue);
+                row[questionLabel] = formatAnswerObjectForExport(answerObj);
               } else {
                 row[questionLabel] = 'No response';
               }
@@ -874,6 +958,7 @@ export default function ActivityResultsPage() {
                   if (answerObj) {
                     return {
                       value: answerObj.value_array || answerObj.value,
+                      otherText: answerObj.other_text,
                       participant: r.participant?.name || r.participant?.email || 'Anonymous',
                       submittedAt: r.submitted_at
                     };
@@ -891,7 +976,7 @@ export default function ActivityResultsPage() {
               questionResponses.forEach((answer: any) => {
                 const value = Array.isArray(answer) ? answer : [answer];
                 value.forEach((v: any) => {
-                  const key = String(v);
+                  const key = v === OTHER_OPTION_VALUE ? 'Other' : String(v);
                   stats[key] = (stats[key] || 0) + 1;
                 });
               });
@@ -965,6 +1050,53 @@ export default function ActivityResultsPage() {
               });
 
               currentY = (doc as any).lastAutoTable.finalY + 10;
+
+              // Include a small sample of "Other" free-text responses (if any)
+              const otherSample = questionResponsesWithDetails
+                .filter((r: any) => {
+                  const val = r?.value;
+                  const hasOther = Array.isArray(val) ? val.includes(OTHER_OPTION_VALUE) : val === OTHER_OPTION_VALUE;
+                  return hasOther && typeof r?.otherText === 'string' && r.otherText.trim().length > 0;
+                })
+                .slice(0, 5)
+                .map((r: any) => [
+                  r.participant,
+                  String(r.otherText).substring(0, 120) + (String(r.otherText).length > 120 ? '...' : ''),
+                ]);
+
+              if (otherSample.length > 0) {
+                if (currentY > 180) {
+                  doc.addPage();
+                  currentY = 15;
+                }
+
+                doc.setFontSize(9);
+                doc.setTextColor(40, 40, 40);
+                doc.text('Other responses (sample)', 20, currentY);
+                currentY += 4;
+
+                autoTable(doc, {
+                  head: [['Participant', 'Other Text']],
+                  body: otherSample,
+                  startY: currentY,
+                  theme: 'striped',
+                  headStyles: {
+                    fillColor: [229, 231, 235],
+                    textColor: [40, 40, 40],
+                    fontStyle: 'bold',
+                  },
+                  styles: {
+                    fontSize: 8,
+                    cellPadding: 2,
+                  },
+                  margin: { left: 20, right: 20 },
+                  columnStyles: {
+                    0: { cellWidth: 50 },
+                  },
+                });
+
+                currentY = (doc as any).lastAutoTable.finalY + 10;
+              }
             } 
             // Rating questions (Star Rating, Likert Scale)
             else if (['star_rating', 'likert_scale', 'likert_visual'].includes(question.type)) {
@@ -1523,13 +1655,43 @@ export default function ActivityResultsPage() {
                 </div>
                 <span>Response List</span>
                 <span className="ml-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
-                  {responses.length} {responses.length === 1 ? 'Response' : 'Responses'}
+                  {filteredResponses.length}
+                  {responseSearch.trim() ? ` of ${responses.length}` : ''}
+                  {filteredResponses.length === 1 ? ' Response' : ' Responses'}
                 </span>
               </CardTitle>
+
+              <div className="flex items-center gap-2">
+                <input
+                  value={responseSearch}
+                  onChange={(e) => setResponseSearch(e.target.value)}
+                  placeholder="Search responses (includes Other text)…"
+                  className="w-72 max-w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                {responseSearch.trim().length > 0 && (
+                  <button
+                    onClick={() => setResponseSearch('')}
+                    className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+                    title="Clear search"
+                  >
+                    <X className="w-4 h-4 text-gray-600" />
+                  </button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {responses.length > 0 ? (
+            {responses.length > 0 && filteredResponses.length === 0 ? (
+              <div className="text-center py-20 px-6">
+                <div className="max-w-md mx-auto">
+                  <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <BarChart3 className="w-12 h-12 text-blue-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">No matching responses</h3>
+                  <p className="text-gray-500 mb-6">Try a different search term.</p>
+                </div>
+              </div>
+            ) : responses.length > 0 ? (
               <div>
                 {/* Enhanced Response List Table */}
                 <div className="overflow-x-auto">
@@ -1732,14 +1894,14 @@ export default function ActivityResultsPage() {
                 </div>
                 
                 {/* Pagination */}
-                {responses.length > 0 && (
+                {filteredResponses.length > 0 && (
                   <div className="px-6 py-4 border-t border-gray-200">
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
                         <div className="text-sm text-gray-600">
-                          Showing {responses.length > 0 ? (responsePage - 1) * responsesPerPage + 1 : 0} to{" "}
-                          {Math.min(responsePage * responsesPerPage, responses.length)} of{" "}
-                          {responses.length} responses
+                          Showing {filteredResponses.length > 0 ? (responsePage - 1) * responsesPerPage + 1 : 0} to{" "}
+                          {Math.min(responsePage * responsesPerPage, filteredResponses.length)} of{" "}
+                          {filteredResponses.length} responses
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-gray-500">Per page:</span>
@@ -1971,14 +2133,90 @@ export default function ActivityResultsPage() {
                         questionResponses.forEach((answer: any) => {
                           const value = Array.isArray(answer) ? answer : [answer];
                           value.forEach((v: any) => {
-                            const key = String(v);
+                            const key = v === OTHER_OPTION_VALUE ? 'Other' : String(v);
                             stats[key] = (stats[key] || 0) + 1;
                           });
                         });
                         return stats;
                       };
 
-                      const stats = ['single_choice', 'multiple_choice', 'radio', 'checkbox'].includes(question.type)
+                      // Calculate SCT Likert scores
+                      const calculateSctLikertScores = () => {
+                        if (question.type !== 'sct_likert') return null;
+                        
+                        const scores = question.settings?.scores || [];
+                        const options = question.options || [];
+                        const choiceType = question.settings?.choiceType || 'single';
+                        const normalizeMultiSelect = question.settings?.normalizeMultiSelect !== false;
+                        const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
+                        
+                        let totalScore = 0;
+                        let responseCount = 0;
+                        const scoreDistribution: Record<string, { count: number; score: number }> = {};
+                        const individualScores: number[] = [];
+                        
+                        questionResponses.forEach((answer: any) => {
+                          if (answer === null || answer === undefined) return;
+                          
+                          let questionScore = 0;
+                          
+                          if (choiceType === 'multi') {
+                            const answerArray = Array.isArray(answer) ? answer : [answer];
+                            const selectedScores: number[] = [];
+                            
+                            answerArray.forEach((ans: any) => {
+                              const index = options.indexOf(ans);
+                              if (index !== -1 && scores[index] !== undefined) {
+                                selectedScores.push(scores[index]);
+                              }
+                            });
+                            
+                            if (selectedScores.length > 0) {
+                              questionScore = selectedScores.reduce((sum, s) => sum + s, 0);
+                              if (normalizeMultiSelect && selectedScores.length > 1) {
+                                questionScore = questionScore / selectedScores.length;
+                              }
+                            }
+                          } else {
+                            const index = options.indexOf(answer);
+                            if (index !== -1 && scores[index] !== undefined) {
+                              questionScore = scores[index];
+                            }
+                          }
+                          
+                          totalScore += questionScore;
+                          responseCount++;
+                          individualScores.push(questionScore);
+                          
+                          // Track score distribution
+                          const answerKey = Array.isArray(answer) ? answer.join(', ') : String(answer);
+                          if (!scoreDistribution[answerKey]) {
+                            scoreDistribution[answerKey] = { count: 0, score: questionScore };
+                          }
+                          scoreDistribution[answerKey].count++;
+                        });
+                        
+                        const avgScore = responseCount > 0 ? totalScore / responseCount : 0;
+                        const minScore = individualScores.length > 0 ? Math.min(...individualScores) : 0;
+                        const maxIndividualScore = individualScores.length > 0 ? Math.max(...individualScores) : 0;
+                        
+                        return {
+                          totalScore,
+                          avgScore,
+                          minScore,
+                          maxIndividualScore,
+                          maxPossibleScore: maxScore,
+                          responseCount,
+                          scoreDistribution,
+                          individualScores,
+                          scores,
+                          options
+                        };
+                      };
+
+                      const sctScoreData = calculateSctLikertScores();
+
+                      const stats = ['single_choice', 'multiple_choice', 'radio', 'checkbox', 'sct_likert'].includes(question.type)
                         ? calculateChoiceStats()
                         : null;
 
@@ -1988,11 +2226,24 @@ export default function ActivityResultsPage() {
                       const participantResponses = responses.map((r) => {
                         const answer = Array.isArray(r.answers) ? r.answers.find((a: any) => a.question_id === question.id) : null;
                         const answerValue = answer ? (answer.value_array || answer.value) : null;
+                        
+                        // Calculate score for sct_likert questions
+                        let participantScore: number | null = null;
+                        if (question.type === 'sct_likert' && answerValue && sctScoreData) {
+                          const selectedOption = String(answerValue);
+                          const optionIndex = sctScoreData.options?.findIndex((opt: string) => opt === selectedOption);
+                          if (optionIndex !== -1 && sctScoreData.scores && sctScoreData.scores[optionIndex] !== undefined) {
+                            participantScore = Number(sctScoreData.scores[optionIndex]);
+                          }
+                        }
+                        
                         return {
                           participantName: r.participant?.name || r.participant?.email || 'Anonymous',
                           participantEmail: r.participant?.email || 'N/A',
                           answer: answerValue,
+                          otherText: answer?.other_text,
                           submittedAt: r.submitted_at || r.updated_at,
+                          score: participantScore,
                         };
                       }).filter(pr => pr.answer !== null && pr.answer !== undefined && pr.answer !== '');
 
@@ -2065,6 +2316,84 @@ export default function ActivityResultsPage() {
                                     </>
                                   )}
                                 </div>
+
+                                {/* SCT Likert Score Summary */}
+                                {question.type === 'sct_likert' && sctScoreData && (
+                                  <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border-2 border-purple-200">
+                                    <h4 className="text-sm font-bold text-purple-800 mb-4 flex items-center gap-2">
+                                      <Award className="w-4 h-4" />
+                                      SCT Likert Score Analysis
+                                    </h4>
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                      <div className="text-center p-3 bg-white rounded-lg border border-purple-200 shadow-sm">
+                                        <p className="text-xs text-gray-600 mb-1">Average Score</p>
+                                        <p className="text-2xl font-bold text-purple-600">{sctScoreData.avgScore}</p>
+                                        <p className="text-xs text-gray-500">per response</p>
+                                      </div>
+                                      <div className="text-center p-3 bg-white rounded-lg border border-purple-200 shadow-sm">
+                                        <p className="text-xs text-gray-600 mb-1">Total Score</p>
+                                        <p className="text-2xl font-bold text-indigo-600">{sctScoreData.totalScore}</p>
+                                        <p className="text-xs text-gray-500">all responses</p>
+                                      </div>
+                                      <div className="text-center p-3 bg-white rounded-lg border border-purple-200 shadow-sm">
+                                        <p className="text-xs text-gray-600 mb-1">Score Range</p>
+                                        <p className="text-2xl font-bold text-blue-600">{sctScoreData.minScore} - {sctScoreData.maxIndividualScore}</p>
+                                        <p className="text-xs text-gray-500">min - max</p>
+                                      </div>
+                                      <div className="text-center p-3 bg-white rounded-lg border border-purple-200 shadow-sm">
+                                        <p className="text-xs text-gray-600 mb-1">Max Possible</p>
+                                        <p className="text-2xl font-bold text-green-600">{sctScoreData.maxPossibleScore}</p>
+                                        <p className="text-xs text-gray-500">per question</p>
+                                      </div>
+                                      <div className="text-center p-3 bg-white rounded-lg border border-purple-200 shadow-sm">
+                                        <p className="text-xs text-gray-600 mb-1">Avg. Score %</p>
+                                        <p className="text-2xl font-bold text-orange-600">
+                                          {sctScoreData.maxPossibleScore > 0 ? ((sctScoreData.avgScore / sctScoreData.maxPossibleScore) * 100).toFixed(0) : 0}%
+                                        </p>
+                                        <p className="text-xs text-gray-500">of maximum</p>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Score per Option breakdown */}
+                                    {sctScoreData.options && sctScoreData.scores && sctScoreData.options.length > 0 && (
+                                      <div className="mt-4 pt-4 border-t border-purple-200">
+                                        <p className="text-xs font-semibold text-gray-700 mb-3">Score per Option:</p>
+                                        <div className="flex flex-wrap gap-2">
+                                          {sctScoreData.options.map((option: string, idx: number) => (
+                                            <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                              <span className="text-sm text-gray-700">{option}</span>
+                                              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">
+                                                {sctScoreData.scores[idx]} pts
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Score Distribution */}
+                                    {sctScoreData.scoreDistribution && Object.keys(sctScoreData.scoreDistribution).length > 0 && (
+                                      <div className="mt-4 pt-4 border-t border-purple-200">
+                                        <p className="text-xs font-semibold text-gray-700 mb-3">Score Distribution:</p>
+                                        <div className="flex flex-wrap gap-3">
+                                          {Object.entries(sctScoreData.scoreDistribution)
+                                            .sort((a, b) => Number(b[0]) - Number(a[0]))
+                                            .map(([score, count]) => (
+                                              <div key={score} className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                                <span className="w-8 h-8 flex items-center justify-center bg-purple-100 text-purple-700 rounded-full font-bold text-sm">
+                                                  {score}
+                                                </span>
+                                                <span className="text-sm text-gray-600">pts</span>
+                                                <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded font-semibold text-sm">
+                                                  {count as number} {(count as number) === 1 ? 'response' : 'responses'}
+                                                </span>
+                                              </div>
+                                            ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
 
                                 {stats ? (
                                   chartType === 'bar' ? (
@@ -2213,6 +2542,11 @@ export default function ActivityResultsPage() {
                                     <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
                                       <Users className="w-4 h-4" />
                                       Per-Participant Response Details
+                                      {question.type === 'sct_likert' && (
+                                        <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full ml-2">
+                                          Includes Scores
+                                        </span>
+                                      )}
                                     </h4>
                                     <div className="bg-white rounded-lg border-2 border-gray-200 overflow-hidden">
                                       <div className="overflow-x-auto">
@@ -2222,6 +2556,9 @@ export default function ActivityResultsPage() {
                                               <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">#</th>
                                               <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Participant</th>
                                               <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Response</th>
+                                              {question.type === 'sct_likert' && (
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-purple-700 uppercase tracking-wider">Score</th>
+                                              )}
                                               <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Submitted</th>
                                             </tr>
                                           </thead>
@@ -2241,17 +2578,39 @@ export default function ActivityResultsPage() {
                                                       <div className="flex flex-wrap gap-1">
                                                         {pr.answer.map((ans: any, i: number) => (
                                                           <span key={i} className="inline-block px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                                                            {formatAnswerForDisplay(ans)}
+                                                            {ans === OTHER_OPTION_VALUE
+                                                              ? (typeof pr.otherText === 'string' && pr.otherText.trim().length > 0
+                                                                  ? `Other: ${pr.otherText.trim()}`
+                                                                  : 'Other')
+                                                              : formatAnswerForDisplay(ans)}
                                                           </span>
                                                         ))}
                                                       </div>
                                                     ) : question.type === 'drag_and_drop' ? (
                                                       formatDragDropResponse(pr.answer, question.settings)
                                                     ) : (
-                                                      <span className="font-medium">{formatAnswerForDisplay(pr.answer)}</span>
+                                                      <span className="font-medium">
+                                                        {pr.answer === OTHER_OPTION_VALUE
+                                                          ? (typeof pr.otherText === 'string' && pr.otherText.trim().length > 0
+                                                              ? `Other: ${pr.otherText.trim()}`
+                                                              : 'Other')
+                                                          : formatAnswerForDisplay(pr.answer)}
+                                                      </span>
                                                     )}
                                                   </div>
                                                 </td>
+                                                {question.type === 'sct_likert' && (
+                                                  <td className="px-4 py-3">
+                                                    {pr.score !== null && pr.score !== undefined ? (
+                                                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full font-bold text-sm">
+                                                        <Award className="w-3.5 h-3.5" />
+                                                        {pr.score} pts
+                                                      </span>
+                                                    ) : (
+                                                      <span className="text-xs text-gray-400">N/A</span>
+                                                    )}
+                                                  </td>
+                                                )}
                                                 <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                                                   {pr.submittedAt ? new Date(pr.submittedAt).toLocaleString() : 'N/A'}
                                                 </td>
@@ -2362,9 +2721,28 @@ export default function ActivityResultsPage() {
                       </div>
                       <span>Email Notification Details</span>
                       <span className="ml-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-semibold">
-                        {notificationReports.length} {notificationReports.length === 1 ? 'Notification' : 'Notifications'}
+                        {filteredNotificationReports.length}
+                        {notificationSearch.trim() ? ` of ${notificationReports.length}` : ''}
+                        {filteredNotificationReports.length === 1 ? ' Notification' : ' Notifications'}
                       </span>
                     </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={notificationSearch}
+                        onChange={(e) => setNotificationSearch(e.target.value)}
+                        placeholder="Search by name, email, type, status…"
+                        className="w-72 max-w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                      />
+                      {notificationSearch.trim().length > 0 && (
+                        <button
+                          onClick={() => setNotificationSearch('')}
+                          className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+                          title="Clear search"
+                        >
+                          <X className="w-4 h-4 text-gray-600" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -2406,8 +2784,18 @@ export default function ActivityResultsPage() {
                               </div>
                             </td>
                           </tr>
+                        ) : filteredNotificationReports.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                              <div className="flex flex-col items-center gap-3">
+                                <Mail className="w-12 h-12 text-gray-300" />
+                                <p className="text-lg font-medium">No matching notifications</p>
+                                <p className="text-sm">Try a different search term</p>
+                              </div>
+                            </td>
+                          </tr>
                         ) : (
-                          notificationReports.map((log: any) => (
+                          filteredNotificationReports.map((log: any) => (
                             <tr key={log.id} className="hover:bg-gray-50 transition-colors">
                               <td className="px-6 py-4">
                                 <p className="text-sm font-semibold text-gray-900">
