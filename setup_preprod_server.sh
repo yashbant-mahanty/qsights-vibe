@@ -83,13 +83,8 @@ echo ""
 
 # Create nginx configuration for preprod
 echo -e "${YELLOW}[5/10] Creating Nginx Configuration...${NC}"
-ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
-PHP_FPM_SOCK=\"\$(ls -1 /var/run/php/php*-fpm.sock 2>/dev/null | head -n 1)\"
-if [ -z \"\$PHP_FPM_SOCK\" ]; then
-  PHP_FPM_SOCK=\"/var/run/php/php8.1-fpm.sock\"
-fi
-
-sudo tee /etc/nginx/sites-available/preprod.qsights.com > /dev/null << EOF
+ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" << 'ENDSSH'
+sudo tee /etc/nginx/sites-available/preprod.qsights.com > /dev/null << 'EOF'
 # QSights Pre-Production Server Configuration
 # Domain: preprod.qsights.com
 # IP: 3.110.94.207
@@ -98,54 +93,48 @@ server {
     listen 80;
     server_name preprod.qsights.com 3.110.94.207;
 
-    # Match production layout as closely as possible
     root /var/www/QSightsOrg2.0/backend/public;
     index index.php;
 
-    # Next.js static assets
     location /_next/static {
         alias /var/www/frontend/.next/static;
         expires 365d;
         access_log off;
-        add_header Cache-Control \"public, immutable\";
+        add_header Cache-Control "public, immutable";
     }
 
-    # Laravel routes
     location /api {
-        try_files \$uri \$uri/ /index.php?\$query_string;
+        try_files $uri $uri/ /index.php?$query_string;
     }
 
     location /sanctum {
-        try_files \$uri \$uri/ /index.php?\$query_string;
+        try_files $uri $uri/ /index.php?$query_string;
     }
 
-    # Media storage
     location /storage {
         alias /var/www/QSightsOrg2.0/backend/storage/app/public;
         add_header Access-Control-Allow-Origin *;
     }
 
-    # PHP-FPM
-    location ~ \\.php\$ {
-        fastcgi_pass unix:$PHP_FPM_SOCK;
-        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         include fastcgi_params;
-        fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
+        fastcgi_param HTTP_AUTHORIZATION $http_authorization;
     }
 
-    # Frontend app
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \"upgrade\";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
         proxy_read_timeout 86400;
-        add_header Cache-Control \"no-store, no-cache, must-revalidate\";
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
     }
 
     client_max_body_size 200M;
@@ -153,7 +142,7 @@ server {
 EOF
 
 echo 'Nginx configuration created'
-"
+ENDSSH
 echo -e "${GREEN}✓ Nginx configuration created${NC}"
 echo ""
 

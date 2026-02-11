@@ -80,3 +80,5 @@ backend/test_sendgrid_email.php
 backend/.env*
 backend/access_token
 **/token*
+backend/fix_sendgrid_settings.php
+backend/*sendgrid*.php

@@ -41,7 +41,6 @@ import {
   DEFAULT_SETTINGS,
 } from "@/components/questions";
 import { createAnswerPayload } from "@/lib/valueDisplayUtils";
-import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 
 interface FormField {
   id: string;
@@ -128,12 +127,6 @@ interface Activity {
     contentHeaderGradientTo?: string;
     contentHeaderCustomTitle?: string;
     contentHeaderCustomSubtitle?: string;
-    // Content Header Display Controls
-    hideContentHeader?: boolean;
-    showContentHeaderTitle?: boolean;
-    showContentHeaderStartDate?: boolean;
-    showContentHeaderEndDate?: boolean;
-    showContentHeaderQuestions?: boolean;
     footerText?: string;
     footerTextColor?: string;
     footerBackgroundColor?: string;
@@ -143,7 +136,6 @@ interface Activity {
     footerLogoPosition?: string;
     footerLogoSize?: string;
     footerTextPosition?: string;
-    footerHyperlinks?: Array<{ text: string; url: string; target: '_blank' | '_self' }>;
     logoPosition?: string;
     leftContentEnabled?: boolean;
     leftContentTitle?: string;
@@ -174,14 +166,6 @@ interface Activity {
     loginBoxLogoVerticalPosition?: string;
     loginBoxCustomTitle?: string;
     loginBoxCustomSubtitle?: string;
-    // Thank You Page Settings
-    thankYouTitle?: string;
-    thankYouMessage?: string;
-    thankYouSubMessage?: string;
-    thankYouIconColor?: string;
-    thankYouShowConfirmation?: boolean;
-    thankYouShowBanner?: boolean;
-    thankYouShowFooter?: boolean;
     [key: string]: any;
   };
 }
@@ -452,14 +436,6 @@ export default function TakeActivityPage() {
   // Timer state
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
-  // Presigned URL state for Content Header logo
-  const [presignedContentHeaderLogoUrl, setPresignedContentHeaderLogoUrl] = useState<string | null>(null);
-  // Presigned URL state for banner and logo images
-  const [presignedBannerUrl, setPresignedBannerUrl] = useState<string | null>(null);
-  const [presignedLogoUrl, setPresignedLogoUrl] = useState<string | null>(null);
-  // Presigned URL state for footer logo
-  const [presignedFooterLogoUrl, setPresignedFooterLogoUrl] = useState<string | null>(null);
-
   // Add to Calendar handler
   const handleAddToCalendar = () => {
     if (!activity) return;
@@ -534,47 +510,6 @@ export default function TakeActivityPage() {
     }
     
     return '';
-  };
-
-  // Component to display question images with presigned URL support
-  const QuestionImage = ({ imageUrl }: { imageUrl: string }) => {
-    const [presignedUrl, setPresignedUrl] = React.useState<string>(imageUrl);
-    const [imageError, setImageError] = React.useState(false);
-
-    React.useEffect(() => {
-      const loadPresignedUrl = async () => {
-        if (!imageUrl) {
-          setPresignedUrl('');
-          return;
-        }
-        if (isPresignedUrl(imageUrl) || !isS3Url(imageUrl)) {
-          setPresignedUrl(imageUrl);
-          return;
-        }
-        try {
-          const signed = await getPresignedUrl(imageUrl);
-          setPresignedUrl(signed || imageUrl);
-        } catch (error) {
-          console.error('Failed to get presigned URL:', error);
-          setPresignedUrl(imageUrl);
-        }
-      };
-      loadPresignedUrl();
-    }, [imageUrl]);
-
-    if (!presignedUrl || imageError) return null;
-
-    return (
-      <div className="mt-3 mb-4">
-        <img
-          src={presignedUrl}
-          alt="Question Image"
-          className="w-full h-auto object-contain rounded-lg border border-gray-200"
-          style={{ maxHeight: '300px' }}
-          onError={() => setImageError(true)}
-        />
-      </div>
-    );
   };
 
   // Load persisted session on mount (skip in preview mode)
@@ -885,94 +820,6 @@ export default function TakeActivityPage() {
       }
     }
   }, [generatedLinkValidated, generatedLinkType, activity, started, submitted, generatedLinkTag]);
-
-  // Presign Content Header logo URL when activity loads
-  useEffect(() => {
-    const presignContentHeaderLogo = async () => {
-      const logoUrl = activity?.landing_config?.contentHeaderLogoUrl;
-      if (logoUrl && isS3Url(logoUrl) && !isPresignedUrl(logoUrl)) {
-        try {
-          const presigned = await getPresignedUrl(logoUrl);
-          setPresignedContentHeaderLogoUrl(presigned);
-        } catch (error) {
-          console.error('Failed to presign content header logo URL:', error);
-          setPresignedContentHeaderLogoUrl(logoUrl); // Fallback to original URL
-        }
-      } else if (logoUrl) {
-        setPresignedContentHeaderLogoUrl(logoUrl); // Already presigned or not S3
-      }
-    };
-    
-    if (activity?.landing_config?.contentHeaderLogoUrl) {
-      presignContentHeaderLogo();
-    }
-  }, [activity?.landing_config?.contentHeaderLogoUrl]);
-
-  // Presign banner image URL when activity loads
-  useEffect(() => {
-    const presignBannerImage = async () => {
-      const bannerUrl = activity?.landing_config?.bannerImageUrl;
-      if (bannerUrl && isS3Url(bannerUrl) && !isPresignedUrl(bannerUrl)) {
-        try {
-          const presigned = await getPresignedUrl(bannerUrl);
-          setPresignedBannerUrl(presigned);
-        } catch (error) {
-          console.error('Failed to presign banner URL:', error);
-          setPresignedBannerUrl(bannerUrl);
-        }
-      } else if (bannerUrl) {
-        setPresignedBannerUrl(bannerUrl);
-      }
-    };
-    
-    if (activity?.landing_config?.bannerImageUrl) {
-      presignBannerImage();
-    }
-  }, [activity?.landing_config?.bannerImageUrl]);
-
-  // Presign logo URL when activity loads
-  useEffect(() => {
-    const presignLogoImage = async () => {
-      const logoUrl = activity?.landing_config?.logoUrl;
-      if (logoUrl && isS3Url(logoUrl) && !isPresignedUrl(logoUrl)) {
-        try {
-          const presigned = await getPresignedUrl(logoUrl);
-          setPresignedLogoUrl(presigned);
-        } catch (error) {
-          console.error('Failed to presign logo URL:', error);
-          setPresignedLogoUrl(logoUrl);
-        }
-      } else if (logoUrl) {
-        setPresignedLogoUrl(logoUrl);
-      }
-    };
-    
-    if (activity?.landing_config?.logoUrl) {
-      presignLogoImage();
-    }
-  }, [activity?.landing_config?.logoUrl]);
-
-  // Presign footer logo URL when activity loads
-  useEffect(() => {
-    const presignFooterLogoImage = async () => {
-      const footerLogoUrl = activity?.landing_config?.footerLogoUrl;
-      if (footerLogoUrl && isS3Url(footerLogoUrl) && !isPresignedUrl(footerLogoUrl)) {
-        try {
-          const presigned = await getPresignedUrl(footerLogoUrl);
-          setPresignedFooterLogoUrl(presigned);
-        } catch (error) {
-          console.error('Failed to presign footer logo URL:', error);
-          setPresignedFooterLogoUrl(footerLogoUrl);
-        }
-      } else if (footerLogoUrl) {
-        setPresignedFooterLogoUrl(footerLogoUrl);
-      }
-    };
-    
-    if (activity?.landing_config?.footerLogoUrl) {
-      presignFooterLogoImage();
-    }
-  }, [activity?.landing_config?.footerLogoUrl]);
 
   async function validateAccessToken() {
     // Prevent duplicate calls
@@ -2835,95 +2682,6 @@ export default function TakeActivityPage() {
           </div>
         );
 
-      case "sct_likert":
-        const sctSettings = question.settings || DEFAULT_SETTINGS.sct_likert;
-        const sctChoiceType = sctSettings.choiceType || 'single';
-        const sctScale = sctSettings.scale || 5;
-        
-        // Fallback: Generate default options if options array is empty
-        let sctOptions = question.options || [];
-        if (sctOptions.length === 0) {
-          // Auto-generate default labels based on scale
-          sctOptions = sctScale === 3 
-            ? ['Disagree', 'Neutral', 'Agree']
-            : sctScale === 5
-            ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
-            : sctScale === 7
-            ? ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree']
-            : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Slightly Disagree', 'Slightly Agree', 'Somewhat Agree', 'Agree', 'Strongly Agree', 'Completely Agree'];
-        }
-        
-        if (sctChoiceType === 'multi') {
-          // Multi-select: render as checkboxes
-          const rawOptions = getTranslatedText(question, 'options') as string[];
-          const translatedSCTOptions = (rawOptions && rawOptions.length > 0) ? rawOptions : sctOptions;
-          return (
-            <div className="space-y-3">
-               {translatedSCTOptions?.map((option: any, index: number) => {
-                const optionValue = typeof option === 'string' ? option : (option.value || option.text || option.label || option);
-                const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
-                const isSelected = (responses[questionId] || []).includes(optionValue);
-                return (
-                  <div
-                    key={index}
-                    onClick={() => !isSubmitted && handleMultipleChoiceToggle(questionId, optionValue)}
-                    className={`flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
-                      isSubmitted ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
-                    } ${
-                      isSelected ? "border-qsights-blue bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <Square
-                      className={`w-5 h-5 ${isSelected ? "text-qsights-blue fill-qsights-blue" : "text-gray-400"}`}
-                    />
-                    <span className="text-sm text-gray-700">{optionLabel}</span>
-                    {isSubmitted && isSelected && (
-                      <span className="ml-auto text-xs text-gray-500">(Submitted)</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        } else {
-          // Single choice: render as radio buttons
-          const rawOptions = getTranslatedText(question, 'options') as string[];
-          const translatedSCTOptions = (rawOptions && rawOptions.length > 0) ? rawOptions : sctOptions;
-          return (
-            <div className="space-y-3">
-              {translatedSCTOptions?.map((option: any, index: number) => {
-                const optionValue = typeof option === 'string' ? option : (option.value || option.text || option.label || option);
-                const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
-                const isSelected = responses[questionId] === optionValue;
-                
-                return (
-                  <div
-                    key={index}
-                    onClick={() => !isSubmitted && handleResponseChange(questionId, optionValue)}
-                    className={`flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
-                      isSubmitted ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
-                    } ${
-                      isSelected ? "border-qsights-blue bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <Circle
-                      className={`w-5 h-5 ${
-                        isSelected
-                          ? "text-qsights-blue fill-qsights-blue"
-                          : "text-gray-400"
-                      }`}
-                    />
-                    <span className="text-sm text-gray-700">{optionLabel}</span>
-                    {isSubmitted && isSelected && (
-                      <span className="ml-auto text-xs text-gray-500">(Submitted)</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        }
-
       case "information":
         // Information block - display only, no response needed
         // Check for hyperlinks in question directly or in settings
@@ -3116,412 +2874,182 @@ export default function TakeActivityPage() {
       assessmentResult
     });
 
-    // Check if we should show banner/footer on thank you page
-    const showThankYouBanner = activity?.landing_config?.thankYouShowBanner !== false && activity?.landing_config?.bannerBackgroundColor;
-    const showThankYouFooter = activity?.landing_config?.thankYouShowFooter !== false && activity?.landing_config?.footerEnabled !== false;
-
     return (
-      <div 
-        className="min-h-screen flex flex-col relative"
-        style={{
-          backgroundColor: activity?.landing_config?.backgroundStyle === "solid" || !activity?.landing_config?.backgroundStyle
-            ? (activity?.landing_config?.backgroundColor || "#F9FAFB")
-            : activity?.landing_config?.backgroundStyle === "gradient"
-            ? undefined
-            : undefined,
-          backgroundImage: activity?.landing_config?.backgroundStyle === "gradient"
-            ? `linear-gradient(to bottom right, ${activity?.landing_config?.gradientFrom || "#F3F4F6"}, ${activity?.landing_config?.gradientTo || "#DBEAFE"})`
-            : undefined,
-        }}
-      >
-        {/* Background Image with Opacity - Same as Landing Page */}
-        {activity?.landing_config?.backgroundStyle === "image" && activity?.landing_config?.backgroundImageUrl && (
-          <div 
-            className="fixed inset-0 z-0"
-            style={{
-              backgroundImage: `url(${activity.landing_config.backgroundImageUrl})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              backgroundAttachment: "fixed",
-              opacity: (activity?.landing_config?.backgroundImageOpacity ?? 100) / 100,
-            }}
-          />
-        )}
+      <div className="h-screen overflow-hidden flex items-center justify-center bg-gradient-to-br from-cyan-50 via-white to-blue-50">
+        <div className="w-full max-w-2xl px-6">
+          {isAssessment && assessmentResult ? (
+            // Assessment Results - Typeform-inspired design
+            <div className="text-center space-y-6 animate-in fade-in duration-700">
+              {/* Main Icon */}
+              <div className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center transform transition-all duration-500 ${
+                assessmentResult.assessmentResult === 'pass' 
+                  ? 'bg-green-500 shadow-lg shadow-green-200' 
+                  : 'bg-orange-500 shadow-lg shadow-orange-200'
+              }`}>
+                {assessmentResult.assessmentResult === 'pass' ? (
+                  <CheckCircle className="w-11 h-11 text-white" />
+                ) : (
+                  <span className="text-4xl">⚠️</span>
+                )}
+              </div>
 
-        {/* Top Banner on Thank You Page - Same structure as Landing Page */}
-        {showThankYouBanner && (
-          <div 
-            className="w-full flex-shrink-0 relative z-10" 
-            style={{ 
-              backgroundColor: activity.landing_config.bannerBackgroundColor || "#3B82F6",
-              height: activity.landing_config.bannerHeight || "120px",
-              backgroundImage: (presignedBannerUrl || activity.landing_config.bannerImageUrl) ? `url(${presignedBannerUrl || activity.landing_config.bannerImageUrl})` : undefined,
-              backgroundSize: "cover",
-              backgroundPosition: activity.landing_config.bannerImagePosition || "center",
-            }}
-          >
-            {/* Mobile: Stacked Layout */}
-            <div className="flex flex-col md:hidden items-center justify-center gap-3 w-full pt-2 h-full">
-              {activity?.landing_config?.logoUrl && (
-                <img 
-                  src={presignedLogoUrl || activity.landing_config.logoUrl} 
-                  alt="Logo" 
-                  className="object-contain"
-                  style={{
-                    height: activity.landing_config.logoSize === 'small' ? '32px' 
-                      : activity.landing_config.logoSize === 'large' ? '56px' 
-                      : '44px'
-                  }}
-                />
-              )}
-              {activity?.landing_config?.bannerText && (
-                <h1 
-                  className="text-lg font-bold text-center"
-                  style={{ color: activity.landing_config.bannerTextColor || "#FFFFFF" }}
-                >
-                  {activity.landing_config.bannerText}
-                </h1>
-              )}
-            </div>
-            {/* Desktop: Absolutely position logo and text for perfect centering */}
-            <div className="hidden md:block w-full h-full relative">
-              {/* Logo - Left */}
-              {activity.landing_config.logoPosition === 'left' && activity?.landing_config?.logoUrl && (
-                <div className="absolute left-0 pl-24 flex items-center h-full z-10">
-                  <img 
-                    src={presignedLogoUrl || activity.landing_config.logoUrl} 
-                    alt="Logo" 
-                    className="object-contain"
-                    style={{
-                      height: activity.landing_config.logoSize === 'small' ? '40px' 
-                        : activity.landing_config.logoSize === 'large' ? '80px' 
-                        : '60px'
-                    }}
-                  />
-                </div>
-              )}
-              {/* Logo - Right */}
-              {activity.landing_config.logoPosition === 'right' && activity?.landing_config?.logoUrl && (
-                <div className="absolute right-0 pr-24 flex items-center h-full z-10">
-                  <img 
-                    src={presignedLogoUrl || activity.landing_config.logoUrl} 
-                    alt="Logo" 
-                    className="object-contain"
-                    style={{
-                      height: activity.landing_config.logoSize === 'small' ? '40px' 
-                        : activity.landing_config.logoSize === 'large' ? '80px' 
-                        : '60px'
-                    }}
-                  />
-                </div>
-              )}
-              {/* Banner Text/Title - Positioned based on config */}
-              {activity?.landing_config?.bannerText && (
-                <div className={`absolute inset-0 flex items-center w-full h-full pointer-events-none z-20 ${
-                  activity.landing_config.bannerTextPosition === 'left' ? 'justify-start pl-24' : 
-                  activity.landing_config.bannerTextPosition === 'right' ? 'justify-end pr-24' : 'justify-center'
-                }`}>
-                  <h1 
-                    className="font-bold"
-                    style={{ 
-                      color: activity.landing_config.bannerTextColor || "#FFFFFF", 
-                      margin: 0,
-                      fontSize: activity.landing_config.bannerTextSize === 'small' ? '1.25rem' :
-                               activity.landing_config.bannerTextSize === 'large' ? '2rem' :
-                               activity.landing_config.bannerTextSize === 'xlarge' ? '2.5rem' : '1.5rem'
-                    }}
-                  >
-                    {activity.landing_config.bannerText}
-                  </h1>
-                </div>
-              )}
-              {/* Logo Center - Only when no text */}
-              {activity.landing_config.logoPosition === 'center' && activity?.landing_config?.logoUrl && !activity?.landing_config?.bannerText && (
-                <div className="w-full flex justify-center items-center h-full z-10">
-                  <img 
-                    src={presignedLogoUrl || activity.landing_config.logoUrl} 
-                    alt="Logo" 
-                    className="object-contain"
-                    style={{
-                      height: activity.landing_config.logoSize === 'small' ? '40px' 
-                        : activity.landing_config.logoSize === 'large' ? '80px' 
-                        : '60px'
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+              {/* Title */}
+              <h1 className="text-3xl font-bold text-gray-900">
+                {assessmentResult.assessmentResult === 'pass' ? 'Well done!' : 'Assessment Complete'}
+              </h1>
 
-        {/* Main Content - Centered */}
-        <div className="flex-1 flex items-center justify-center overflow-auto py-8 relative z-10">
-          <div className="w-full max-w-2xl px-6">
-            {isAssessment && assessmentResult ? (
-              // Assessment Results - Typeform-inspired design
-              <div className="text-center space-y-6 animate-in fade-in duration-700">
-                {/* Main Icon */}
-                <div className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center transform transition-all duration-500 ${
-                  assessmentResult.assessmentResult === 'pass' 
-                    ? 'bg-green-500 shadow-lg shadow-green-200' 
-                    : 'bg-orange-500 shadow-lg shadow-orange-200'
+              {/* Score Card - Compact & Clean */}
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 space-y-4">
+                {/* Score */}
+                <div>
+                  <div className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">Your Score</div>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-4xl font-bold text-gray-900">{assessmentResult.correctAnswersCount}</span>
+                    <span className="text-2xl font-semibold text-gray-400">/</span>
+                    <span className="text-4xl font-bold text-gray-400">{assessmentResult.totalQuestions}</span>
+                  </div>
+                  <div className="mt-2 text-xl font-semibold text-gray-600">
+                    {assessmentResult.score?.toFixed(0)}%
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-200"></div>
+
+                {/* Status */}
+                <div className={`py-3 px-6 rounded-xl ${
+                  assessmentResult.assessmentResult === 'pass'
+                    ? 'bg-green-50 text-green-700'
+                    : 'bg-orange-50 text-orange-700'
                 }`}>
-                  {assessmentResult.assessmentResult === 'pass' ? (
-                    <CheckCircle className="w-11 h-11 text-white" />
-                  ) : (
-                    <span className="text-4xl">⚠️</span>
+                  <div className="font-semibold text-lg">
+                    {assessmentResult.assessmentResult === 'pass' 
+                      ? '✓ Passed' 
+                      : '✗ Not Passed'}
+                  </div>
+                  {activity?.pass_percentage && (
+                    <div className="text-sm opacity-75 mt-1">
+                      Pass mark: {activity.pass_percentage}%
+                    </div>
                   )}
                 </div>
 
-                {/* Title */}
-                <h1 className="text-3xl font-bold text-gray-900">
-                  {assessmentResult.assessmentResult === 'pass' ? 'Well done!' : 'Assessment Complete'}
-                </h1>
-
-                {/* Score Card - Compact & Clean */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 space-y-4">
-                  {/* Score */}
-                  <div>
-                    <div className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">Your Score</div>
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-4xl font-bold text-gray-900">{assessmentResult.correctAnswersCount}</span>
-                      <span className="text-2xl font-semibold text-gray-400">/</span>
-                      <span className="text-4xl font-bold text-gray-400">{assessmentResult.totalQuestions}</span>
-                    </div>
-                    <div className="mt-2 text-xl font-semibold text-gray-600">
-                      {assessmentResult.score?.toFixed(0)}%
-                    </div>
-                  </div>
-
-                  {/* Divider */}
-                  <div className="border-t border-gray-200"></div>
-
-                  {/* Status */}
-                  <div className={`py-3 px-6 rounded-xl ${
-                    assessmentResult.assessmentResult === 'pass'
-                      ? 'bg-green-50 text-green-700'
-                      : 'bg-orange-50 text-orange-700'
-                  }`}>
-                    <div className="font-semibold text-lg">
-                      {assessmentResult.assessmentResult === 'pass' 
-                        ? '✓ Passed' 
-                        : '✗ Not Passed'}
-                    </div>
-                    {activity?.pass_percentage && (
-                      <div className="text-sm opacity-75 mt-1">
-                        Pass mark: {activity.pass_percentage}%
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Attempt Info */}
-                  <div className="text-xs text-gray-500">
-                    Attempt #{assessmentResult.attemptNumber}
-                  </div>
+                {/* Attempt Info */}
+                <div className="text-xs text-gray-500">
+                  Attempt #{assessmentResult.attemptNumber}
                 </div>
+              </div>
 
-                {/* Retake Section */}
-                {assessmentResult.assessmentResult !== 'pass' && assessmentResult.canRetake && (
-                  <div className="bg-blue-50 rounded-xl p-6 space-y-3 border border-blue-100">
-                    <p className="text-gray-700 font-medium">
-                      {assessmentResult.retakesRemaining === null 
-                        ? 'You can retake this assessment'
-                        : assessmentResult.retakesRemaining === 1
-                        ? '1 retake remaining'
-                        : `${assessmentResult.retakesRemaining} retakes remaining`
-                      }
-                    </p>
-                    <button
-                      onClick={handleRetake}
-                      className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200"
-                    >
-                      Try Again
-                    </button>
-                  </div>
-                )}
+              {/* Retake Section */}
+              {assessmentResult.assessmentResult !== 'pass' && assessmentResult.canRetake && (
+                <div className="bg-blue-50 rounded-xl p-6 space-y-3 border border-blue-100">
+                  <p className="text-gray-700 font-medium">
+                    {assessmentResult.retakesRemaining === null 
+                      ? 'You can retake this assessment'
+                      : assessmentResult.retakesRemaining === 1
+                      ? '1 retake remaining'
+                      : `${assessmentResult.retakesRemaining} retakes remaining`
+                    }
+                  </p>
+                  <button
+                    onClick={handleRetake}
+                    className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
 
-                {/* No retakes message */}
-                {assessmentResult.assessmentResult !== 'pass' && !assessmentResult.canRetake && (
-                  <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
-                    <p className="text-sm text-orange-800">
-                      No retakes remaining
-                    </p>
-                  </div>
-                )}
+              {/* No retakes message */}
+              {assessmentResult.assessmentResult !== 'pass' && !assessmentResult.canRetake && (
+                <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
+                  <p className="text-sm text-orange-800">
+                    No retakes remaining
+                  </p>
+                </div>
+              )}
 
-                {/* Confirmation message */}
-                <p className="text-sm text-gray-500 pt-2">
+              {/* Footer */}
+              <p className="text-sm text-gray-500 pt-2">
+                A confirmation has been sent to your email
+              </p>
+              
+              {/* Take Event Again Button - Kiosk Mode (for assessments too) */}
+              {activity?.landing_config?.enableTakeEventAgainButton && !token && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={handleTakeEventAgain}
+                    className="w-full max-w-md mx-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                    Take Event Again
+                  </button>
+                  <p className="text-xs text-gray-500 mt-3">
+                    Start this event for a new participant
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            // General Thank You (Non-Assessment) - Clean & Simple
+            <div className="text-center space-y-6 animate-in fade-in duration-700">
+              {isPreview && (
+                <div className="mb-4 px-4 py-2 bg-yellow-100 border border-yellow-300 rounded-lg">
+                  <p className="text-sm text-yellow-800 font-semibold">
+                    🔍 Preview Mode - No data was saved
+                  </p>
+                </div>
+              )}
+              <div 
+                className="mx-auto w-20 h-20 rounded-full flex items-center justify-center shadow-lg"
+                style={{ 
+                  backgroundColor: activity?.landing_config?.thankYouIconColor || "#10B981",
+                  boxShadow: `0 10px 25px -5px ${activity?.landing_config?.thankYouIconColor || "#10B981"}33`
+                }}
+              >
+                <CheckCircle className="w-11 h-11 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {activity?.landing_config?.thankYouTitle || "Thank you!"}
+              </h1>
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+                <p className="text-lg text-gray-700 mb-2">
+                  {isPreview 
+                    ? "Preview completed" 
+                    : (activity?.landing_config?.thankYouMessage || "Your response has been submitted")
+                  }
+                </p>
+                <p className="text-sm text-gray-500">
+                  {isPreview
+                    ? "This was a preview - responses were not saved"
+                    : (activity?.landing_config?.thankYouSubMessage || "We appreciate your participation")
+                  }
+                </p>
+              </div>
+              {!isPreview && (activity?.landing_config?.thankYouShowConfirmation !== false) && (
+                <p className="text-sm text-gray-500">
                   A confirmation has been sent to your email
                 </p>
-                
-                {/* Take Event Again Button - Kiosk Mode (for assessments too) */}
-                {activity?.landing_config?.enableTakeEventAgainButton && !token && (
-                  <div className="mt-6 pt-6 border-t border-gray-200">
-                    <button
-                      onClick={handleTakeEventAgain}
-                      className="w-full max-w-md mx-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md"
-                    >
-                      <UserPlus className="w-5 h-5" />
-                      Take Event Again
-                    </button>
-                    <p className="text-xs text-gray-500 mt-3">
-                      Start this event for a new participant
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              // General Thank You (Non-Assessment) - Clean & Simple
-              <div className="text-center space-y-6 animate-in fade-in duration-700">
-                {isPreview && (
-                  <div className="mb-4 px-4 py-2 bg-yellow-100 border border-yellow-300 rounded-lg">
-                    <p className="text-sm text-yellow-800 font-semibold">
-                      🔍 Preview Mode - No data was saved
-                    </p>
-                  </div>
-                )}
-                <div 
-                  className="mx-auto w-20 h-20 rounded-full flex items-center justify-center shadow-lg"
-                  style={{ 
-                    backgroundColor: activity?.landing_config?.thankYouIconColor || "#10B981",
-                    boxShadow: `0 10px 25px -5px ${activity?.landing_config?.thankYouIconColor || "#10B981"}33`
-                  }}
-                >
-                  <CheckCircle className="w-11 h-11 text-white" />
-                </div>
-                <h1 className="text-3xl font-bold text-gray-900">
-                  {activity?.landing_config?.thankYouTitle || "Thank you!"}
-                </h1>
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-                  <p className="text-lg text-gray-700 mb-2">
-                    {isPreview 
-                      ? "Preview completed" 
-                      : (activity?.landing_config?.thankYouMessage || "Your response has been submitted")
-                    }
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {isPreview
-                      ? "This was a preview - responses were not saved"
-                      : (activity?.landing_config?.thankYouSubMessage || "We appreciate your participation")
-                    }
+              )}
+              
+              {/* Take Event Again Button - Kiosk Mode */}
+              {activity?.landing_config?.enableTakeEventAgainButton && !token && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={handleTakeEventAgain}
+                    className="w-full max-w-md mx-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                    Take Event Again
+                  </button>
+                  <p className="text-xs text-gray-500 mt-3">
+                    Start this event for a new participant
                   </p>
                 </div>
-                {!isPreview && (activity?.landing_config?.thankYouShowConfirmation !== false) && (
-                  <p className="text-sm text-gray-500">
-                    A confirmation has been sent to your email
-                  </p>
-                )}
-                
-                {/* Take Event Again Button - Kiosk Mode */}
-                {activity?.landing_config?.enableTakeEventAgainButton && !token && (
-                  <div className="mt-6 pt-6 border-t border-gray-200">
-                    <button
-                      onClick={handleTakeEventAgain}
-                      className="w-full max-w-md mx-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md"
-                    >
-                      <UserPlus className="w-5 h-5" />
-                      Take Event Again
-                    </button>
-                    <p className="text-xs text-gray-500 mt-3">
-                      Start this event for a new participant
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Footer on Thank You Page - Same structure as Landing Page */}
-        {showThankYouFooter && (
-          <div 
-            className="w-full flex-shrink-0 flex items-center py-4 md:py-0 relative z-30"
-            style={{ 
-              backgroundColor: activity?.landing_config?.footerBackgroundColor || "#F1F5F9",
-              minHeight: activity?.landing_config?.footerHeight || "80px",
-              pointerEvents: 'auto'
-            }}
-          >
-            <div className="w-full h-full relative">
-              <div className="flex flex-col md:grid md:grid-cols-3 items-center gap-3 md:gap-4 w-full h-full px-4">
-                {/* Left Section */}
-                <div className="flex justify-center md:justify-start items-center w-full h-full">
-                  {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'left' && (
-                    <img 
-                      src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
-                      alt="Footer Logo" 
-                      className="object-contain"
-                      style={{
-                        height: activity.landing_config.footerLogoSize === 'small' ? '24px' :
-                                activity.landing_config.footerLogoSize === 'large' ? '40px' : '32px'
-                      }}
-                    />
-                  )}
-                  {activity?.landing_config?.footerText && activity.landing_config.footerTextPosition === 'left' && (
-                    <p 
-                      className="text-xs md:text-sm text-center md:text-left"
-                      style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
-                      dangerouslySetInnerHTML={getFooterHtml(
-                        activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
-                      )}
-                    />
-                  )}
-                </div>
-                
-                {/* Center Section */}
-                <div className="flex justify-center items-center w-full h-full">
-                  {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'center' && (
-                    <img 
-                      src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
-                      alt="Footer Logo" 
-                      className="object-contain"
-                      style={{
-                        height: activity.landing_config.footerLogoSize === 'small' ? '24px' :
-                                activity.landing_config.footerLogoSize === 'large' ? '40px' : '32px'
-                      }}
-                    />
-                  )}
-                  {activity?.landing_config?.footerText && activity.landing_config.footerTextPosition === 'center' && (
-                    <p 
-                      className="text-xs md:text-sm text-center"
-                      style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
-                      dangerouslySetInnerHTML={getFooterHtml(
-                        activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
-                      )}
-                    />
-                  )}
-                </div>
-                
-                {/* Right Section */}
-                <div className="flex justify-center md:justify-end items-center w-full h-full">
-                  {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'right' && (
-                    <img 
-                      src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
-                      alt="Footer Logo" 
-                      className="object-contain"
-                      style={{
-                        height: activity.landing_config.footerLogoSize === 'small' ? '24px' :
-                                activity.landing_config.footerLogoSize === 'large' ? '40px' : '32px'
-                      }}
-                    />
-                  )}
-                  {activity?.landing_config?.footerText && activity.landing_config.footerTextPosition === 'right' && (
-                    <p 
-                      className="text-xs md:text-sm text-center md:text-right"
-                      style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
-                      dangerouslySetInnerHTML={getFooterHtml(
-                        activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
-                      )}
-                    />
-                  )}
-                </div>
-              </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }
@@ -3738,7 +3266,7 @@ export default function TakeActivityPage() {
               backgroundColor: activity.landing_config.bannerBackgroundColor || "#3B82F6",
               height: activity.landing_config.bannerHeight || "120px",
               zIndex: 20,
-              backgroundImage: (presignedBannerUrl || activity.landing_config.bannerImageUrl) ? `url(${presignedBannerUrl || activity.landing_config.bannerImageUrl})` : undefined,
+              backgroundImage: activity.landing_config.bannerImageUrl ? `url(${activity.landing_config.bannerImageUrl})` : undefined,
               backgroundSize: "cover",
               backgroundPosition: activity.landing_config.bannerImagePosition || "center",
             }}
@@ -3747,7 +3275,7 @@ export default function TakeActivityPage() {
             <div className="flex flex-col md:hidden items-center justify-center gap-3 w-full pt-2 h-full">
               {activity?.landing_config?.logoUrl && (
                 <img 
-                  src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                  src={activity.landing_config.logoUrl} 
                   alt="Logo" 
                   className="object-contain"
                   style={{
@@ -3770,9 +3298,9 @@ export default function TakeActivityPage() {
             <div className="hidden md:block w-full h-full relative">
               {/* Logo - Left */}
               {activity.landing_config.logoPosition === 'left' && activity?.landing_config?.logoUrl && (
-                <div className="absolute left-0 pl-24 flex items-center h-full z-10">
+                <div className="absolute left-0 pl-10 flex items-center h-full z-10">
                   <img 
-                    src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                    src={activity.landing_config.logoUrl} 
                     alt="Logo" 
                     className="object-contain"
                     style={{
@@ -3785,9 +3313,9 @@ export default function TakeActivityPage() {
               )}
               {/* Logo - Right */}
               {activity.landing_config.logoPosition === 'right' && activity?.landing_config?.logoUrl && (
-                <div className="absolute right-0 pr-24 flex items-center h-full z-10">
+                <div className="absolute right-0 pr-10 flex items-center h-full z-10">
                   <img 
-                    src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                    src={activity.landing_config.logoUrl} 
                     alt="Logo" 
                     className="object-contain"
                     style={{
@@ -3801,8 +3329,8 @@ export default function TakeActivityPage() {
               {/* Banner Text/Title - Positioned based on config */}
               {activity?.landing_config?.bannerText && (
                 <div className={`absolute inset-0 flex items-center w-full h-full pointer-events-none z-20 ${
-                  activity.landing_config.bannerTextPosition === 'left' ? 'justify-start pl-24' : 
-                  activity.landing_config.bannerTextPosition === 'right' ? 'justify-end pr-24' : 'justify-center'
+                  activity.landing_config.bannerTextPosition === 'left' ? 'justify-start pl-10' : 
+                  activity.landing_config.bannerTextPosition === 'right' ? 'justify-end pr-10' : 'justify-center'
                 }`}>
                   <h1 
                     className="font-bold"
@@ -3822,7 +3350,7 @@ export default function TakeActivityPage() {
               {activity.landing_config.logoPosition === 'center' && activity?.landing_config?.logoUrl && !activity?.landing_config?.bannerText && (
                 <div className="w-full flex justify-center items-center h-full z-10">
                   <img 
-                    src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                    src={activity.landing_config.logoUrl} 
                     alt="Logo" 
                     className="object-contain"
                     style={{
@@ -3850,7 +3378,7 @@ export default function TakeActivityPage() {
                   }`}
                 >
                   <img 
-                    src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                    src={activity.landing_config.logoUrl} 
                     alt="Logo" 
                     className="object-contain"
                     style={{
@@ -4307,11 +3835,10 @@ export default function TakeActivityPage() {
         {/* Footer */}
         {(activity?.landing_config?.footerEnabled !== false) && (
           <div 
-            className="w-full flex items-center py-4 md:py-0 relative z-30"
+            className="w-full flex items-center py-4 md:py-0 relative z-20"
             style={{ 
               backgroundColor: activity?.landing_config?.footerBackgroundColor || "#F1F5F9",
-              minHeight: activity?.landing_config?.footerHeight || "80px",
-              pointerEvents: 'auto'
+              minHeight: activity?.landing_config?.footerHeight || "80px"
             }}
           >
             {/* Full width container with same padding as banner for consistency */}
@@ -4322,7 +3849,7 @@ export default function TakeActivityPage() {
                 <div className="flex justify-center md:justify-start items-center w-full h-full">
                   {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'left' && (
                     <img 
-                      src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
+                      src={activity.landing_config.footerLogoUrl} 
                       alt="Footer Logo" 
                       className="object-contain"
                       style={{
@@ -4347,7 +3874,7 @@ export default function TakeActivityPage() {
                 <div className="flex justify-center items-center w-full h-full">
                   {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'center' && (
                     <img 
-                      src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
+                      src={activity.landing_config.footerLogoUrl} 
                       alt="Footer Logo" 
                       className="object-contain"
                       style={{
@@ -4372,7 +3899,7 @@ export default function TakeActivityPage() {
                 <div className="flex justify-center md:justify-end items-center w-full h-full pr-0">
                   {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'right' && (
                     <img 
-                      src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
+                      src={activity.landing_config.footerLogoUrl} 
                       alt="Footer Logo" 
                       className="object-contain"
                       style={{
@@ -4449,7 +3976,7 @@ export default function TakeActivityPage() {
           style={{ 
             backgroundColor: activity.landing_config.bannerBackgroundColor || "#3B82F6",
             height: activity.landing_config.bannerHeight || "120px",
-            backgroundImage: (presignedBannerUrl || activity.landing_config.bannerImageUrl) ? `url(${presignedBannerUrl || activity.landing_config.bannerImageUrl})` : undefined,
+            backgroundImage: activity.landing_config.bannerImageUrl ? `url(${activity.landing_config.bannerImageUrl})` : undefined,
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}
@@ -4458,7 +3985,7 @@ export default function TakeActivityPage() {
           <div className="flex flex-col md:hidden items-center justify-center gap-3 w-full pt-2 h-full">
             {activity?.landing_config?.logoUrl && (
               <img 
-                src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                src={activity.landing_config.logoUrl} 
                 alt="Logo" 
                 className="object-contain"
                 style={{
@@ -4482,9 +4009,9 @@ export default function TakeActivityPage() {
           <div className="hidden md:block w-full h-full relative">
             {/* Logo - Left */}
             {activity?.landing_config && activity.landing_config.logoPosition === 'left' && activity.landing_config.logoUrl && (
-              <div className="absolute left-0 pl-24 flex items-center h-full z-10">
+              <div className="absolute left-0 pl-10 flex items-center h-full z-10">
                 <img 
-                  src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                  src={activity.landing_config.logoUrl} 
                   alt="Logo" 
                   className="object-contain"
                   style={{
@@ -4498,9 +4025,9 @@ export default function TakeActivityPage() {
             
             {/* Logo - Right */}
             {activity?.landing_config && activity.landing_config.logoPosition === 'right' && activity.landing_config.logoUrl && (
-              <div className="absolute right-0 pr-24 flex items-center h-full z-10">
+              <div className="absolute right-0 pr-10 flex items-center h-full z-10">
                 <img 
-                  src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                  src={activity.landing_config.logoUrl} 
                   alt="Logo" 
                   className="object-contain"
                   style={{
@@ -4528,7 +4055,7 @@ export default function TakeActivityPage() {
             {activity?.landing_config && activity.landing_config.logoPosition === 'center' && activity.landing_config.logoUrl && !activity.landing_config.bannerText && (
               <div className="w-full flex justify-center items-center h-full z-10">
                 <img 
-                  src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                  src={activity.landing_config.logoUrl} 
                   alt="Logo" 
                   className="object-contain"
                   style={{
@@ -4545,8 +4072,7 @@ export default function TakeActivityPage() {
 
       <div className="p-4 md:p-6 lg:p-8 relative z-10" style={{ marginTop: shouldShowBanner ? (activity?.landing_config?.bannerHeight || "120px") : 0 }}>
         <div className="max-w-5xl mx-auto space-y-4">
-          {/* Ultra Modern Activity Header - Respects hideContentHeader setting */}
-          {!activity?.landing_config?.hideContentHeader && (
+          {/* Ultra Modern Activity Header */}
           <div 
             className="relative overflow-hidden rounded-3xl shadow-2xl border border-white/10"
             style={{
@@ -4561,8 +4087,8 @@ export default function TakeActivityPage() {
             {/* Content Container */}
             <div className="relative z-10 px-6 py-6 md:px-10 md:py-8">
               
-              {/* Content Header - Event Title & Description (Default) - controlled by showContentHeaderTitle */}
-              {activity?.landing_config?.showContentHeaderTitle !== false && (!activity?.landing_config?.contentHeaderType || activity?.landing_config?.contentHeaderType === "event") && (
+              {/* Content Header - Event Title & Description (Default) */}
+              {(!activity?.landing_config?.contentHeaderType || activity?.landing_config?.contentHeaderType === "event") && (
                 <>
                   {/* Top Row: Title + Type Badge */}
                   <div className="flex items-start justify-between gap-4 mb-6">
@@ -4585,11 +4111,11 @@ export default function TakeActivityPage() {
                 </>
               )}
               
-              {/* Content Header - Logo - controlled by showContentHeaderTitle */}
-              {activity?.landing_config?.showContentHeaderTitle !== false && activity?.landing_config?.contentHeaderType === "logo" && activity?.landing_config?.contentHeaderLogoUrl && (
+              {/* Content Header - Logo */}
+              {activity?.landing_config?.contentHeaderType === "logo" && activity?.landing_config?.contentHeaderLogoUrl && (
                 <div className="flex items-center justify-center mb-6">
                   <img 
-                    src={presignedContentHeaderLogoUrl || activity.landing_config.contentHeaderLogoUrl} 
+                    src={activity.landing_config.contentHeaderLogoUrl} 
                     alt="Header Logo" 
                     className="object-contain"
                     style={{
@@ -4601,8 +4127,8 @@ export default function TakeActivityPage() {
                 </div>
               )}
               
-              {/* Content Header - Custom Text - controlled by showContentHeaderTitle */}
-              {activity?.landing_config?.showContentHeaderTitle !== false && activity?.landing_config?.contentHeaderType === "custom" && (
+              {/* Content Header - Custom Text */}
+              {activity?.landing_config?.contentHeaderType === "custom" && (
                 <div className="mb-6">
                   {activity?.landing_config?.contentHeaderCustomTitle && (
                     <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight mb-3">
@@ -4617,13 +4143,10 @@ export default function TakeActivityPage() {
                 </div>
               )}
 
-              {/* Info Grid - Controlled by individual showContentHeader settings */}
-              {(activity?.landing_config?.showContentHeaderStartDate !== false || 
-                activity?.landing_config?.showContentHeaderEndDate !== false || 
-                activity?.landing_config?.showContentHeaderQuestions !== false) && (
+              {/* Info Grid - Always show START DATE, END DATE, QUESTIONS */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Start Date - controlled by showContentHeaderStartDate */}
-                {activity?.landing_config?.showContentHeaderStartDate !== false && activity.start_date && (
+                {/* Start Date */}
+                {activity.start_date && (
                   <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
                     <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
                       <Calendar className="w-5 h-5 text-white" />
@@ -4637,8 +4160,8 @@ export default function TakeActivityPage() {
                   </div>
                 )}
 
-                {/* End Date - controlled by showContentHeaderEndDate */}
-                {activity?.landing_config?.showContentHeaderEndDate !== false && activity.end_date && (
+                {/* End Date */}
+                {activity.end_date && (
                   <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
                     <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
                       <Calendar className="w-5 h-5 text-white" />
@@ -4652,8 +4175,8 @@ export default function TakeActivityPage() {
                   </div>
                 )}
 
-                {/* Questions Count - controlled by showContentHeaderQuestions */}
-                {activity?.landing_config?.showContentHeaderQuestions !== false && questionnaire?.sections && (
+                {/* Questions Count */}
+                {questionnaire?.sections && (
                   <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
                     <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
                       <FileText className="w-5 h-5 text-white" />
@@ -4667,13 +4190,11 @@ export default function TakeActivityPage() {
                   </div>
                 )}
               </div>
-              )}
             </div>
 
             {/* Gradient Border Bottom */}
             <div className="h-1 bg-gradient-to-r from-qsights-cyan via-cyan-400 to-cyan-500" />
           </div>
-          )}
 
         {/* Timer Display */}
         {activity?.time_limit_enabled && activity?.time_limit_minutes && started && !submitted && remainingSeconds !== null && (
@@ -4882,8 +4403,6 @@ export default function TakeActivityPage() {
                                 {question.description && (
                                   <p className="text-sm text-gray-500 mt-1">{question.description}</p>
                                 )}
-                                {/* Question Image */}
-                                {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                 <div className="mt-4">{renderQuestion(question)}</div>
                               </div>
                             </div>
@@ -4944,8 +4463,6 @@ export default function TakeActivityPage() {
                                 {question.description && (
                                   <p className="text-sm text-gray-500 mt-1">{question.description}</p>
                                 )}
-                                {/* Question Image */}
-                                {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                 <div className="mt-4">{renderQuestion(question)}</div>
                               </div>
                             </div>
@@ -5020,8 +4537,6 @@ export default function TakeActivityPage() {
                                       {question.description && (
                                         <p className="text-sm text-gray-500 mt-1">{question.description}</p>
                                       )}
-                                      {/* Question Image */}
-                                      {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                       <div className="mt-4">{renderQuestion(question)}</div>
                                     </div>
                                   </div>
@@ -5336,11 +4851,10 @@ export default function TakeActivityPage() {
       {/* Footer */}
       {(activity?.landing_config?.footerEnabled !== false) && (
         <div 
-          className="w-full px-4 md:px-8 flex items-center py-4 md:py-0 relative z-30"
+          className="w-full px-4 md:px-8 flex items-center py-4 md:py-0"
           style={{ 
             backgroundColor: activity?.landing_config?.footerBackgroundColor || "#F1F5F9",
-            minHeight: activity?.landing_config?.footerHeight || "80px",
-            pointerEvents: 'auto'
+            minHeight: activity?.landing_config?.footerHeight || "80px"
           }}
         >
           <div className="max-w-7xl mx-auto w-full">
@@ -5350,7 +4864,7 @@ export default function TakeActivityPage() {
               <div className="flex justify-center md:justify-start w-full">
                 {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'left' && (
                   <img 
-                    src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
+                    src={activity.landing_config.footerLogoUrl} 
                     alt="Footer Logo" 
                     className="object-contain"
                     style={{
@@ -5375,7 +4889,7 @@ export default function TakeActivityPage() {
               <div className="flex justify-center w-full">
                 {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'center' && (
                   <img 
-                    src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
+                    src={activity.landing_config.footerLogoUrl} 
                     alt="Footer Logo" 
                     className="object-contain"
                     style={{
@@ -5400,7 +4914,7 @@ export default function TakeActivityPage() {
               <div className="flex justify-center md:justify-end w-full">
                 {activity?.landing_config?.footerLogoUrl && activity.landing_config.footerLogoPosition === 'right' && (
                   <img 
-                    src={presignedFooterLogoUrl || activity.landing_config.footerLogoUrl} 
+                    src={activity.landing_config.footerLogoUrl} 
                     alt="Footer Logo" 
                     className="object-contain"
                     style={{

@@ -140,7 +140,7 @@ echo -e "${YELLOW}[9/10] Recording Deployment State${NC}"
 COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     sudo mkdir -p $DEPLOY_STATE_DIR
-    echo '$COMMIT_SHA' | sudo tee $DEPLOY_STATE_DIR/last_deployed_commit >/dev/null
+    echo '$COMMIT_SHA' | sudo tee $DEPLOY_STATE_DIR/last_frontend_deployed_commit >/dev/null
     echo '$BUILD_ID' | sudo tee $DEPLOY_STATE_DIR/last_frontend_build_id >/dev/null
     date -u +%Y-%m-%dT%H:%M:%SZ | sudo tee $DEPLOY_STATE_DIR/last_frontend_deployed_utc >/dev/null
     sudo chown -R ubuntu:ubuntu $DEPLOY_STATE_DIR
@@ -151,7 +151,17 @@ echo ""
 # Restart PM2
 echo -e "${YELLOW}[10/10] Restarting PM2${NC}"
 ssh -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
-    pm2 restart qsights-frontend-preprod 2>/dev/null || pm2 restart qsights-frontend || pm2 start npm --name qsights-frontend-preprod -- start
+    PIDS=\$(sudo lsof -tiTCP:3000 -sTCP:LISTEN 2>/dev/null || true)
+    if [ -n \"\$PIDS\" ]; then
+        echo 'Port 3000 already in use; stopping existing listener(s)...'
+        sudo kill \$PIDS 2>/dev/null || true
+        sleep 1
+    fi
+    if pm2 describe qsights-frontend-preprod >/dev/null 2>&1; then
+        pm2 restart qsights-frontend-preprod
+    else
+        pm2 start /home/ubuntu/ecosystem.preprod.config.js --only qsights-frontend-preprod
+    fi
     pm2 save
     sleep 2
     pm2 list | grep qsights-frontend

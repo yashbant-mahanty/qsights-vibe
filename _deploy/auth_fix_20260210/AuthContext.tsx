@@ -19,34 +19,58 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  // IMPORTANT: Avoid reading localStorage during initial render.
-  // Client Components are SSR-ed and then hydrated; reading client-only data
-  // during render causes hydration mismatches (React #418/#423).
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  // CRITICAL: Start with isLoading=true to prevent components from rendering before user is loaded
-  const [isLoading, setIsLoading] = useState(true);
-  const hasAttemptedLoad = useRef(false);
+// Helper to get backend token from cookies (same as api.ts)
+function getBackendToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  
+  const cookies = document.cookie.split(';');
+  const tokenCookie = cookies.find(c => c.trim().startsWith('backendToken='));
+  
+  if (!tokenCookie) return null;
+  
+  return decodeURIComponent(tokenCookie.split('=')[1]);
+}
 
-  const loadUser = async () => {
-    // Prevent infinite loops - only attempt once per mount
-    if (hasAttemptedLoad.current) {
+export function AuthProvider({ children }: { children: ReactNode }) {
+  // Initialize as null to avoid hydration mismatch
+  // Load cached user after hydration in useEffect
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const hasAttemptedLoad = useRef(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  const loadUser = async (force = false) => {
+    // Prevent infinite loops - only attempt once per mount unless forced
+    if (hasAttemptedLoad.current && !force) {
       return;
     }
     hasAttemptedLoad.current = true;
 
     try {
-      // IMPORTANT: In production, `/api/*` is routed to Laravel.
-      // Laravel sets `backendToken` as an HttpOnly cookie, so JS cannot read it.
-      // Rely on cookie-based auth: send credentials and do NOT require a Bearer token.
-      const response = await fetch('/api/auth/me', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          Accept: 'application/json',
-        },
-      });
+      // Get the backend token from cookies
+      const token = getBackendToken();
+      
+      // If no token, don't make the API call - just use cached user
+      if (!token) {
+        // Keep cached user if available, otherwise clear
+        if (!currentUser) {
+          setCurrentUser(null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('qsights_current_user');
+          }
+        }
+        return;
+      }
 
+      // Call Laravel backend directly with token
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
+      const response = await fetch(`${API_URL}/auth/me`, {
+        credentials: "include",
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setCurrentUser(data.user);
@@ -72,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     hasAttemptedLoad.current = false;
     setIsLoading(true);
-    await loadUser();
+    await loadUser(true); // Force reload
   };
 
   const clearUser = () => {
@@ -83,17 +107,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Load cached user AFTER hydration (prevents hydration mismatch)
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem('qsights_current_user');
-      if (cached) {
-        try {
-          setCurrentUser(JSON.parse(cached));
-        } catch {
-          // ignore
+    // Load cached user after hydration to avoid mismatch
+    if (!isHydrated) {
+      try {
+        const cached = localStorage.getItem('qsights_current_user');
+        if (cached) {
+          try {
+            setCurrentUser(JSON.parse(cached));
+          } catch (e) {
+            // Invalid cached data
+          }
         }
+      } catch (e) {
+        // localStorage not available (incognito mode, etc.)
       }
+      setIsHydrated(true);
     }
+    
     loadUser();
   }, []);
 

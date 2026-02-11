@@ -50,7 +50,9 @@ Recommended approach:
 - Frontend: `./deploy_frontend_preprod.sh`
 
 These scripts also write deployment state to:
-- `/home/ubuntu/deployments/preprod/last_deployed_commit`
+- `/home/ubuntu/deployments/preprod/last_backend_deployed_commit`
+- `/home/ubuntu/deployments/preprod/last_frontend_deployed_commit`
+- (legacy) `/home/ubuntu/deployments/preprod/last_deployed_commit`
 - `/home/ubuntu/deployments/preprod/last_frontend_build_id`
 
 ### Step B — Regression verification on Pre-Prod
@@ -76,7 +78,7 @@ This creates:
 - Frontend: `./deploy_frontend_prod.sh`
 
 **Hard gate rules in prod deploy scripts:**
-- Current commit must match `last_deployed_commit` on Pre-Prod
+- Current commit must match BOTH `last_backend_deployed_commit` and `last_frontend_deployed_commit` on Pre-Prod
 - `release/PROD_APPROVAL.txt` must exist and contain the current commit
 
 ## 4) Backups & storage

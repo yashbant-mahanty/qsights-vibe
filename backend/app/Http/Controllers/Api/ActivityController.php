@@ -823,27 +823,18 @@ class ActivityController extends Controller
         $activity = Activity::findOrFail($id);
         
         // Fetch participants with consistent logic matching event list
-        // Only include: 
-        // 1. Registered participants (is_guest=false, not anonymous, not preview)
+        // Include ALL active participants that can receive notifications:
+        // 1. Registered participants (is_guest=false, not preview)
         // 2. Anonymous participants (participant_type='anonymous', not preview)
-        // Exclude: Legacy guests without proper typing, Preview participants
+        // 3. Guests (is_guest=true, not preview) - these may need to receive notifications too
+        // Exclude ONLY: Preview participants
         $participants = $activity->participants()
             ->select('participants.id', 'participants.name', 'participants.email', 'participants.phone', 
                      'participants.status', 'participants.is_guest', 'participants.is_preview', 'participants.additional_data', 'participants.created_at')
             ->withPivot('joined_at')
-            ->where('is_preview', false) // Exclude preview participants
-            ->where(function($query) {
-                // Include registered participants (is_guest=false, not marked as anonymous)
-                $query->where(function($q) {
-                    $q->where('is_guest', false)
-                      ->where(function($q2) {
-                          $q2->whereNull('additional_data')
-                             ->orWhereRaw("(additional_data->>'participant_type' IS NULL OR additional_data->>'participant_type' != 'anonymous')");
-                      });
-                })
-                // OR include anonymous participants (marked with participant_type='anonymous')
-                ->orWhereRaw("additional_data->>'participant_type' = 'anonymous'");
-            })
+            ->where('is_preview', false) // Exclude preview participants only
+            ->whereNotNull('email') // Must have email for notifications
+            ->where('email', '!=', '') // Email must not be empty
             ->get()
             ->map(function ($participant) {
                 // Determine participant type for display
@@ -851,7 +842,14 @@ class ActivityController extends Controller
                     ? $participant->additional_data 
                     : ($participant->additional_data ? json_decode($participant->additional_data, true) : []);
                 
-                $participantType = $additionalData['participant_type'] ?? 'registered';
+                // Determine type: anonymous, guest, or registered
+                if (isset($additionalData['participant_type']) && $additionalData['participant_type'] === 'anonymous') {
+                    $participantType = 'anonymous';
+                } elseif ($participant->is_guest) {
+                    $participantType = 'guest';
+                } else {
+                    $participantType = 'registered';
+                }
                 
                 return [
                     'id' => $participant->id,
@@ -860,7 +858,7 @@ class ActivityController extends Controller
                     'phone' => $participant->phone,
                     'status' => $participant->status,
                     'is_guest' => $participant->is_guest,
-                    'type' => $participantType, // 'registered' or 'anonymous'
+                    'type' => $participantType,
                     'joined_at' => $participant->pivot->joined_at,
                     'created_at' => $participant->created_at,
                 ];
@@ -869,6 +867,7 @@ class ActivityController extends Controller
         // Count breakdown
         $activeCount = $participants->where('status', 'active')->where('type', 'registered')->count();
         $anonymousCount = $participants->where('status', 'active')->where('type', 'anonymous')->count();
+        $guestCount = $participants->where('status', 'active')->where('type', 'guest')->count();
         $inactiveCount = $participants->where('status', 'inactive')->count();
 
         return response()->json([
@@ -877,6 +876,7 @@ class ActivityController extends Controller
             'breakdown' => [
                 'active' => $activeCount,
                 'anonymous' => $anonymousCount,
+                'guest' => $guestCount,
                 'inactive' => $inactiveCount,
                 'total' => $participants->count()
             ]

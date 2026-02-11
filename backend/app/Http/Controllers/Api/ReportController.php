@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
+    private const OTHER_OPTION_VALUE = '__other__';
     /**
      * Get participation metrics for an activity
      */
@@ -202,13 +203,39 @@ class ReportController extends Controller
         
         $totalAnswers = $answers->count();
         $avgTimeSpent = $answers->avg('time_spent');
+
+        // Collect sample "Other" free-text responses (if present)
+        $otherTextSamples = [];
+        foreach ($answers as $answer) {
+            $otherText = is_string($answer->other_text ?? null) ? trim($answer->other_text) : '';
+            if ($otherText === '') {
+                continue;
+            }
+
+            $hasOther = false;
+            if (($answer->value ?? null) === self::OTHER_OPTION_VALUE) {
+                $hasOther = true;
+            } elseif (!empty($answer->value_array)) {
+                $decoded = json_decode($answer->value_array, true);
+                if (is_array($decoded) && in_array(self::OTHER_OPTION_VALUE, $decoded, true)) {
+                    $hasOther = true;
+                }
+            }
+
+            if ($hasOther) {
+                $otherTextSamples[] = $otherText;
+                if (count($otherTextSamples) >= 10) {
+                    break;
+                }
+            }
+        }
         
         // Value distribution (for single-value questions)
         $valueDistribution = [];
         if (in_array($question->type, ['radio', 'select', 'yesno'])) {
             $valueDistribution = $answers->groupBy('value')
                 ->map(fn($group) => [
-                    'value' => $group[0]->value,
+                    'value' => ($group[0]->value === self::OTHER_OPTION_VALUE) ? 'Other' : $group[0]->value,
                     'count' => $group->count(),
                     'percentage' => round(($group->count() / $totalAnswers) * 100, 2),
                 ])
@@ -224,7 +251,7 @@ class ReportController extends Controller
                     $values = json_decode($answer->value_array, true);
                     if (is_array($values)) {
                         foreach ($values as $val) {
-                            $allValues[] = $val;
+                            $allValues[] = ($val === self::OTHER_OPTION_VALUE) ? 'Other' : $val;
                         }
                     }
                 }
@@ -255,6 +282,7 @@ class ReportController extends Controller
             'value_distribution' => $valueDistribution,
             'array_value_distribution' => $arrayValueDistribution,
             'text_samples' => $textSamples,
+            'other_text_samples' => $otherTextSamples,
         ]);
     }
 

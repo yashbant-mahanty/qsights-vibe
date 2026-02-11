@@ -10,10 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from '@/components/ui/toast';
 import DeleteConfirmationModal from '@/components/delete-confirmation-modal';
+import { useAuth } from '@/contexts/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
 
 const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
+  const { currentUser, isLoading: authLoading } = useAuth();
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState(null);
@@ -115,18 +117,9 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     setCurrentPage(1);
   }, [searchQuery, statusFilter]);
 
-  // Get auth token from cookies
-  const getAuthToken = useCallback(() => {
-    if (typeof window === 'undefined') return '';
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name === 'backendToken') {
-        return decodeURIComponent(value);
-      }
-    }
-    return localStorage.getItem('token') || '';
-  }, []);
+  // Note: In production, backendToken is HttpOnly so JS cannot read it.
+  // We use credentials: 'include' in fetch to let browser send cookie automatically.
+  // Auth state is checked via useAuth() hook which queries /api/auth/me.
 
   // Initialize form with activity fields
   const initializeForm = useCallback((existingData = {}) => {
@@ -154,16 +147,18 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
   // Fetch activity details
   const fetchActivityDetails = useCallback(async () => {
     try {
-      const token = getAuthToken();
-      if (!token) return;
-      
       const response = await fetch(`${API_URL}/activities/${activityId}`, {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
       });
-      if (!response.ok) throw new Error('Failed to fetch activity');
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
+        throw new Error('Failed to fetch activity');
+      }
       const result = await response.json();
       setActivity(result.data);
       console.log('✓ Activity loaded:', result.data.name);
@@ -171,22 +166,16 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } catch (err) {
       console.error('Error fetching activity:', err);
     }
-  }, [activityId, getAuthToken]);
+  }, [activityId]);
 
   // Fetch participants
   const fetchParticipants = useCallback(async () => {
     try {
       setLoading(true);
-      const token = getAuthToken();
-      if (!token) {
-        toast({ title: "Error", description: "Not authenticated. Please log in again.", variant: "error" });
-        setLoading(false);
-        return;
-      }
       
       const response = await fetch(`${API_URL}/activities/${activityId}/participants`, {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
       });
@@ -206,18 +195,16 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setLoading(false);
     }
-  }, [activityId, getAuthToken]);
+  }, [activityId]);
 
   // Fetch all existing participants (not yet linked to this activity)
   const fetchExistingParticipants = useCallback(async () => {
     try {
       setLoadingExisting(true);
-      const token = getAuthToken();
-      if (!token) return;
       
       const response = await fetch(`${API_URL}/participants`, {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
       });
@@ -242,18 +229,16 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setLoadingExisting(false);
     }
-  }, [getAuthToken, participants]);
+  }, [participants]);
 
   // Fetch template by type
   const fetchTemplate = useCallback(async (templateType) => {
     try {
       setTemplateLoading(true);
-      const token = getAuthToken();
-      if (!token) return;
       
       const response = await fetch(`${API_URL}/activities/${activityId}/notification-templates/type/${templateType}`, {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
       });
@@ -283,7 +268,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setTemplateLoading(false);
     }
-  }, [activityId, getAuthToken]);
+  }, [activityId]);
 
   // Save template
   const handleSaveTemplate = useCallback(async () => {
@@ -291,11 +276,6 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     
     try {
       setTemplateSaving(true);
-      const token = getAuthToken();
-      if (!token) {
-        toast({ title: "Error", description: "Not authenticated. Please refresh the page.", variant: "error" });
-        return;
-      }
       
       const payload = {
         notification_type: editingTemplateType,
@@ -306,8 +286,8 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       
       const response = await fetch(`${API_URL}/activities/${activityId}/notification-templates`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
@@ -315,6 +295,9 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       });
       
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to save template');
       }
@@ -328,19 +311,17 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setTemplateSaving(false);
     }
-  }, [activityId, editingTemplateType, templateContent, getAuthToken]);
+  }, [activityId, editingTemplateType, templateContent]);
 
   // Fetch rendered preview with QR code from backend
   const fetchRenderedPreview = useCallback(async (templateType) => {
     try {
       setTemplateLoading(true);
-      const token = getAuthToken();
-      if (!token) return;
       
       // First get the template content
       const templateResponse = await fetch(`${API_URL}/activities/${activityId}/notification-templates/type/${templateType}`, {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
       });
@@ -362,8 +343,8 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
         // Now call the preview endpoint to get rendered HTML with QR code
         const previewResponse = await fetch(`${API_URL}/activities/${activityId}/notification-templates/preview`, {
           method: 'POST',
+          credentials: 'include',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Accept': 'application/json',
             'Content-Type': 'application/json',
           },
@@ -398,7 +379,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setTemplateLoading(false);
     }
-  }, [activityId, getAuthToken]);
+  }, [activityId]);
 
   // Load template when editor opens
   useEffect(() => {
@@ -414,16 +395,21 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     }
   }, [templatePreviewOpen, editingTemplateType, fetchRenderedPreview]);
 
+  // Wait for auth to load, then fetch data
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) {
+    // Don't do anything while auth is loading
+    if (authLoading) return;
+    
+    // Check if user is authenticated using useAuth state
+    if (!currentUser) {
       toast({ title: "Error", description: "Not authenticated. Please log in to manage participants.", variant: "error" });
       setLoading(false);
       return;
     }
+    
     fetchActivityDetails();
     fetchParticipants();
-  }, [fetchActivityDetails, fetchParticipants, getAuthToken]);
+  }, [fetchActivityDetails, fetchParticipants, currentUser, authLoading]);
 
   // Initialize form when activity loads
   useEffect(() => {
@@ -440,12 +426,6 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     }
 
     try {
-      const token = getAuthToken();
-      if (!token) {
-        toast({ title: "Error", description: "Not authenticated. Please refresh the page and log in again.", variant: "error" });
-        return;
-      }
-      
       // Build payload
       const payload = {
         name: participantForm.name,
@@ -475,8 +455,8 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       
       const response = await fetch(`${API_URL}/activities/${activityId}/participants/new`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
@@ -517,7 +497,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       console.error('Error adding participant:', err);
       toast({ title: "Error", description: err.message || 'Failed to add participant', variant: "error" });
     }
-  }, [activityId, participantForm, activity, getAuthToken, fetchParticipants, initializeForm]);
+  }, [activityId, participantForm, activity, fetchParticipants, initializeForm]);
 
   // Link existing participants to activity
   const handleLinkExistingParticipants = useCallback(async () => {
@@ -527,16 +507,10 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     }
 
     try {
-      const token = getAuthToken();
-      if (!token) {
-        toast({ title: "Error", description: "Not authenticated. Please refresh the page and log in again.", variant: "error" });
-        return;
-      }
-
       const response = await fetch(`${API_URL}/activities/${activityId}/participants/existing`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
@@ -548,6 +522,9 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       const result = await response.json();
       
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
         throw new Error(result.message || 'Failed to add participants');
       }
 
@@ -563,7 +540,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       console.error('Error linking participants:', err);
       toast({ title: "Error", description: err.message || 'Failed to link participants', variant: "error" });
     }
-  }, [activityId, selectedExistingParticipants, getAuthToken, fetchParticipants]);
+  }, [activityId, selectedExistingParticipants, fetchParticipants]);
 
   // Edit participant
   const handleOpenEditModal = useCallback((participant) => {
@@ -579,12 +556,6 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     }
 
     try {
-      const token = getAuthToken();
-      if (!token) {
-        toast({ title: "Error", description: "Not authenticated. Please refresh the page and log in again.", variant: "error" });
-        return;
-      }
-
       // Build payload
       const payload = {
         name: participantForm.name,
@@ -612,8 +583,8 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
 
       const response = await fetch(`${API_URL}/activities/${activityId}/participants/${editingParticipant.id}`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
@@ -623,6 +594,9 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       const result = await response.json();
       
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
         throw new Error(result.message || 'Failed to update participant');
       }
       
@@ -635,7 +609,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       console.error('Error updating participant:', err);
       toast({ title: "Error", description: err.message || 'Failed to update participant', variant: "error" });
     }
-  }, [activityId, participantForm, editingParticipant, activity, getAuthToken, fetchParticipants, initializeForm]);
+  }, [activityId, participantForm, editingParticipant, activity, fetchParticipants, initializeForm]);
 
   // Bulk import participants
   const handleBulkImport = useCallback(async () => {
@@ -646,14 +620,13 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
 
     try {
       setImporting(true);
-      const token = getAuthToken();
       const formData = new FormData();
       formData.append('file', importFile);
 
       const response = await fetch(`${API_URL}/activities/${activityId}/participants/import`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
         body: formData,
@@ -661,6 +634,9 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
 
       const result = await response.json();
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
         throw new Error(result.message || 'Failed to import participants');
       }
 
@@ -674,7 +650,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setImporting(false);
     }
-  }, [activityId, importFile, getAuthToken, fetchParticipants]);
+  }, [activityId, importFile, fetchParticipants]);
 
   // Download template
   const handleDownloadTemplate = useCallback(() => {
@@ -704,35 +680,43 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
   // Remove participant
   const handleRemoveParticipant = useCallback(async (participantId) => {
     try {
-      const token = getAuthToken();
       const response = await fetch(`${API_URL}/activities/${activityId}/participants/${participantId}`, {
         method: 'DELETE',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
       });
-      if (!response.ok) throw new Error('Failed to remove participant');
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
+        throw new Error('Failed to remove participant');
+      }
       toast({ title: "Success!", description: "Participant removed from activity", variant: "success" });
       setDeleteModal({ isOpen: false, participantId: null, participantName: null });
       fetchParticipants();
     } catch (err) {
       toast({ title: "Error", description: err.message, variant: "error" });
     }
-  }, [activityId, getAuthToken, fetchParticipants]);
+  }, [activityId, fetchParticipants]);
 
   // Toggle participant status
   const handleToggleStatus = useCallback(async (participantId, currentStatus) => {
     try {
-      const token = getAuthToken();
       const response = await fetch(`${API_URL}/participants/${participantId}/toggle-status`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
       });
-      if (!response.ok) throw new Error('Failed to toggle status');
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
+        throw new Error('Failed to toggle status');
+      }
       
       const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
       toast({ title: "Success!", description: `Participant ${newStatus === 'active' ? 'activated' : 'deactivated'}`, variant: "success" });
@@ -740,7 +724,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } catch (err) {
       toast({ title: "Error", description: err.message, variant: "error" });
     }
-  }, [getAuthToken, fetchParticipants]);
+  }, [fetchParticipants]);
 
   // Send notification functions
   const handleOpenSendNotification = useCallback(() => {
@@ -774,7 +758,6 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
 
     try {
       setSending(true);
-      const token = getAuthToken();
       
       // FIXED: Use the correct endpoint with enhanced logging
       const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/notifications/send-emails`;
@@ -783,12 +766,11 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       console.log('Participant Count:', selectedForNotification.length);
       console.log('Participant IDs:', selectedForNotification);
       console.log('Notification Type:', notificationType);
-      console.log('Has Auth Token:', !!token);
       
       const response = await fetch(apiUrl, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
@@ -806,6 +788,9 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       console.log('Response Data:', result);
       
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
         throw new Error(result.message || 'Failed to send notifications');
       }
 
@@ -836,32 +821,35 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setSending(false);
     }
-  }, [activityId, notificationType, selectedForNotification, getAuthToken]);
+  }, [activityId, notificationType, selectedForNotification]);
 
   // Email-Embedded Survey Functions
   const fetchQuestionsForEmbedded = useCallback(async () => {
     try {
       setLoadingQuestions(true);
-      const token = getAuthToken();
-      if (!token) return;
       
       // Fetch questions from the activity's questionnaire
       const response = await fetch(`${API_URL}/activities/${activityId}`, {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
         },
       });
       
-      if (!response.ok) throw new Error('Failed to fetch activity');
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        }
+        throw new Error('Failed to fetch activity');
+      }
       const result = await response.json();
       const activityData = result.data;
       
       if (activityData?.questionnaire_id) {
         // Fetch the questionnaire with sections and questions
         const qResponse = await fetch(`${API_URL}/questionnaires/${activityData.questionnaire_id}`, {
+          credentials: 'include',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Accept': 'application/json',
           },
         });
@@ -904,7 +892,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setLoadingQuestions(false);
     }
-  }, [activityId, getAuthToken]);
+  }, [activityId]);
 
   const handleOpenEmailEmbedded = useCallback(() => {
     setEmailEmbeddedModalOpen(true);
@@ -959,7 +947,6 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
 
     try {
       setSendingEmbedded(true);
-      const token = getAuthToken();
       
       // Get participant emails
       const selectedParticipants = participants.filter(p => embeddedRecipients.includes(p.id));
@@ -982,8 +969,8 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       for (const question of selectedEmbeddedQuestions) {
         const response = await fetch(`${API_URL}/email-embedded-survey/send`, {
           method: 'POST',
+          credentials: 'include',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
@@ -1006,6 +993,9 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
         if (response.ok) {
           totalSent += result.sent_count || emails.length;
         } else {
+          if (response.status === 401) {
+            throw new Error('Session expired. Please refresh the page and log in again.');
+          }
           totalFailed += emails.length;
         }
       }
@@ -1034,7 +1024,7 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     } finally {
       setSendingEmbedded(false);
     }
-  }, [activityId, selectedEmbeddedQuestions, embeddedRecipients, participants, getAuthToken, embeddedEmailConfig]);
+  }, [activityId, selectedEmbeddedQuestions, embeddedRecipients, participants, embeddedEmailConfig]);
 
   // Render form fields
   const renderFormFields = (isEdit = false) => {
@@ -1093,7 +1083,8 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     return fields;
   };
 
-  if (loading) {
+  // Show loading while auth is loading or data is loading
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />

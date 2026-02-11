@@ -15,6 +15,8 @@ use Carbon\Carbon;
 
 class ResponseController extends Controller
 {
+    private const OTHER_OPTION_VALUE = '__other__';
+
     protected $responseAuditService;
 
     public function __construct(ResponseAuditService $responseAuditService)
@@ -118,6 +120,7 @@ class ResponseController extends Controller
             'answers.*.question_id' => 'required|uuid|exists:questions,id',
             'answers.*.value' => 'nullable',
             'answers.*.value_array' => 'nullable|array',
+            'answers.*.other_text' => 'nullable|string',
             'answers.*.value_translations' => 'nullable|array',
             'answers.*.time_spent' => 'nullable|integer',
             'auto_save' => 'nullable|boolean',
@@ -146,6 +149,23 @@ class ResponseController extends Controller
                     $answer->setValue($answerData['value_array'], $question->type);
                 } elseif (isset($answerData['value'])) {
                     $answer->setValue($answerData['value'], $question->type);
+                }
+
+                // Store/clear other_text based on whether "Other" was selected
+                $hasOtherSelected = false;
+                if (array_key_exists('value', $answerData) && $answerData['value'] === self::OTHER_OPTION_VALUE) {
+                    $hasOtherSelected = true;
+                }
+                if (array_key_exists('value_array', $answerData) && is_array($answerData['value_array']) && in_array(self::OTHER_OPTION_VALUE, $answerData['value_array'], true)) {
+                    $hasOtherSelected = true;
+                }
+
+                if ($hasOtherSelected) {
+                    $otherText = is_string($answerData['other_text'] ?? null) ? trim($answerData['other_text']) : '';
+                    // Allow empty other_text during progress saves; keep null in DB when empty
+                    $answer->other_text = $otherText !== '' ? $otherText : null;
+                } else {
+                    $answer->other_text = null;
                 }
 
                 // Handle multilingual translations
@@ -214,6 +234,7 @@ class ResponseController extends Controller
             'answers.*.question_id' => 'required|uuid|exists:questions,id',
             'answers.*.value' => 'nullable',
             'answers.*.value_array' => 'nullable|array',
+            'answers.*.other_text' => 'nullable|string',
             'answers.*.value_translations' => 'nullable|array',
             'answers.*.time_spent' => 'nullable|integer',
         ]);
@@ -239,6 +260,31 @@ class ResponseController extends Controller
                     $answer->setValue($answerData['value_array'], $question->type);
                 } elseif (isset($answerData['value'])) {
                     $answer->setValue($answerData['value'], $question->type);
+                }
+
+                // Enforce other_text when submitting with "Other" selected
+                $hasOtherSelected = false;
+                if (array_key_exists('value', $answerData) && $answerData['value'] === self::OTHER_OPTION_VALUE) {
+                    $hasOtherSelected = true;
+                }
+                if (array_key_exists('value_array', $answerData) && is_array($answerData['value_array']) && in_array(self::OTHER_OPTION_VALUE, $answerData['value_array'], true)) {
+                    $hasOtherSelected = true;
+                }
+
+                if ($hasOtherSelected) {
+                    $otherText = is_string($answerData['other_text'] ?? null) ? trim($answerData['other_text']) : '';
+                    if ($otherText === '') {
+                        DB::rollBack();
+                        return response()->json([
+                            'message' => 'Other selected but other_text is missing',
+                            'errors' => [
+                                'answers' => ['Please specify your response for Other.'],
+                            ],
+                        ], 422);
+                    }
+                    $answer->other_text = $otherText;
+                } else {
+                    $answer->other_text = null;
                 }
 
                 if (isset($answerData['value_translations'])) {
@@ -420,7 +466,14 @@ class ResponseController extends Controller
                 
                 // If it's a Laravel Collection, convert to array
                 if (is_object($answersRelation) && method_exists($answersRelation, 'values')) {
-                    $answersArray = $answersRelation->values()->toArray();
+                    $answersArray = $answersRelation->values()->map(function ($ans) {
+                        return [
+                            'question_id' => $ans['question_id'] ?? null,
+                            'value' => $ans['value'] ?? null,
+                            'value_array' => $ans['value_array'] ?? null,
+                            'other_text' => $ans['other_text'] ?? null,
+                        ];
+                    })->toArray();
                     
                     // If relationship has data, use it
                     if (!empty($answersArray)) {
@@ -448,6 +501,7 @@ class ResponseController extends Controller
                                     'question_id' => (string) $questionId,
                                     'value' => is_array($value) ? null : $value,
                                     'value_array' => is_array($value) ? $value : null,
+                                    'other_text' => null,
                                 ];
                             }
                             $response->setRelation('answers', $formattedAnswers);

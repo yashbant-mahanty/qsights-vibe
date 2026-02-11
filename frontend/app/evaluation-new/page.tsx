@@ -279,6 +279,12 @@ function EvaluationNewPageContent() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [mappings, setMappings] = useState<Mapping[]>([]);
   
+  // Setup sub-tabs state
+  type SetupSubTab = 'overview' | 'staff-mapping';
+  const [activeSetupTab, setActiveSetupTab] = useState<SetupSubTab>('overview');
+  const [mappingSelectedEvaluator, setMappingSelectedEvaluator] = useState<string>('');
+  const [mappingSelectedStaff, setMappingSelectedStaff] = useState<string[]>([]);
+  
   // Search, Filter and Pagination states for Lists
   const [roleSearchQuery, setRoleSearchQuery] = useState('');
   const [roleDeptFilter, setRoleDeptFilter] = useState('all');
@@ -2383,6 +2389,37 @@ function EvaluationNewPageContent() {
           {/* SETUP TAB */}
           {activeTab === 'setup' && (
             <div className="space-y-6">
+              {/* Setup Sub-Tabs Navigation */}
+              <div className="bg-white rounded-xl shadow-sm border p-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setActiveSetupTab('overview')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                      activeSetupTab === 'overview'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Building2 className="h-4 w-4" />
+                    Overview
+                  </button>
+                  <button
+                    onClick={() => setActiveSetupTab('staff-mapping')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                      activeSetupTab === 'staff-mapping'
+                        ? 'bg-orange-600 text-white shadow-md'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Network className="h-4 w-4" />
+                    Staff Mapping
+                  </button>
+                </div>
+              </div>
+
+              {/* Overview Sub-Tab Content */}
+              {activeSetupTab === 'overview' && (
+                <>
               {/* Stats Cards - Using GradientStatCard for Professional Look */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div onClick={() => {
@@ -2878,6 +2915,322 @@ function EvaluationNewPageContent() {
                   <p className="text-sm text-orange-600">Evaluators</p>
                 </div>
               </div>
+                </>
+              )}
+
+              {/* Staff Mapping Sub-Tab Content */}
+              {activeSetupTab === 'staff-mapping' && (
+                <div className="space-y-6">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-6 border border-orange-200">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-orange-100 rounded-lg p-2.5">
+                        <Network className="h-6 w-6 text-orange-600" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-semibold text-gray-900">Staff Mapping</h2>
+                        <p className="text-sm text-gray-600">Map evaluators (managers) to their subordinates (staff members)</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Two-Panel Mapping Interface */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left Panel - Evaluators (Parents) */}
+                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                      <div className="p-4 bg-blue-50 border-b border-blue-200">
+                        <h3 className="font-semibold text-blue-900 flex items-center gap-2">
+                          <UserCheck className="h-5 w-5 text-blue-600" />
+                          Select Evaluator (Manager)
+                        </h3>
+                        <p className="text-xs text-blue-700 mt-1">Click on an evaluator to assign subordinates</p>
+                      </div>
+                      <div className="max-h-[500px] overflow-y-auto">
+                        {staff.length === 0 ? (
+                          <div className="p-8 text-center text-gray-500">
+                            <Users className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                            <p>No staff members available</p>
+                            <p className="text-xs mt-1">Add staff members in the Overview tab first</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y">
+                            {staff.map((s) => {
+                              const staffRole = roles.find(r => r.id === s.role_id);
+                              const existingMapping = mappings.find(m => m.evaluator_id === s.id);
+                              const subordinateCount = existingMapping?.subordinates?.length || 0;
+                              
+                              return (
+                                <div
+                                  key={s.id}
+                                  onClick={() => {
+                                    setMappingSelectedEvaluator(s.id);
+                                    // Load existing subordinates if any
+                                    if (existingMapping) {
+                                      setMappingSelectedStaff(existingMapping.subordinates.map(sub => sub.staff_id));
+                                    } else {
+                                      setMappingSelectedStaff([]);
+                                    }
+                                  }}
+                                  className={`p-4 cursor-pointer transition-all ${
+                                    mappingSelectedEvaluator === s.id
+                                      ? 'bg-blue-50 border-l-4 border-blue-600'
+                                      : 'hover:bg-gray-50 border-l-4 border-transparent'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="font-medium text-gray-900">{s.name}</p>
+                                      <p className="text-xs text-gray-500">{staffRole?.name || 'No role'} • {s.department || 'No dept'}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {subordinateCount > 0 && (
+                                        <span className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded-full">
+                                          {subordinateCount} subordinates
+                                        </span>
+                                      )}
+                                      {mappingSelectedEvaluator === s.id && (
+                                        <CheckCircle className="h-5 w-5 text-blue-600" />
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Panel - Subordinates (Children) */}
+                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                      <div className="p-4 bg-orange-50 border-b border-orange-200">
+                        <h3 className="font-semibold text-orange-900 flex items-center gap-2">
+                          <Users className="h-5 w-5 text-orange-600" />
+                          Assign Subordinates (Staff)
+                        </h3>
+                        <p className="text-xs text-orange-700 mt-1">
+                          {mappingSelectedEvaluator 
+                            ? `Select staff members to report to ${staff.find(s => s.id === mappingSelectedEvaluator)?.name || 'selected evaluator'}`
+                            : 'Select an evaluator first'
+                          }
+                        </p>
+                      </div>
+                      <div className="max-h-[400px] overflow-y-auto">
+                        {!mappingSelectedEvaluator ? (
+                          <div className="p-8 text-center text-gray-500">
+                            <ChevronLeft className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                            <p>Select an evaluator from the left panel</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y">
+                            {staff
+                              .filter(s => s.id !== mappingSelectedEvaluator)
+                              .map((s) => {
+                                const staffRole = roles.find(r => r.id === s.role_id);
+                                const isSelected = mappingSelectedStaff.includes(s.id);
+                                
+                                return (
+                                  <label
+                                    key={s.id}
+                                    className={`flex items-center gap-3 p-4 cursor-pointer transition-all ${
+                                      isSelected ? 'bg-orange-50' : 'hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setMappingSelectedStaff([...mappingSelectedStaff, s.id]);
+                                        } else {
+                                          setMappingSelectedStaff(mappingSelectedStaff.filter(id => id !== s.id));
+                                        }
+                                      }}
+                                      className="w-5 h-5 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
+                                    />
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-900">{s.name}</p>
+                                      <p className="text-xs text-gray-500">{staffRole?.name || 'No role'} • {s.department || 'No dept'}</p>
+                                    </div>
+                                    {isSelected && (
+                                      <CheckCircle className="h-5 w-5 text-orange-600" />
+                                    )}
+                                  </label>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
+                      {/* Save Button */}
+                      {mappingSelectedEvaluator && (
+                        <div className="p-4 bg-gray-50 border-t">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm text-gray-600">
+                              {mappingSelectedStaff.length} subordinate(s) selected
+                            </p>
+                            <button
+                              onClick={async () => {
+                                if (!mappingSelectedEvaluator || mappingSelectedStaff.length === 0) {
+                                  showToast.warning('Please select at least one subordinate');
+                                  return;
+                                }
+                                
+                                setLoading(true);
+                                try {
+                                  // The API expects individual hierarchy records with:
+                                  // staff_id (subordinate) and reports_to_id (manager/evaluator)
+                                  // Create a hierarchy entry for each selected subordinate
+                                  
+                                  let successCount = 0;
+                                  let errorMessages: string[] = [];
+                                  
+                                  for (const subordinateId of mappingSelectedStaff) {
+                                    try {
+                                      // Check if mapping already exists
+                                      const existingMapping = mappings.find(m => 
+                                        m.evaluator_id === mappingSelectedEvaluator && 
+                                        m.subordinates.some(s => s.staff_id === subordinateId)
+                                      );
+                                      
+                                      if (!existingMapping) {
+                                        // Create new hierarchy entry
+                                        const response = await fetchWithAuth('/evaluation/hierarchy', {
+                                          method: 'POST',
+                                          body: JSON.stringify({
+                                            staff_id: subordinateId,
+                                            reports_to_id: mappingSelectedEvaluator,
+                                            program_id: programId,
+                                            relationship_type: 'direct',
+                                            is_primary: true,
+                                            is_active: true
+                                          })
+                                        });
+                                        
+                                        if (response.success) {
+                                          successCount++;
+                                        } else {
+                                          errorMessages.push(response.message || 'Failed to create mapping');
+                                        }
+                                      } else {
+                                        // Already exists, count as success
+                                        successCount++;
+                                      }
+                                    } catch (err: any) {
+                                      errorMessages.push(err.message || 'Unknown error');
+                                    }
+                                  }
+                                  
+                                  if (successCount > 0) {
+                                    showToast.success(`${successCount} mapping(s) created successfully`);
+                                    // Refresh mappings and switch to overview tab to see them
+                                    fetchMappings();
+                                    setActiveSetupTab('overview');
+                                  }
+                                  
+                                  if (errorMessages.length > 0) {
+                                    showToast.error(`Some mappings failed: ${errorMessages.join(', ')}`);
+                                  }
+                                  
+                                  // Reset selection
+                                  setMappingSelectedEvaluator('');
+                                  setMappingSelectedStaff([]);
+                                } catch (error: any) {
+                                  console.error('Error saving mapping:', error);
+                                  showToast.error(error.message || 'Failed to save mapping');
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                              disabled={loading || mappingSelectedStaff.length === 0}
+                              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                              {loading ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="h-4 w-4" />
+                                  Save Mapping
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Existing Mappings Summary */}
+                  <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <div className="p-4 bg-gray-50 border-b flex items-center justify-between">
+                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <Network className="h-5 w-5 text-gray-600" />
+                        Current Mappings ({mappings.length})
+                      </h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Evaluator</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subordinates</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {mappings.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-8 text-center text-gray-500 text-sm">
+                                No mappings created yet. Select an evaluator above to start mapping.
+                              </td>
+                            </tr>
+                          ) : (
+                            mappings.map((mapping) => (
+                              <tr key={mapping.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">{mapping.evaluator_name}</td>
+                                <td className="px-4 py-3 text-sm text-gray-600">{mapping.evaluator_role}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-wrap gap-1">
+                                    {mapping.subordinates.map((sub) => (
+                                      <span key={sub.id} className="inline-flex items-center px-2 py-1 bg-orange-50 text-orange-700 text-xs rounded-full">
+                                        {sub.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setMappingSelectedEvaluator(mapping.evaluator_id);
+                                        setMappingSelectedStaff(mapping.subordinates.map(sub => sub.staff_id));
+                                      }}
+                                      className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded transition"
+                                      title="Edit"
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteMapping(mapping.id, mapping.evaluator_name)}
+                                      className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded transition"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -6258,7 +6611,9 @@ export default function EvaluationNewPage() {
         </div>
       </div>
     }>
-      <EvaluationNewPageContent />
+      <div suppressHydrationWarning>
+        <EvaluationNewPageContent />
+      </div>
     </Suspense>
   );
 }

@@ -86,52 +86,45 @@ SidebarItem.displayName = 'SidebarItem';
 export default function ProgramAdminLayout({ children }: ProgramAdminLayoutProps) {
   const { currentUser, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const lastUserKeyRef = useRef<string>('');
-  const [sidebarItems, setSidebarItems] = useState<any[]>(() => {
-    // Try to get cached sidebar items on initial load
-    if (typeof window !== 'undefined') {
-      const cached = sessionStorage.getItem('qsights_program_admin_sidebar');
-      if (cached) {
-        try {
-          return JSON.parse(cached);
-        } catch (e) {}
-      }
+  // CRITICAL: Do NOT read from localStorage/sessionStorage during initial state
+  // This causes hydration errors because SSR has no access to browser storage
+  const [sidebarItems, setSidebarItems] = useState<any[]>([]);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoLoading, setLogoLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Load cached data AFTER mount to prevent hydration errors
+  useEffect(() => {
+    setIsMounted(true);
+    // Load cached sidebar items after mount
+    const cachedSidebar = sessionStorage.getItem('qsights_program_admin_sidebar');
+    if (cachedSidebar) {
+      try {
+        setSidebarItems(JSON.parse(cachedSidebar));
+      } catch (e) {}
     }
-    return [];
-  });
-  const [logoUrl, setLogoUrl] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('qsights_logo');
+    // Load cached logo after mount
+    const cachedLogo = localStorage.getItem('qsights_logo');
+    if (cachedLogo) {
+      setLogoUrl(cachedLogo);
+      setLogoLoading(false);
     }
-    return null;
-  });
-  const [logoLoading, setLogoLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return !localStorage.getItem('qsights_logo');
-    }
-    return true;
-  });
-  const pathname = usePathname();
+  }, []);
 
   useEffect(() => {
     async function loadLogo() {
       try {
-        if (typeof window !== 'undefined') {
-          const cachedLogo = localStorage.getItem('qsights_logo');
-          if (cachedLogo) {
-            setLogoUrl(cachedLogo);
-          }
-        }
+        // Fetch fresh logo from API
         const settings = await themeApi.getAll();
         const logo = settings?.branding?.logo?.value;
         if (logo) {
           setLogoUrl(logo);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('qsights_logo', logo);
-          }
+          localStorage.setItem('qsights_logo', logo);
         }
       } catch (error) {
         console.error("Failed to load logo:", error);

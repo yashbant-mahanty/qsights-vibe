@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Upload, X, Image as ImageIcon, Loader2, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchWithAuth } from "@/lib/api";
+import { getPresignedUrl, isS3Url, isPresignedUrl } from "@/lib/s3Utils";
 
 // Global cache for S3 config to prevent multiple API calls across components
 let s3ConfigCache: { configured: boolean; checkedAt: number } | null = null;
@@ -48,6 +49,8 @@ export default function S3ImageUpload({
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [aspectRatioWarning, setAspectRatioWarning] = useState<string | null>(null);
+  const [displayUrl, setDisplayUrl] = useState<string>(value || '');
+  const [loadingPresigned, setLoadingPresigned] = useState(false);
   const [s3Configured, setS3Configured] = useState<boolean | null>(
     s3ConfigCache && Date.now() - s3ConfigCache.checkedAt < S3_CONFIG_CACHE_TTL 
       ? s3ConfigCache.configured 
@@ -55,6 +58,36 @@ export default function S3ImageUpload({
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const checkingRef = useRef(false); // Prevent concurrent checks
+
+  // Convert S3 URL to presigned URL when value changes
+  useEffect(() => {
+    async function loadPresignedUrl() {
+      if (!value) {
+        setDisplayUrl('');
+        return;
+      }
+      
+      // If already presigned or not an S3 URL, use as-is
+      if (isPresignedUrl(value) || !isS3Url(value)) {
+        setDisplayUrl(value);
+        return;
+      }
+      
+      // Need to get presigned URL
+      setLoadingPresigned(true);
+      try {
+        const presigned = await getPresignedUrl(value);
+        setDisplayUrl(presigned || value);
+      } catch (err) {
+        console.error('Failed to get presigned URL:', err);
+        setDisplayUrl(value); // Fallback to original
+      } finally {
+        setLoadingPresigned(false);
+      }
+    }
+    
+    loadPresignedUrl();
+  }, [value]);
 
   // Check S3 configuration on first interaction (with global caching)
   const checkS3Config = useCallback(async () => {
@@ -204,6 +237,9 @@ export default function S3ImageUpload({
   console.log('🖼️ [S3ImageUpload] Render:', { 
     value, 
     hasValue: !!value, 
+    displayUrl: displayUrl?.substring(0, 60) + '...',
+    hasDisplayUrl: !!displayUrl,
+    loadingPresigned,
     showPreview,
     valueType: typeof value,
     valueLength: value?.length
@@ -284,9 +320,14 @@ export default function S3ImageUpload({
           {showPreview && (
             <div className="relative rounded-lg border border-gray-200 overflow-hidden max-w-md">
               <div className="bg-gray-100 flex items-center justify-center p-4 min-h-[120px] max-h-[240px]">
-                {value.endsWith(".svg") ? (
+                {loadingPresigned ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                    <span className="text-xs text-gray-500">Loading image...</span>
+                  </div>
+                ) : displayUrl.endsWith(".svg") ? (
                   <object
-                    data={value}
+                    data={displayUrl}
                     type="image/svg+xml"
                     className="max-w-full max-h-full h-auto object-contain"
                     style={{ maxWidth: '100%', maxHeight: '200px' }}
@@ -295,11 +336,12 @@ export default function S3ImageUpload({
                   </object>
                 ) : (
                   <img
-                    src={value}
+                    src={displayUrl}
                     alt="Uploaded image"
                     className="max-w-full max-h-full h-auto object-contain"
                     style={{ maxWidth: '100%', maxHeight: '200px' }}
                     onError={(e) => {
+                      console.error('🖼️ [S3ImageUpload] Image failed to load:', displayUrl.substring(0, 100));
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
                   />

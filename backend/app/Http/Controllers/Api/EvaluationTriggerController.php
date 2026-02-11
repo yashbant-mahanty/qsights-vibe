@@ -140,6 +140,13 @@ class EvaluationTriggerController extends Controller
                 
                 $triggeredCount++;
                 
+                \Log::info('Evaluation triggered - preparing to send email', [
+                    'triggered_id' => $triggeredId,
+                    'evaluator_email' => $evaluator->email,
+                    'should_send_now' => $shouldSendNow,
+                    'scheduled_at' => $scheduledAt
+                ]);
+                
                 // Send email to evaluator only if not scheduled for future
                 if (!$shouldSendNow) {
                     \Log::info("Evaluation scheduled for future", [
@@ -149,130 +156,58 @@ class EvaluationTriggerController extends Controller
                     ]);
                     continue; // Skip sending email now
                 }
+                
+                // Use EvaluationNotificationService to send email with template support
                 try {
-                    $evaluationUrl = config('app.frontend_url', 'https://prod.qsights.com') . 
-                        '/e/evaluate/' . $triggeredId . '?token=' . $accessToken;
-                    
-                    // Prepare email subject and body with placeholders
-                    $emailSubject = $validated['email_subject'] ?? ('Evaluation Request: ' . $validated['template_name']);
-                    $emailBody = $validated['email_body'] ?? "Hello {evaluator_name},\n\nYou have been requested to complete evaluations for your team members.";
-                    
-                    // Replace placeholders including evaluation_url for button
-                    $subordinatesList = $subordinates->map(fn($s) => $s->name)->implode("\n- ");
-                    
-                    // First replace the evaluation_url placeholder if present (for button in body)
-                    $emailBody = str_replace('{evaluation_url}', $evaluationUrl, $emailBody);
-                    
-                    // Then replace other placeholders
-                    $emailBody = str_replace([
-                        '{evaluator_name}',
-                        '{start_date}',
-                        '{end_date}',
-                        '{subordinates_list}'
-                    ], [
-                        $evaluator->name,
-                        $validated['start_date'] ?? 'Not specified',
-                        $validated['end_date'] ?? 'Not specified',
-                        $subordinatesList
-                    ], $emailBody);
-                    
-                    // Send via SendGrid API - Get credentials from database (System Settings)
-                    $sendGridApiKey = SystemSetting::getValue('email_sendgrid_api_key') ?: env('SENDGRID_API_KEY');
-                    $from = SystemSetting::getValue('email_sender_email') ?: config('mail.from.address', 'info@qsights.com');
-                    $fromName = SystemSetting::getValue('email_sender_name') ?: config('mail.from.name', 'QSights');
-                    
-                    \Log::info('Sending evaluation email', [
-                        'to' => $evaluator->email,
-                        'subject' => $emailSubject,
-                        'from' => $from,
-                        'has_api_key' => !empty($sendGridApiKey)
+                    \Log::info('Sending evaluation trigger email via NotificationService', [
+                        'evaluator' => $evaluator->email,
+                        'triggered_id' => $triggeredId
                     ]);
                     
-                    // Build professional HTML email template like event emailers
-                    // Use full HTML document structure for better email client compatibility
-                    // Use solid background color (not gradient) for maximum email client compatibility
-                    $buttonHtml = "
-                        <table role='presentation' cellspacing='0' cellpadding='0' border='0' align='center' style='margin: 30px auto;'>
-                            <tr>
-                                <td align='center' bgcolor='#667eea' style='border-radius: 8px; background-color: #667eea;'>
-                                    <a href='" . $evaluationUrl . "' target='_blank' style='background-color: #667eea; border: 15px solid #667eea; border-radius: 8px; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; line-height: 1.1; text-align: center; text-decoration: none; display: inline-block; color: #ffffff; mso-padding-alt: 0;'>
-                                        <!--[if mso]><i style='letter-spacing: 25px; mso-font-width: -100%; mso-text-raise: 30pt;'>&nbsp;</i><![endif]-->
-                                        <span style='color: #ffffff; mso-text-raise: 15pt;'>Start Evaluation →</span>
-                                        <!--[if mso]><i style='letter-spacing: 25px; mso-font-width: -100%;'>&nbsp;</i><![endif]-->
-                                    </a>
-                                </td>
-                            </tr>
-                        </table>";
+                    // Prepare evaluation triggered data array
+                    $triggeredData = [
+                        'id' => $triggeredId,
+                        'program_id' => $validated['program_id'],
+                        'template_name' => $validated['template_name'],
+                        'evaluator_id' => $evaluatorId,
+                        'evaluator_name' => $evaluator->name,
+                        'evaluator_email' => $evaluator->email,
+                        'subordinates' => json_encode($subordinates->toArray()),
+                        'subordinates_count' => $subordinates->count(),
+                        'start_date' => $validated['start_date'] ?? null,
+                        'end_date' => $validated['end_date'] ?? null,
+                        'email_subject' => $validated['email_subject'] ?? null,
+                        'email_body' => $validated['email_body'] ?? null,
+                        'access_token' => $accessToken,
+                    ];
                     
-                    $htmlBody = "<!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset='utf-8'>
-                        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-                    </head>
-                    <body style='margin: 0; padding: 0; background-color: #f4f4f4;'>
-                        <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='background-color: #f4f4f4;'>
-                            <tr>
-                                <td style='padding: 20px 0;'>
-                                    <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;'>
-                                        <tr>
-                                            <td style='padding: 40px 30px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;'>
-                                                " . nl2br(e($emailBody)) . "
-                                                " . $buttonHtml . "
-                                                <p style='color: #888888; font-size: 12px; margin-top: 30px; text-align: center; border-top: 1px solid #eeeeee; padding-top: 20px;'>
-                                                    If the button doesn't work, copy and paste this link into your browser:<br>
-                                                    <a href='" . $evaluationUrl . "' style='color: #667eea; word-break: break-all;'>" . $evaluationUrl . "</a>
-                                                </p>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-                    </body>
-                    </html>";
+                    $result = $this->notificationService->sendTriggerEmailToEvaluator($triggeredData);
                     
-                    \Log::info('Email HTML body constructed', [
-                        'html_length' => strlen($htmlBody),
-                        'has_button' => strpos($htmlBody, 'Start Evaluation') !== false,
-                        'evaluation_url' => $evaluationUrl
-                    ]);
-                    
-                    $response = Http::withHeaders([
-                        'Authorization' => 'Bearer ' . $sendGridApiKey,
-                        'Content-Type' => 'application/json'
-                    ])->post('https://api.sendgrid.com/v3/mail/send', [
-                        'personalizations' => [[
-                            'to' => [['email' => $evaluator->email, 'name' => $evaluator->name]],
-                            'subject' => $emailSubject
-                        ]],
-                        'from' => ['email' => $from, 'name' => $fromName],
-                        'content' => [['type' => 'text/html', 'value' => $htmlBody]]
-                    ]);
-                    
-                    \Log::info('SendGrid response', [
-                        'status' => $response->status(),
-                        'successful' => $response->successful(),
-                        'body' => $response->body()
-                    ]);
-                    
-                    if ($response->successful()) {
+                    if ($result['success']) {
                         $emailsSent++;
                         
                         // Update email sent status
                         DB::table('evaluation_triggered')
                             ->where('id', $triggeredId)
                             ->update(['email_sent_at' => now()]);
+                        
+                        \Log::info('Email sent successfully via NotificationService', [
+                            'to' => $evaluator->email,
+                            'emails_sent' => $emailsSent
+                        ]);
                     } else {
-                        \Log::error('SendGrid email failed', [
-                            'status' => $response->status(),
-                            'body' => $response->body(),
+                        \Log::error('NotificationService email failed', [
+                            'error' => $result['error'] ?? 'Unknown error',
                             'to' => $evaluator->email
                         ]);
                     }
-                        
                 } catch (\Exception $emailError) {
-                    \Log::error('Failed to send evaluation email: ' . $emailError->getMessage());
+                    \Log::error('Failed to send evaluation email', [
+                        'error' => $emailError->getMessage(),
+                        'file' => $emailError->getFile(),
+                        'line' => $emailError->getLine(),
+                        'trace' => $emailError->getTraceAsString()
+                    ]);
                 }
             }
             

@@ -441,17 +441,25 @@ function RolesPage() {
   }, [displayRoles, currentPage, itemsPerPage]);
 
   const getAuthHeaders = () => {
-    const cookies = document.cookie.split(';');
-    const tokenCookie = cookies.find(c => c.trim().startsWith('backendToken='));
-    if (!tokenCookie) {
-      throw new Error('Not authenticated');
-    }
-    const token = decodeURIComponent(tokenCookie.split('=')[1]);
-    return {
-      'Authorization': `Bearer ${token}`,
+    // CRITICAL: backendToken is HTTP-only cookie - JavaScript cannot read it
+    // The backend middleware automatically converts the cookie to Bearer token
+    // So we just need to set basic headers and use credentials: 'include'
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
     };
+    
+    // Try to get CSRF token for state-changing requests
+    if (typeof document !== 'undefined') {
+      const cookies = document.cookie.split(';');
+      const csrfCookie = cookies.find(c => c.trim().startsWith('XSRF-TOKEN='));
+      if (csrfCookie) {
+        headers['X-XSRF-TOKEN'] = decodeURIComponent(csrfCookie.split('=')[1]);
+      }
+    }
+    
+    return headers;
   };
 
   // Helper function to safely parse services (handles both array and JSON string)
@@ -470,10 +478,23 @@ function RolesPage() {
     return [];
   };
 
+  // Helper function to get program ID from AuthContext first, then localStorage as fallback
   const getProgramId = () => {
-    const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
-    return user?.programId || 'a0a77496-0fc0-4627-ba5b-9a1ea026623f';
+    // First try to get from AuthContext (preferred - already loaded)
+    if (authUser?.programId) {
+      return authUser.programId;
+    }
+    // Fallback to localStorage only if mounted (client-side)
+    if (typeof window !== 'undefined') {
+      try {
+        const userStr = localStorage.getItem('user');
+        const user = userStr ? JSON.parse(userStr) : null;
+        return user?.programId || 'a0a77496-0fc0-4627-ba5b-9a1026026623f';
+      } catch (e) {
+        console.error('Error parsing user from localStorage:', e);
+      }
+    }
+    return 'a0a77496-0fc0-4627-ba5b-9a1ea026623f';
   };
 
   const loadProgramsWithUser = async (user: any) => {
@@ -1398,6 +1419,33 @@ function RolesPage() {
       return acc;
     }, {} as Record<string, typeof AVAILABLE_SERVICES>);
   }, []); // Empty dependency array since AVAILABLE_SERVICES is constant
+
+  // CRITICAL: Show loading screen until auth is fully loaded - prevents hydration errors
+  if (!isMounted || authLoading) {
+    return (
+      <ProgramAdminLayout>
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </ProgramAdminLayout>
+    );
+  }
+
+  // CRITICAL: If user is not authenticated after loading completes, redirect
+  if (!authUser) {
+    return (
+      <ProgramAdminLayout>
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="flex flex-col items-center gap-4">
+            <p className="text-gray-600">Session expired. Redirecting...</p>
+          </div>
+        </div>
+      </ProgramAdminLayout>
+    );
+  }
 
   return (
     <ProgramAdminLayout>

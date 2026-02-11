@@ -113,6 +113,15 @@ export interface StarRatingSettings {
   };
 }
 
+export interface SCTLikertSettings {
+  scale?: 3 | 5 | 7 | 9;
+  choiceType?: 'single' | 'multi';
+  labels?: string[];
+  scores?: number[];
+  showScores?: boolean; // Whether to show scores to admin during configuration
+  normalizeMultiSelect?: boolean; // Normalize scores for multi-select to avoid inflation
+}
+
 // Question type constants
 export const INTERACTIVE_QUESTION_TYPES = {
   SLIDER_SCALE: 'slider_scale',
@@ -197,6 +206,14 @@ export const DEFAULT_SETTINGS = {
     layout: 'responsive',
     partialScoring: false,
   },
+  sct_likert: {
+    scale: 5,
+    choiceType: 'single',
+    labels: ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree'],
+    scores: [1, 2, 3, 4, 5],
+    showScores: true,
+    normalizeMultiSelect: true,
+  } as SCTLikertSettings,
 };
 
 // Helper to get component by type

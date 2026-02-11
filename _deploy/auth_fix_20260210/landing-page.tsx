@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { themeApi } from "@/lib/api";
-import { getRedirectUrl } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -158,12 +157,7 @@ export default function LandingPage() {
       await refreshUser();
 
       // Redirect to role-specific dashboard
-      const redirectUrl =
-        typeof data.redirectUrl === "string" && data.redirectUrl.trim()
-          ? data.redirectUrl
-          : getRedirectUrl(data?.user?.role);
-
-      router.push(redirectUrl || "/dashboard");
+      router.push(data.redirectUrl);
     } catch (err) {
       const errorMessage = "An error occurred. Please try again.";
       setError(errorMessage);

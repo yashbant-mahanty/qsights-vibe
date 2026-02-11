@@ -6,6 +6,7 @@ import RoleBasedLayout from "@/components/role-based-layout";
 import S3ImageUpload from "@/components/S3ImageUpload";
 import BulkImageUpload from "@/components/BulkImageUpload";
 import { ValueDisplayModeConfig } from "@/components/ValueDisplayModeConfig";
+import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +44,7 @@ import {
   Image as ImageIcon,
   MoveVertical,
   Link2,
+  ClipboardList,
 } from "lucide-react";
 import { questionnairesApi, programsApi, type Program } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -173,6 +175,7 @@ export default function ViewQuestionnairePage() {
     { id: "nps", label: "NPS Scale", icon: ThumbsUp, color: "text-cyan-600" },
     { id: "star_rating", label: "Star Rating", icon: Heart, color: "text-rose-600" },
     { id: "drag_and_drop", label: "Drag & Drop Bucket", icon: MoveVertical, color: "text-purple-600" },
+    { id: "sct_likert", label: "Script Concordance (SCT) Likert", icon: ClipboardList, color: "text-indigo-600" },
   ];
 
   useEffect(() => {
@@ -1081,6 +1084,52 @@ export default function ViewQuestionnairePage() {
     );
   }
 
+  // Helper component for displaying SCT question images with presigned URLs
+  const SCTQuestionImage = ({ imageUrl }: { imageUrl: string }) => {
+    const [presignedUrl, setPresignedUrl] = useState<string>(imageUrl);
+    const [imageError, setImageError] = useState(false);
+
+    useEffect(() => {
+      const loadPresignedUrl = async () => {
+        if (!imageUrl) {
+          setPresignedUrl('');
+          return;
+        }
+
+        // If already presigned or not an S3 URL, use as-is
+        if (isPresignedUrl(imageUrl) || !isS3Url(imageUrl)) {
+          setPresignedUrl(imageUrl);
+          return;
+        }
+
+        // Get presigned URL for S3 images
+        try {
+          const signed = await getPresignedUrl(imageUrl);
+          setPresignedUrl(signed || imageUrl);
+        } catch (error) {
+          console.error('Failed to get presigned URL:', error);
+          setPresignedUrl(imageUrl); // Fallback to original
+        }
+      };
+
+      loadPresignedUrl();
+    }, [imageUrl]);
+
+    if (!presignedUrl || imageError) return null;
+
+    return (
+      <div className="relative rounded-lg border border-gray-200 overflow-hidden max-w-2xl">
+        <img
+          src={presignedUrl}
+          alt="Clinical scenario"
+          className="w-full h-auto object-contain"
+          style={{ maxHeight: '300px' }}
+          onError={() => setImageError(true)}
+        />
+      </div>
+    );
+  };
+
   const renderQuestionPreview = (question: any, sectionId: number) => {
     switch (question.type) {
       case "mcq":
@@ -1155,6 +1204,37 @@ export default function ViewQuestionnairePage() {
                 )}
               </div>
             ))}
+
+            {!showPreview && (
+              <div className="pt-1">
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={question.settings?.allow_other === true}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setSections((prevSections: any) =>
+                        prevSections.map((s: any) =>
+                          s.id === sectionId
+                            ? {
+                                ...s,
+                                questions: s.questions.map((q: any) =>
+                                  q.id === question.id
+                                    ? { ...q, settings: { ...(q.settings || {}), allow_other: checked } }
+                                    : q
+                                )
+                              }
+                            : s
+                        )
+                      );
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span>Allow “Other (Please Specify)”</span>
+                </label>
+              </div>
+            )}
+
             {!showPreview && (
               <button
                 onClick={() => addQuestionOption(sectionId, question.id)}
@@ -3302,6 +3382,306 @@ export default function ViewQuestionnairePage() {
                     <p className="text-xs text-gray-400 mt-2">💡 Upload or provide URLs for both states: one for selected (filled) and one for unselected (empty).</p>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        );
+      case "sct_likert":
+        const sctSettings = question.settings || DEFAULT_SETTINGS.sct_likert;
+        const sctScale = sctSettings.scale || 5;
+        const sctChoiceType = sctSettings.choiceType || 'single';
+        const sctScores = sctSettings.scores || Array.from({ length: sctScale }, (_, i) => i + 1);
+        const sctShowScores = sctSettings.showScores !== false;
+        const sctNormalize = sctSettings.normalizeMultiSelect !== false;
+        
+        // Initialize options with default labels if empty or length doesn't match scale
+        const defaultLabels = sctScale === 3 
+          ? ['Disagree', 'Neutral', 'Agree']
+          : sctScale === 5
+          ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
+          : sctScale === 7
+          ? ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree']
+          : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Slightly Disagree', 'Slightly Agree', 'Somewhat Agree', 'Agree', 'Strongly Agree', 'Completely Agree'];
+        
+        // Ensure options array exists and matches scale length - MUST be called unconditionally (React Hooks rule)
+        React.useEffect(() => {
+          if (!question.options || question.options.length !== sctScale) {
+            setSections(prevSections =>
+              prevSections.map(section =>
+                section.id === sectionId
+                  ? {
+                      ...section,
+                      questions: section.questions.map((q: any) =>
+                        q.id === question.id && (!q.options || q.options.length !== sctScale)
+                          ? { ...q, options: defaultLabels }
+                          : q
+                      )
+                    }
+                  : section
+              )
+            );
+          }
+        }, [question.options, sctScale]);
+        
+        return (
+          <div className="py-4 space-y-4 w-full overflow-hidden" style={{ maxWidth: '100%' }}>
+            {/* Settings Panel */}
+            {!showPreview && (
+              <div className="space-y-4 w-full overflow-hidden" style={{ maxWidth: '100%' }}>
+                {/* Configuration Panel */}
+                <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200 w-full overflow-hidden" style={{ maxWidth: '100%' }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Settings className="w-4 h-4 text-indigo-600" />
+                    <span className="text-sm font-medium text-gray-700">SCT Configuration</span>
+                  </div>
+                  
+                  {/* Scale Selector */}
+                  <div className="mb-4">
+                    <Label htmlFor={`sct-scale-${question.id}`} className="text-xs text-gray-600 block mb-1">
+                      Likert Scale
+                    </Label>
+                    <select
+                      id={`sct-scale-${question.id}`}
+                      value={sctScale}
+                      onChange={(e) => {
+                        withPreservedScroll(() => {
+                          const newScale = parseInt(e.target.value) as 3 | 5 | 7 | 9;
+                        const newLabels = newScale === 3 
+                          ? ['Disagree', 'Neutral', 'Agree']
+                          : newScale === 5
+                          ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
+                          : newScale === 7
+                          ? ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree']
+                          : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Slightly Disagree', 'Slightly Agree', 'Somewhat Agree', 'Agree', 'Strongly Agree', 'Completely Agree'];
+                        
+                        const newScores = Array.from({ length: newScale }, (_, i) => i + 1);
+                        const newOptions = newLabels;
+                        
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { 
+                                          ...q, 
+                                          settings: { ...sctSettings, scale: newScale, labels: newLabels, scores: newScores },
+                                          options: newOptions
+                                        }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                        });
+                      }}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="3">3-Point Scale</option>
+                      <option value="5">5-Point Scale</option>
+                      <option value="7">7-Point Scale</option>
+                      <option value="9">9-Point Scale</option>
+                    </select>
+                  </div>
+
+                  {/* Choice Type Toggle */}
+                  <div className="mb-4">
+                    <Label className="text-xs text-gray-600 block mb-2">Response Type</Label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          withPreservedScroll(() => {
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...sctSettings, choiceType: 'single' } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          });
+                        }}
+                        className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                          sctChoiceType === 'single'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Single Choice
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          withPreservedScroll(() => {
+                            setSections(prevSections =>
+                            prevSections.map(section =>
+                              section.id === sectionId
+                                ? {
+                                    ...section,
+                                    questions: section.questions.map((q: any) =>
+                                      q.id === question.id
+                                        ? { ...q, settings: { ...sctSettings, choiceType: 'multi' } }
+                                        : q
+                                    )
+                                  }
+                                : section
+                            )
+                          );
+                          });
+                        }}
+                        className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                          sctChoiceType === 'multi'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Multiple Choice
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Multi-Select Normalization */}
+                  {sctChoiceType === 'multi' && (
+                    <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 rounded-md border border-blue-200">
+                      <input
+                        type="checkbox"
+                        id={`sct-normalize-${question.id}`}
+                        checked={sctNormalize}
+                        onChange={(e) => {
+                          setSections(prevSections =>
+                            prevSections.map(section =>
+                              section.id === sectionId
+                                ? {
+                                    ...section,
+                                    questions: section.questions.map((q: any) =>
+                                      q.id === question.id
+                                        ? { ...q, settings: { ...sctSettings, normalizeMultiSelect: e.target.checked } }
+                                        : q
+                                    )
+                                  }
+                                : section
+                            )
+                          );
+                        }}
+                        className="w-4 h-4 text-indigo-600 rounded"
+                      />
+                      <Label htmlFor={`sct-normalize-${question.id}`} className="text-xs text-gray-700 cursor-pointer">
+                        Normalize multi-select scores (divide by number of selections)
+                      </Label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Score Configuration */}
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-gray-700">Score Assignment</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Assign scores to each option. These scores will be used to calculate the assessment result.
+                  </p>
+                  
+                  {/* Show Scores Toggle */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <input
+                      type="checkbox"
+                      id={`sct-show-scores-${question.id}`}
+                      checked={sctShowScores}
+                      onChange={(e) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, settings: { ...sctSettings, showScores: e.target.checked } }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded"
+                    />
+                    <Label htmlFor={`sct-show-scores-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                      Show scores to admin (preview only)
+                    </Label>
+                  </div>
+
+                  <div className="space-y-2">
+                    {(question.options || []).map((option: string, idx: number) => (
+                      <div key={idx} className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <span className="text-xs text-gray-500 w-6 flex-shrink-0">{idx + 1}.</span>
+                        <Input
+                          type="text"
+                          value={option}
+                          onChange={(e) => {
+                            withPreservedScroll(() => {
+                              const newOptions = [...(question.options || [])];
+                              newOptions[idx] = e.target.value;
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? { ...q, options: newOptions }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            });
+                          }}
+                          placeholder={`Option ${idx + 1}`}
+                          className="flex-1 min-w-0 text-xs h-9"
+                        />
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Label className="text-xs text-gray-500 whitespace-nowrap">Score:</Label>
+                          <Input
+                            type="number"
+                            value={sctScores[idx] || 0}
+                            onChange={(e) => {
+                              withPreservedScroll(() => {
+                                const newScores = [...sctScores];
+                                newScores[idx] = parseFloat(e.target.value) || 0;
+                                setSections(prevSections =>
+                                  prevSections.map(section =>
+                                    section.id === sectionId
+                                      ? {
+                                          ...section,
+                                          questions: section.questions.map((q: any) =>
+                                            q.id === question.id
+                                              ? { ...q, settings: { ...sctSettings, scores: newScores } }
+                                              : q
+                                          )
+                                        }
+                                      : section
+                                  )
+                                );
+                              });
+                            }}
+                            className="w-20 text-xs h-9"
+                            step="0.5"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>

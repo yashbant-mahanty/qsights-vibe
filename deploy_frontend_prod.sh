@@ -24,7 +24,8 @@ SERVER_USER="ubuntu"
 FRONTEND_PATH="/var/www/frontend"
 LOCAL_FRONTEND_PATH="$(pwd)/frontend"
 PREPROD_SERVER_IP="3.110.94.207"
-PREPROD_STATE_FILE="/home/ubuntu/deployments/preprod/last_deployed_commit"
+PREPROD_BACKEND_STATE_FILE="/home/ubuntu/deployments/preprod/last_backend_deployed_commit"
+PREPROD_FRONTEND_STATE_FILE="/home/ubuntu/deployments/preprod/last_frontend_deployed_commit"
 APPROVAL_FILE="release/PROD_APPROVAL.txt"
 
 echo -e "${RED}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -45,18 +46,24 @@ if [ -z "$LOCAL_COMMIT" ]; then
     exit 1
 fi
 
-PREPROD_COMMIT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$PREPROD_SERVER_IP" "cat $PREPROD_STATE_FILE 2>/dev/null || true" | tr -d ' \n\r')
-if [ -z "$PREPROD_COMMIT" ]; then
-    echo -e "${RED}✗ Pre-Prod deployment state not found on $PREPROD_SERVER_IP${NC}"
-    echo -e "${YELLOW}Run pre-prod deploy first: ./deploy_backend_preprod.sh and ./deploy_frontend_preprod.sh${NC}"
+PREPROD_BACKEND_COMMIT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$PREPROD_SERVER_IP" "cat $PREPROD_BACKEND_STATE_FILE 2>/dev/null || true" | tr -d ' \n\r')
+PREPROD_FRONTEND_COMMIT=$(ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$PREPROD_SERVER_IP" "cat $PREPROD_FRONTEND_STATE_FILE 2>/dev/null || true" | tr -d ' \n\r')
+
+if [ -z "$PREPROD_BACKEND_COMMIT" ] || [ -z "$PREPROD_FRONTEND_COMMIT" ]; then
+    echo -e "${RED}✗ Pre-Prod deployment state incomplete on $PREPROD_SERVER_IP${NC}"
+    echo -e "${YELLOW}Expected both markers:${NC}"
+    echo -e "  - $PREPROD_BACKEND_STATE_FILE"
+    echo -e "  - $PREPROD_FRONTEND_STATE_FILE"
+    echo -e "${YELLOW}Run pre-prod deploys first: ./deploy_backend_preprod.sh AND ./deploy_frontend_preprod.sh${NC}"
     exit 1
 fi
 
-if [ "$PREPROD_COMMIT" != "$LOCAL_COMMIT" ]; then
-    echo -e "${RED}✗ BLOCKED: Current commit is not deployed to Pre-Prod${NC}"
-    echo -e "${YELLOW}Local:   ${NC}$LOCAL_COMMIT"
-    echo -e "${YELLOW}Pre-Prod:${NC} $PREPROD_COMMIT"
-    echo -e "${YELLOW}Deploy this commit to Pre-Prod first, verify, then deploy to Prod.${NC}"
+if [ "$PREPROD_BACKEND_COMMIT" != "$LOCAL_COMMIT" ] || [ "$PREPROD_FRONTEND_COMMIT" != "$LOCAL_COMMIT" ]; then
+    echo -e "${RED}✗ BLOCKED: Current commit is not fully deployed to Pre-Prod${NC}"
+    echo -e "${YELLOW}Local:         ${NC}$LOCAL_COMMIT"
+    echo -e "${YELLOW}Pre-Prod back: ${NC}$PREPROD_BACKEND_COMMIT"
+    echo -e "${YELLOW}Pre-Prod front:${NC} $PREPROD_FRONTEND_COMMIT"
+    echo -e "${YELLOW}Deploy this commit to Pre-Prod (backend+frontend), verify, then deploy to Prod.${NC}"
     exit 1
 fi
 

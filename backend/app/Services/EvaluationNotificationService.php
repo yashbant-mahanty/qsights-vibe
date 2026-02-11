@@ -222,10 +222,8 @@ class EvaluationNotificationService
     {
         $recipientEmail = $admin->communication_email ?? $admin->email;
         
-        // Create notification log
-        $logId = \Illuminate\Support\Str::uuid()->toString();
+        // Create notification log - id is bigint auto-increment, do NOT set manually
         $log = EvaluationNotificationLog::create([
-            'id' => $logId,
             'evaluation_triggered_id' => $evaluationTriggered['id'] ?? null,
             'program_id' => $evaluationTriggered['program_id'],
             'notification_type' => $type,
@@ -289,19 +287,54 @@ class EvaluationNotificationService
     }
 
     /**
+     * Send trigger email to evaluator (when evaluation is assigned)
+     */
+    public function sendTriggerEmailToEvaluator($evaluationTriggered)
+    {
+        $config = EvaluationNotificationConfig::getForProgram($evaluationTriggered['program_id']);
+
+        // Get evaluator details
+        $evaluator = DB::table('evaluation_staff')
+            ->where('id', $evaluationTriggered['evaluator_id'])
+            ->first();
+
+        if (!$evaluator || !$evaluator->email) {
+            Log::warning('No email found for evaluator', ['evaluator_id' => $evaluationTriggered['evaluator_id']]);
+            return ['success' => false, 'error' => 'No email found for evaluator'];
+        }
+
+        // Use configured template or default
+        $template = $config->trigger_email_template ?? $this->getDefaultEvaluatorTriggerTemplate();
+        
+        // Build evaluation URL with access token
+        $evaluationUrl = config('app.frontend_url', 'https://prod.qsights.com') . 
+            '/e/evaluate/' . $evaluationTriggered['id'] . '?token=' . $evaluationTriggered['access_token'];
+        
+        // Prepare subject and body with placeholders
+        $subject = $evaluationTriggered['email_subject'] ?? 'Evaluation Request: ' . $evaluationTriggered['template_name'];
+        
+        // Get subordinates list
+        $subordinates = json_decode($evaluationTriggered['subordinates'] ?? '[]', true);
+        $subordinatesList = collect($subordinates)->map(fn($s) => $s['name'] ?? 'Unknown')->implode("\n- ");
+        
+        // Replace all placeholders in template
+        $message = $this->replaceEvaluatorPlaceholders($template, $evaluationTriggered, $evaluator, $evaluationUrl, $subordinatesList);
+
+        return $this->sendEmailToEvaluator($evaluator, $subject, $message, $evaluationTriggered, 'trigger');
+    }
+
+    /**
      * Send email to evaluator
      */
     protected function sendEmailToEvaluator($evaluator, $subject, $message, $evaluationTriggered, $type)
     {
-        // Create notification log
-        $logId = \Illuminate\Support\Str::uuid()->toString();
+        // Create notification log - id is bigint auto-increment, do NOT set manually
         $log = EvaluationNotificationLog::create([
-            'id' => $logId,
             'evaluation_triggered_id' => $evaluationTriggered['id'] ?? null,
             'program_id' => $evaluationTriggered['program_id'],
             'notification_type' => $type,
             'channel' => 'email',
-            'recipient_id' => $evaluator->id,
+            'recipient_id' => $evaluator->user_id ?? null,
             'recipient_email' => $evaluator->email,
             'recipient_name' => $evaluator->name,
             'subject' => $subject,
@@ -458,6 +491,80 @@ class EvaluationNotificationService
         ];
 
         return str_replace(array_keys($placeholders), array_values($placeholders), $template);
+    }
+
+    /**
+     * Replace placeholders specifically for evaluator emails (including evaluation URL with token)
+     */
+    protected function replaceEvaluatorPlaceholders($template, $evaluationTriggered, $evaluator, $evaluationUrl, $subordinatesList)
+    {
+        $placeholders = [
+            '{evaluator_name}' => $evaluator->name ?? '',
+            '{template_name}' => $evaluationTriggered['template_name'] ?? '',
+            '{start_date}' => $evaluationTriggered['start_date'] ? Carbon::parse($evaluationTriggered['start_date'])->format('F j, Y') : 'Not specified',
+            '{end_date}' => $evaluationTriggered['end_date'] ? Carbon::parse($evaluationTriggered['end_date'])->format('F j, Y') : 'Not specified',
+            '{subordinates_list}' => $subordinatesList,
+            '{subordinates_count}' => $evaluationTriggered['subordinates_count'] ?? 0,
+            '{evaluation_url}' => $evaluationUrl,
+            '{{evaluator_name}}' => $evaluator->name ?? '',
+            '{{template_name}}' => $evaluationTriggered['template_name'] ?? '',
+            '{{start_date}}' => $evaluationTriggered['start_date'] ? Carbon::parse($evaluationTriggered['start_date'])->format('F j, Y') : 'Not specified',
+            '{{end_date}}' => $evaluationTriggered['end_date'] ? Carbon::parse($evaluationTriggered['end_date'])->format('F j, Y') : 'Not specified',
+            '{{subordinates_list}}' => $subordinatesList,
+            '{{subordinates_count}}' => $evaluationTriggered['subordinates_count'] ?? 0,
+            '{{evaluation_url}}' => $evaluationUrl,
+        ];
+
+        return str_replace(array_keys($placeholders), array_values($placeholders), $template);
+    }
+
+    /**
+     * Get default trigger email template for evaluators
+     */
+    protected function getDefaultEvaluatorTriggerTemplate()
+    {
+        return <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+</head>
+<body style='margin: 0; padding: 0; background-color: #f4f4f4;'>
+    <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%' style='background-color: #f4f4f4;'>
+        <tr>
+            <td style='padding: 20px 0;'>
+                <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden;'>
+                    <tr>
+                        <td style='padding: 40px 30px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #333333;'>
+                            <p>Hello {evaluator_name},</p>
+                            <p>You have been requested to complete a {template_name} evaluation for your team members.</p>
+                            <p><strong>Evaluation Period:</strong> {start_date} to {end_date}</p>
+                            <p><strong>Your subordinates to evaluate:</strong><br>
+                            {subordinates_list}</p>
+                            <table role='presentation' cellspacing='0' cellpadding='0' border='0' align='center' style='margin: 30px auto;'>
+                                <tr>
+                                    <td align='center' bgcolor='#667eea' style='border-radius: 8px; background-color: #667eea;'>
+                                        <a href='{evaluation_url}' target='_blank' style='background-color: #667eea; border: 15px solid #667eea; border-radius: 8px; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; line-height: 1.1; text-align: center; text-decoration: none; display: inline-block; color: #ffffff;'>
+                                            Start Evaluation →
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style='color: #888888; font-size: 12px; margin-top: 30px; text-align: center; border-top: 1px solid #eeeeee; padding-top: 20px;'>
+                                If the button doesn't work, copy and paste this link into your browser:<br>
+                                <a href='{evaluation_url}' style='color: #667eea; word-break: break-all;'>{evaluation_url}</a>
+                            </p>
+                            <p>Best regards,<br>QSights Team</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
     }
 
     /**

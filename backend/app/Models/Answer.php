@@ -15,6 +15,7 @@ class Answer extends Model
         'question_id',
         'value',
         'value_array',
+        'other_text',
         'file_path',
         'value_translations',
         'time_spent',

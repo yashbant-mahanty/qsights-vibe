@@ -47,8 +47,11 @@ else
 fi
 
 yellow "== Server checks (nginx/php-fpm/pm2/cron) =="
-ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
+ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" 'bash -s' <<'ENDSSH' | sed 's/^/  /'
 set -e
+
+DEPLOY_STATE_DIR="/home/ubuntu/deployments/preprod"
+
 sudo systemctl is-active nginx >/dev/null && echo 'nginx: active' || echo 'nginx: NOT active'
 (sudo systemctl is-active php8.4-fpm >/dev/null && echo 'php8.4-fpm: active') || true
 (sudo systemctl is-active php8.1-fpm >/dev/null && echo 'php8.1-fpm: active') || true
@@ -61,6 +64,18 @@ if [ -d /var/www/QSightsOrg2.0/backend ]; then
   cd /var/www/QSightsOrg2.0/backend
   if [ -f .env ]; then echo 'backend: .env present'; else echo 'backend: .env MISSING'; fi
   php artisan --version 2>/dev/null | head -1 || true
+
+  if [ -f .env ]; then
+    DB_HOST=$(grep -E '^DB_HOST=' .env | tail -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
+    DB_PORT=$(grep -E '^DB_PORT=' .env | tail -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
+    if [ -z "$DB_PORT" ]; then DB_PORT=5432; fi
+    if [ -n "$DB_HOST" ]; then
+      echo "db: checking ${DB_HOST}:${DB_PORT}"
+      timeout 5 bash -lc "</dev/tcp/${DB_HOST}/${DB_PORT}" >/dev/null 2>&1 && echo 'db: TCP OK' || echo 'db: TCP FAIL (timeout/refused)'
+    else
+      echo 'db: DB_HOST missing (skip check)'
+    fi
+  fi
 else
   echo 'backend: path missing'
 fi
@@ -72,13 +87,23 @@ else
   echo 'frontend: path missing'
 fi
 
-sudo mkdir -p $DEPLOY_STATE_DIR
-if [ -f $DEPLOY_STATE_DIR/last_deployed_commit ]; then
-  echo "preprod state: commit $(cat $DEPLOY_STATE_DIR/last_deployed_commit)"
+sudo mkdir -p "$DEPLOY_STATE_DIR"
+if [ -f "$DEPLOY_STATE_DIR/last_backend_deployed_commit" ]; then
+  echo "preprod state: backend_commit $(cat "$DEPLOY_STATE_DIR/last_backend_deployed_commit")"
 else
-  echo "preprod state: missing last_deployed_commit"
+  echo 'preprod state: backend_commit MISSING'
 fi
-" | sed 's/^/  /'
+if [ -f "$DEPLOY_STATE_DIR/last_frontend_deployed_commit" ]; then
+  echo "preprod state: frontend_commit $(cat "$DEPLOY_STATE_DIR/last_frontend_deployed_commit")"
+else
+  echo 'preprod state: frontend_commit MISSING'
+fi
+if [ -f "$DEPLOY_STATE_DIR/last_deployed_commit" ]; then
+  echo "preprod state: legacy_commit $(cat "$DEPLOY_STATE_DIR/last_deployed_commit")"
+else
+  echo 'preprod state: legacy_commit MISSING'
+fi
+ENDSSH
 
 yellow "== Functional checklist (manual) =="
 echo "- Auth: login + token/session"

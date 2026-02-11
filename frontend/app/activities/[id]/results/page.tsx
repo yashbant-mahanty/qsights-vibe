@@ -2374,18 +2374,19 @@ export default function ActivityResultsPage() {
                                     {/* Score Distribution */}
                                     {sctScoreData.scoreDistribution && Object.keys(sctScoreData.scoreDistribution).length > 0 && (
                                       <div className="mt-4 pt-4 border-t border-purple-200">
-                                        <p className="text-xs font-semibold text-gray-700 mb-3">Score Distribution:</p>
+                                        <p className="text-xs font-semibold text-gray-700 mb-3">Response Distribution by Score:</p>
                                         <div className="flex flex-wrap gap-3">
                                           {Object.entries(sctScoreData.scoreDistribution)
-                                            .sort((a, b) => Number(b[0]) - Number(a[0]))
-                                            .map(([score, count]) => (
-                                              <div key={score} className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                            .sort((a, b) => (b[1] as any).score - (a[1] as any).score)
+                                            .map(([answer, data]: [string, any]) => (
+                                              <div key={answer} className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                                <span className="text-sm font-medium text-gray-700">{answer}</span>
                                                 <span className="w-8 h-8 flex items-center justify-center bg-purple-100 text-purple-700 rounded-full font-bold text-sm">
-                                                  {score}
+                                                  {data.score}
                                                 </span>
-                                                <span className="text-sm text-gray-600">pts</span>
+                                                <span className="text-xs text-gray-500">pts</span>
                                                 <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded font-semibold text-sm">
-                                                  {count as number} {(count as number) === 1 ? 'response' : 'responses'}
+                                                  {data.count} {data.count === 1 ? 'response' : 'responses'}
                                                 </span>
                                               </div>
                                             ))}

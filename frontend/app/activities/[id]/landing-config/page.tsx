@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { activitiesApi } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
+import S3ImageUpload from "@/components/S3ImageUpload";
 
 interface LandingPageConfig {
   // Logo
@@ -46,6 +47,8 @@ interface LandingPageConfig {
   bannerImagePosition: string;
   bannerHeight: string;
   bannerBackgroundColor: string;
+  bannerPaddingLeft: string; // Left padding for banner content
+  bannerPaddingRight: string; // Right padding for banner content
   bannerText: string;
   bannerTextColor: string;
   bannerTextSize: string; // small, medium, large, xlarge
@@ -55,6 +58,10 @@ interface LandingPageConfig {
   // Footer
   footerEnabled: boolean;
   footerText: string;
+  footerTextUrl: string; // URL to make footer text clickable/hyperlinked
+  footerLinkText: string; // Display text for hyperlink within footer (e.g., "BioQuest Solutions")
+  footerLinkUrl: string; // URL for the hyperlink
+  footerLinkTarget: string; // _blank or _self
   footerTextColor: string;
   footerTextPosition: string;
   footerBackgroundColor: string;
@@ -74,6 +81,7 @@ interface LandingPageConfig {
   gradientTo: string;
   
   // Post-Landing Content Header
+  hideContentHeader: boolean;
   contentHeaderType: string; // "event" (show title/description), "logo", "custom"
   contentHeaderLogoUrl: string;
   contentHeaderLogoSize: string; // small, medium, large
@@ -83,6 +91,12 @@ interface LandingPageConfig {
   contentHeaderGradientTo: string;
   contentHeaderCustomTitle: string;
   contentHeaderCustomSubtitle: string;
+  
+  // Content Header Display Controls (NEW)
+  showContentHeaderTitle: boolean;
+  showContentHeaderStartDate: boolean;
+  showContentHeaderEndDate: boolean;
+  showContentHeaderQuestions: boolean;
   
   // Background Image Opacity
   backgroundImageOpacity: number;
@@ -149,6 +163,8 @@ interface LandingPageConfig {
   thankYouSubMessage: string;
   thankYouIconColor: string;
   thankYouShowConfirmation: boolean;
+  thankYouShowBanner: boolean; // Display top banner on Thank You page
+  thankYouShowFooter: boolean; // Display footer on Thank You page
   enableTakeEventAgainButton: boolean; // NEW: Kiosk mode - allow new participants on same device
   
   // Post Session Registration Page
@@ -225,13 +241,20 @@ const defaultConfig: LandingPageConfig = {
   bannerImagePosition: "center",
   bannerHeight: "200px",
   bannerBackgroundColor: "#3B82F6",
+  bannerPaddingLeft: "48px",
+  bannerPaddingRight: "48px",
   bannerText: "",
   bannerTextColor: "#FFFFFF",
+  bannerTextSize: "medium",
   bannerTextPosition: "left",
   bannerEnabled: true,
   bannerShowOnInnerPages: false,
   footerEnabled: true,
   footerText: "© 2025 All rights reserved.",
+  footerTextUrl: "",
+  footerLinkText: "",
+  footerLinkUrl: "",
+  footerLinkTarget: "_blank",
   footerTextColor: "#6B7280",
   footerTextPosition: "left",
   footerBackgroundColor: "#F9FAFB",
@@ -244,6 +267,7 @@ const defaultConfig: LandingPageConfig = {
   backgroundStyle: "solid",
   gradientFrom: "#F3F4F6",
   gradientTo: "#DBEAFE",
+  hideContentHeader: false,
   contentHeaderType: "event", // Default to showing event title/description
   contentHeaderLogoUrl: "",
   contentHeaderLogoSize: "medium",
@@ -253,6 +277,10 @@ const defaultConfig: LandingPageConfig = {
   contentHeaderGradientTo: "#7C3AED",
   contentHeaderCustomTitle: "",
   contentHeaderCustomSubtitle: "",
+  showContentHeaderTitle: true,
+  showContentHeaderStartDate: true,
+  showContentHeaderEndDate: true,
+  showContentHeaderQuestions: true,
   backgroundImageOpacity: 100,
   leftContentEnabled: true,
   leftContentTitle: "Professional Survey Platform",
@@ -271,6 +299,8 @@ const defaultConfig: LandingPageConfig = {
   splitScreenRightBackgroundOpacity: 100,
   splitScreenRightBackgroundColor: "#F3F4F6",
   fullPageBackgroundImageUrl: "",
+  fullPageBackgroundOpacity: 100,
+  fullPageBackgroundColor: "#FFFFFF",
   featuresEnabled: true,
   features: [
     { icon: "check", title: "Easy to Use", description: "Simple and intuitive interface", color: "#10B981" },
@@ -302,6 +332,8 @@ const defaultConfig: LandingPageConfig = {
   thankYouSubMessage: "We appreciate your participation",
   thankYouIconColor: "#10B981",
   thankYouShowConfirmation: true,
+  thankYouShowBanner: true, // Display banner on Thank You page by default
+  thankYouShowFooter: true, // Display footer on Thank You page by default
   enableTakeEventAgainButton: false, // Disabled by default
   // Post Session Registration defaults
   postSessionRegTitle: "Complete Your Registration",
@@ -428,8 +460,12 @@ export default function LandingPageConfigPage() {
       
       if (data && Object.keys(data).length > 0) {
         // Merge with default config to ensure all fields are present
-        const mergedConfig = { ...defaultConfig, ...data };
+        let mergedConfig = { ...defaultConfig, ...data };
         console.log("Merged config:", mergedConfig);
+        
+        // Clean any blob URLs from the config
+        mergedConfig = cleanBlobUrls(mergedConfig);
+        
         setConfig(mergedConfig);
         
         // Detect which template is currently applied by comparing key properties
@@ -602,21 +638,52 @@ export default function LandingPageConfigPage() {
     setConfig(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleImageUpload = async (field: string, file: File) => {
-    try {
-      const result = await activitiesApi.uploadLandingImage(activityId, file, field);
-      updateConfig(field, result.url);
-    } catch (err) {
-      console.error("Failed to upload image:", err);
-      // Fallback to local URL for now
-      const url = URL.createObjectURL(file);
-      updateConfig(field, url);
+  // Helper function to detect and clean blob URLs
+  const cleanBlobUrls = (configData: any) => {
+    const cleaned = { ...configData };
+    let hadBlobUrls = false;
+    const imageFields = [
+      'logoUrl',
+      'bannerImageUrl',
+      'footerLogoUrl',
+      'splitScreenLeftBackgroundImageUrl',
+      'splitScreenRightBackgroundImageUrl',
+      'fullPageBackgroundImageUrl',
+      'loginBoxLogoUrl',
+      'backgroundImageUrl',
+      'contentHeaderLogoUrl',
+      'leftContentImageUrl',
+      'loginBoxBackgroundImageUrl',
+      'loginBoxBannerLogoUrl'
+    ];
+
+    imageFields.forEach(field => {
+      if (cleaned[field] && typeof cleaned[field] === 'string' && cleaned[field].startsWith('blob:')) {
+        console.warn(`Removing invalid blob URL from ${field}:`, cleaned[field]);
+        cleaned[field] = '';
+        hadBlobUrls = true;
+      }
+    });
+
+    if (hadBlobUrls) {
       toast({
-        title: "Warning",
-        description: "Image upload failed. Using temporary local URL. Please save to persist.",
+        title: "Temporary Images Removed",
+        description: "Some images were using temporary URLs and have been cleared. Please re-upload them using the Upload buttons.",
         variant: "warning",
+        duration: 8000,
       });
     }
+
+    return cleaned;
+  };
+
+  const handleImageUpload = async (field: string, file: File) => {
+    toast({
+      title: "Not Supported",
+      description: "Direct file upload is not available. Please use an image URL from S3 or external source.",
+      variant: "warning",
+      duration: 5000,
+    });
   };
 
   const addFeature = () => {
@@ -1017,16 +1084,19 @@ export default function LandingPageConfigPage() {
                       <h4 className="font-semibold text-sm text-gray-900">Logo</h4>
                       <div>
                         <Label>Logo Image</Label>
-                        <p className="text-xs text-gray-500 mt-1">Upload a file or enter an image URL (e.g., S3 bucket URL)</p>
+                        <p className="text-xs text-gray-500 mt-1">Upload logo to S3 storage or enter an image URL</p>
                         <div className="mt-2 space-y-3">
-                          {config.logoUrl && (
-                            <div className="flex items-center justify-center p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                              <img src={config.logoUrl} alt="Logo" className="h-20 max-w-full object-contain" />
-                            </div>
-                          )}
-                          
+                          <S3ImageUpload
+                            value={config.logoUrl || ""}
+                            onChange={(url) => updateConfig("logoUrl", url)}
+                            onRemove={() => updateConfig("logoUrl", "")}
+                            folder="landing-logos"
+                            maxSize={5}
+                            accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                            placeholder="Click to upload logo (PNG, JPG, GIF, SVG, WebP)"
+                          />
                           <div>
-                            <Label className="text-xs text-gray-600">Image URL</Label>
+                            <Label className="text-xs text-gray-600">Or enter Image URL</Label>
                             <div className="flex gap-2 mt-1">
                               <Input
                                 type="url"
@@ -1045,29 +1115,7 @@ export default function LandingPageConfigPage() {
                                 </Button>
                               )}
                             </div>
-                            <p className="text-xs text-gray-400 mt-1">Example: https://bq-common.s3.ap-south-1.amazonaws.com/logos/logo.png</p>
-                          </div>
-                          
-                          <div>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleImageUpload("logoUrl", file);
-                              }}
-                              className="hidden"
-                              id="logo-upload"
-                            />
-                            <label htmlFor="logo-upload">
-                              <Button variant="outline" className="cursor-pointer w-full" asChild>
-                                <span>
-                                  <Upload className="w-4 h-4 mr-2" />
-                                  Or Upload File (Temporary)
-                                </span>
-                              </Button>
-                            </label>
-                            <p className="text-xs text-gray-400 mt-1">Note: File uploads are temporary. Use URL for permanent storage.</p>
+                            <p className="text-xs text-gray-500 mt-1">Direct URL to your logo image (S3, CDN, or any public URL)</p>
                           </div>
                         </div>
                       </div>
@@ -1159,67 +1207,27 @@ export default function LandingPageConfigPage() {
 
                         <div>
                           <Label>Banner Image</Label>
-                          <p className="text-xs text-gray-500 mt-1">Optional background image for the banner</p>
+                          <p className="text-xs text-gray-500 mt-1">Upload banner image to S3 storage or enter an image URL</p>
                           <div className="mt-2 space-y-3">
-                            {config.bannerImageUrl && (
-                              <div className="relative">
-                                <img
-                                  src={config.bannerImageUrl}
-                                  alt="Banner"
-                                  className="w-full h-32 object-cover rounded-lg"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="absolute top-2 right-2"
-                                  onClick={() => updateConfig("bannerImageUrl", "")}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
-                            
+                            <S3ImageUpload
+                              value={config.bannerImageUrl || ""}
+                              onChange={(url) => updateConfig("bannerImageUrl", url)}
+                              onRemove={() => updateConfig("bannerImageUrl", "")}
+                              folder="landing-banners"
+                              maxSize={15}
+                              accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                              placeholder="Click to upload banner image (PNG, JPG, GIF, SVG, WebP)"
+                            />
                             <div>
-                              <Label className="text-xs text-gray-600">Image URL</Label>
-                              <div className="flex gap-2 mt-1">
-                                <Input
-                                  type="url"
-                                  value={config.bannerImageUrl || ""}
-                                  onChange={(e) => updateConfig("bannerImageUrl", e.target.value)}
-                                  placeholder="https://example.com/banner.jpg"
-                                  className="flex-1"
-                                />
-                                {config.bannerImageUrl && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => updateConfig("bannerImageUrl", "")}
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleImageUpload("bannerImageUrl", file);
-                                }}
-                                className="hidden"
-                                id="banner-upload"
+                              <Label className="text-xs text-gray-600">Or enter Image URL</Label>
+                              <Input
+                                type="url"
+                                value={config.bannerImageUrl || ""}
+                                onChange={(e) => updateConfig("bannerImageUrl", e.target.value)}
+                                placeholder="https://example.com/banner.png"
+                                className="mt-1"
                               />
-                              <label htmlFor="banner-upload">
-                                <Button variant="outline" className="w-full cursor-pointer" asChild>
-                                  <span>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    Upload Banner Image
-                                  </span>
-                                </Button>
-                              </label>
+                              <p className="text-xs text-gray-500 mt-1">Direct URL to your banner image (S3, CDN, or any public URL)</p>
                             </div>
                           </div>
                         </div>
@@ -1262,6 +1270,29 @@ export default function LandingPageConfigPage() {
                             <option value="center">Center</option>
                             <option value="right">Right</option>
                           </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Banner Padding Left</Label>
+                            <Input
+                              value={config.bannerPaddingLeft || "24px"}
+                              onChange={(e) => updateConfig("bannerPaddingLeft", e.target.value)}
+                              placeholder="24px"
+                              className="mt-2"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Left spacing for banner content</p>
+                          </div>
+                          <div>
+                            <Label>Banner Padding Right</Label>
+                            <Input
+                              value={config.bannerPaddingRight || "24px"}
+                              onChange={(e) => updateConfig("bannerPaddingRight", e.target.value)}
+                              placeholder="24px"
+                              className="mt-2"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Right spacing for banner content</p>
+                          </div>
                         </div>
 
                         <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -1371,6 +1402,62 @@ export default function LandingPageConfigPage() {
                       />
                     </div>
                     <div>
+                      <Label>Footer Text URL (Optional)</Label>
+                      <Input
+                        type="url"
+                        value={config.footerTextUrl || ""}
+                        onChange={(e) => updateConfig("footerTextUrl", e.target.value)}
+                        placeholder="https://yoursite.com"
+                        className="mt-2"
+                        disabled={config.footerEnabled === false}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Make entire footer text clickable by adding a link URL</p>
+                    </div>
+                    
+                    {/* Footer Hyperlink Configuration */}
+                    <div className="border-t pt-4 mt-4">
+                      <Label className="text-sm font-semibold">Footer Hyperlink (Optional)</Label>
+                      <p className="text-xs text-gray-500 mt-1 mb-3">Add a hyperlink for specific words/phrases within your footer text</p>
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-xs">Link Display Text</Label>
+                          <Input
+                            value={config.footerLinkText || ""}
+                            onChange={(e) => updateConfig("footerLinkText", e.target.value)}
+                            placeholder="e.g., BioQuest Solutions"
+                            className="mt-1"
+                            disabled={config.footerEnabled === false}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Text to be hyperlinked (will be styled in QSights color)</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Link URL</Label>
+                          <Input
+                            type="url"
+                            value={config.footerLinkUrl || ""}
+                            onChange={(e) => updateConfig("footerLinkUrl", e.target.value)}
+                            placeholder="https://example.com"
+                            className="mt-1"
+                            disabled={config.footerEnabled === false}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Open Link In</Label>
+                          <select
+                            value={config.footerLinkTarget || "_blank"}
+                            onChange={(e) => updateConfig("footerLinkTarget", e.target.value)}
+                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            disabled={config.footerEnabled === false}
+                          >
+                            <option value="_blank">New Tab (_blank)</option>
+                            <option value="_self">Same Tab (_self)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
                       <Label>Footer Text Position</Label>
                       <select
                         value={config.footerTextPosition || "left"}
@@ -1385,15 +1472,19 @@ export default function LandingPageConfigPage() {
                     </div>
                     <div>
                       <Label>Footer Logo</Label>
-                      <p className="text-xs text-gray-500 mt-1">Optional logo for footer area</p>
+                      <p className="text-xs text-gray-500 mt-1">Upload footer logo to S3 storage or enter an image URL</p>
                       <div className="mt-2 space-y-3">
-                        {config.footerLogoUrl && (
-                          <div className="flex items-center justify-center p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                            <img src={config.footerLogoUrl} alt="Footer Logo" className="h-12 max-w-full object-contain" />
-                          </div>
-                        )}
+                        <S3ImageUpload
+                          value={config.footerLogoUrl || ""}
+                          onChange={(url) => updateConfig("footerLogoUrl", url)}
+                          onRemove={() => updateConfig("footerLogoUrl", "")}
+                          folder="landing-logos"
+                          maxSize={5}
+                          accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                          placeholder="Click to upload footer logo (PNG, JPG, GIF, SVG, WebP)"
+                        />
                         <div>
-                          <Label className="text-xs text-gray-600">Logo URL</Label>
+                          <Label className="text-xs text-gray-600">Or enter Logo URL</Label>
                           <div className="flex gap-2 mt-1">
                             <Input
                               type="url"
@@ -1414,27 +1505,6 @@ export default function LandingPageConfigPage() {
                               </Button>
                             )}
                           </div>
-                        </div>
-                        <div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload("footerLogoUrl", file);
-                            }}
-                            className="hidden"
-                            id="footer-logo-upload"
-                            disabled={config.footerEnabled === false}
-                          />
-                          <label htmlFor="footer-logo-upload">
-                            <Button variant="outline" className="w-full cursor-pointer" asChild disabled={config.footerEnabled === false}>
-                              <span>
-                                <Upload className="w-4 h-4 mr-2" />
-                                Or Upload File (Temporary)
-                              </span>
-                            </Button>
-                          </label>
                         </div>
                       </div>
                     </div>
@@ -1547,28 +1617,20 @@ export default function LandingPageConfigPage() {
                         {/* Left Side Background Image */}
                         <div>
                           <Label>Left Side Background Image (Optional)</Label>
-                          <p className="text-xs text-gray-500 mt-1">Full-height background image for left content panel</p>
+                          <p className="text-xs text-gray-500 mt-1">Upload to S3 or enter URL for left content panel background</p>
                           <div className="mt-2 space-y-3">
-                            {config.splitScreenLeftBackgroundImageUrl && (
-                              <div className="relative">
-                                <img
-                                  src={config.splitScreenLeftBackgroundImageUrl}
-                                  alt="Left Background"
-                                  className="w-full h-48 object-cover rounded-lg"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="absolute top-2 right-2"
-                                  onClick={() => updateConfig("splitScreenLeftBackgroundImageUrl", "")}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
+                            <S3ImageUpload
+                              value={config.splitScreenLeftBackgroundImageUrl || ""}
+                              onChange={(url) => updateConfig("splitScreenLeftBackgroundImageUrl", url)}
+                              onRemove={() => updateConfig("splitScreenLeftBackgroundImageUrl", "")}
+                              folder="landing-backgrounds"
+                              maxSize={15}
+                              accept="image/png,image/jpeg,image/gif,image/webp"
+                              placeholder="Click to upload left background (PNG, JPG, GIF, WebP)"
+                            />
                             
                             <div>
-                              <Label className="text-xs text-gray-600">Image URL</Label>
+                              <Label className="text-xs text-gray-600">Or enter Image URL</Label>
                               <div className="flex gap-2 mt-1">
                                 <Input
                                   type="url"
@@ -1587,27 +1649,6 @@ export default function LandingPageConfigPage() {
                                   </Button>
                                 )}
                               </div>
-                            </div>
-                            
-                            <div>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleImageUpload("splitScreenLeftBackgroundImageUrl", file);
-                                }}
-                                className="hidden"
-                                id="split-left-bg-upload"
-                              />
-                              <label htmlFor="split-left-bg-upload">
-                                <Button variant="outline" className="w-full cursor-pointer" asChild>
-                                  <span>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    Upload Left Background Image
-                                  </span>
-                                </Button>
-                              </label>
                             </div>
 
                             {config.splitScreenLeftBackgroundImageUrl && (
@@ -1682,28 +1723,20 @@ export default function LandingPageConfigPage() {
                         {/* Right Side Background Image */}
                         <div>
                           <Label>Right Side Background Image (Optional)</Label>
-                          <p className="text-xs text-gray-500 mt-1">Full-height background image for right login panel</p>
+                          <p className="text-xs text-gray-500 mt-1">Upload to S3 or enter URL for right login panel background</p>
                           <div className="mt-2 space-y-3">
-                            {config.splitScreenRightBackgroundImageUrl && (
-                              <div className="relative">
-                                <img
-                                  src={config.splitScreenRightBackgroundImageUrl}
-                                  alt="Right Background"
-                                  className="w-full h-48 object-cover rounded-lg"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="absolute top-2 right-2"
-                                  onClick={() => updateConfig("splitScreenRightBackgroundImageUrl", "")}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
+                            <S3ImageUpload
+                              value={config.splitScreenRightBackgroundImageUrl || ""}
+                              onChange={(url) => updateConfig("splitScreenRightBackgroundImageUrl", url)}
+                              onRemove={() => updateConfig("splitScreenRightBackgroundImageUrl", "")}
+                              folder="landing-backgrounds"
+                              maxSize={15}
+                              accept="image/png,image/jpeg,image/gif,image/webp"
+                              placeholder="Click to upload right background (PNG, JPG, GIF, WebP)"
+                            />
                             
                             <div>
-                              <Label className="text-xs text-gray-600">Image URL</Label>
+                              <Label className="text-xs text-gray-600">Or enter Image URL</Label>
                               <div className="flex gap-2 mt-1">
                                 <Input
                                   type="url"
@@ -1722,27 +1755,6 @@ export default function LandingPageConfigPage() {
                                   </Button>
                                 )}
                               </div>
-                            </div>
-                            
-                            <div>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleImageUpload("splitScreenRightBackgroundImageUrl", file);
-                                }}
-                                className="hidden"
-                                id="split-right-bg-upload"
-                              />
-                              <label htmlFor="split-right-bg-upload">
-                                <Button variant="outline" className="w-full cursor-pointer" asChild>
-                                  <span>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    Upload Right Background Image
-                                  </span>
-                                </Button>
-                              </label>
                             </div>
                             
                             {config.splitScreenRightBackgroundImageUrl && (
@@ -1812,28 +1824,20 @@ export default function LandingPageConfigPage() {
                         {/* Full Page Background Image for Other Templates */}
                         <div>
                           <Label>Full Page Background Image (Optional)</Label>
-                          <p className="text-xs text-gray-500 mt-1">Background image covering entire page from top banner to footer</p>
+                          <p className="text-xs text-gray-500 mt-1">Upload to S3 or enter URL for full page background</p>
                           <div className="mt-2 space-y-3">
-                            {config.fullPageBackgroundImageUrl && (
-                              <div className="relative">
-                                <img
-                                  src={config.fullPageBackgroundImageUrl}
-                                  alt="Full Page Background"
-                                  className="w-full h-48 object-cover rounded-lg"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="absolute top-2 right-2"
-                                  onClick={() => updateConfig("fullPageBackgroundImageUrl", "")}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
+                            <S3ImageUpload
+                              value={config.fullPageBackgroundImageUrl || ""}
+                              onChange={(url) => updateConfig("fullPageBackgroundImageUrl", url)}
+                              onRemove={() => updateConfig("fullPageBackgroundImageUrl", "")}
+                              folder="landing-backgrounds"
+                              maxSize={15}
+                              accept="image/png,image/jpeg,image/gif,image/webp"
+                              placeholder="Click to upload full page background (PNG, JPG, GIF, WebP)"
+                            />
                             
                             <div>
-                              <Label className="text-xs text-gray-600">Image URL</Label>
+                              <Label className="text-xs text-gray-600">Or enter Image URL</Label>
                               <div className="flex gap-2 mt-1">
                                 <Input
                                   type="url"
@@ -1852,27 +1856,6 @@ export default function LandingPageConfigPage() {
                                   </Button>
                                 )}
                               </div>
-                            </div>
-                            
-                            <div>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleImageUpload("fullPageBackgroundImageUrl", file);
-                                }}
-                                className="hidden"
-                                id="full-page-bg-upload"
-                              />
-                              <label htmlFor="full-page-bg-upload">
-                                <Button variant="outline" className="w-full cursor-pointer" asChild>
-                                  <span>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    Upload Background Image
-                                  </span>
-                                </Button>
-                              </label>
                             </div>
                             
                             {config.fullPageBackgroundImageUrl && (
@@ -1955,26 +1938,22 @@ export default function LandingPageConfigPage() {
                         
                         <div>
                           <Label>Logo Image</Label>
-                          {config.loginBoxLogoUrl && (
-                            <div className="relative mt-2 mb-3">
-                              <img
-                                src={config.loginBoxLogoUrl}
-                                alt="Login Box Logo"
-                                className="w-32 h-32 object-contain rounded-lg border"
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="absolute top-2 right-2"
-                                onClick={() => updateConfig("loginBoxLogoUrl", "")}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          )}
+                          <p className="text-xs text-gray-500 mt-1">Upload to S3 or enter URL for login box logo</p>
                           
                           <div className="mt-2">
-                            <Label className="text-xs text-gray-600">Image URL</Label>
+                            <S3ImageUpload
+                              value={config.loginBoxLogoUrl || ""}
+                              onChange={(url) => updateConfig("loginBoxLogoUrl", url)}
+                              onRemove={() => updateConfig("loginBoxLogoUrl", "")}
+                              folder="landing-logos"
+                              maxSize={10}
+                              accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                              placeholder="Click to upload logo (PNG, JPG, GIF, SVG, WebP)"
+                            />
+                          </div>
+                          
+                          <div className="mt-2">
+                            <Label className="text-xs text-gray-600">Or enter Image URL</Label>
                             <div className="flex gap-2 mt-1">
                               <Input
                                 type="url"
@@ -1993,27 +1972,6 @@ export default function LandingPageConfigPage() {
                                 </Button>
                               )}
                             </div>
-                          </div>
-                          
-                          <div className="mt-3">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleImageUpload("loginBoxLogoUrl", file);
-                              }}
-                              className="hidden"
-                              id="login-box-logo-upload"
-                            />
-                            <label htmlFor="login-box-logo-upload">
-                              <Button variant="outline" className="w-full cursor-pointer" asChild>
-                                <span>
-                                  <Upload className="w-4 h-4 mr-2" />
-                                  Upload Logo
-                                </span>
-                              </Button>
-                            </label>
                           </div>
                         </div>
 
@@ -2116,73 +2074,29 @@ export default function LandingPageConfigPage() {
                   <CardContent className="space-y-4">
                     <div>
                       <Label>Banner Image</Label>
-                      <p className="text-xs text-gray-500 mt-1">Upload a file or enter an image URL</p>
+                      <p className="text-xs text-gray-500 mt-1">Upload banner image to S3 storage or enter an image URL</p>
                       <div className="mt-2 space-y-3">
-                        {config.bannerImageUrl && (
-                          <div className="relative">
-                            <img
-                              src={config.bannerImageUrl}
-                              alt="Banner"
-                              className="w-full h-32 object-cover rounded-lg"
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="absolute top-2 right-2"
-                              onClick={() => updateConfig("bannerImageUrl", "")}
-                              disabled={config.bannerEnabled === false}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        )}
-                        
-                        {/* URL Input */}
+                        <S3ImageUpload
+                          value={config.bannerImageUrl || ""}
+                          onChange={(url) => updateConfig("bannerImageUrl", url)}
+                          onRemove={() => updateConfig("bannerImageUrl", "")}
+                          folder="landing-banners"
+                          maxSize={15}
+                          accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                          placeholder="Click to upload banner image (PNG, JPG, GIF, SVG, WebP)"
+                          className={config.bannerEnabled === false ? "opacity-50 pointer-events-none" : ""}
+                        />
                         <div>
-                          <Label className="text-xs text-gray-600">Image URL</Label>
-                          <div className="flex gap-2 mt-1">
-                            <Input
-                              type="url"
-                              value={config.bannerImageUrl || ""}
-                              onChange={(e) => updateConfig("bannerImageUrl", e.target.value)}
-                              placeholder="https://example.com/banner.jpg"
-                              className="flex-1"
-                              disabled={config.bannerEnabled === false}
-                            />
-                            {config.bannerImageUrl && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => updateConfig("bannerImageUrl", "")}
-                                disabled={config.bannerEnabled === false}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* File Upload */}
-                        <div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload("bannerImageUrl", file);
-                            }}
-                            className="hidden"
-                            id="banner-upload-post"
+                          <Label className="text-xs text-gray-600">Or enter Image URL</Label>
+                          <Input
+                            type="url"
+                            value={config.bannerImageUrl || ""}
+                            onChange={(e) => updateConfig("bannerImageUrl", e.target.value)}
+                            placeholder="https://example.com/banner.png"
+                            className="mt-1"
                             disabled={config.bannerEnabled === false}
                           />
-                          <label htmlFor="banner-upload-post">
-                            <Button variant="outline" className="w-full cursor-pointer" asChild disabled={config.bannerEnabled === false}>
-                              <span>
-                                <Upload className="w-4 h-4 mr-2" />
-                                Upload Banner Image
-                              </span>
-                            </Button>
-                          </label>
+                          <p className="text-xs text-gray-500 mt-1">Direct URL to your banner image (S3, CDN, or any public URL)</p>
                         </div>
                       </div>
                     </div>
@@ -2250,6 +2164,30 @@ export default function LandingPageConfigPage() {
                           <option value="center">Center</option>
                           <option value="right">Right</option>
                         </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Banner Padding Left</Label>
+                        <Input
+                          value={config.bannerPaddingLeft || "24px"}
+                          onChange={(e) => updateConfig("bannerPaddingLeft", e.target.value)}
+                          placeholder="24px"
+                          className="mt-2"
+                          disabled={config.bannerEnabled === false}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Left spacing for banner content</p>
+                      </div>
+                      <div>
+                        <Label>Banner Padding Right</Label>
+                        <Input
+                          value={config.bannerPaddingRight || "24px"}
+                          onChange={(e) => updateConfig("bannerPaddingRight", e.target.value)}
+                          placeholder="24px"
+                          className="mt-2"
+                          disabled={config.bannerEnabled === false}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Right spacing for banner content</p>
                       </div>
                     </div>
                     <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -2345,29 +2283,21 @@ export default function LandingPageConfigPage() {
                     {config.backgroundStyle === "image" && (
                       <div>
                         <Label>Background Image</Label>
-                        <p className="text-xs text-gray-500 mt-1">Enter an image URL or upload a file</p>
+                        <p className="text-xs text-gray-500 mt-1">Upload to S3 or enter URL for background image</p>
                         <div className="mt-2 space-y-3">
-                          {config.backgroundImageUrl && (
-                            <div className="relative">
-                              <img
-                                src={config.backgroundImageUrl}
-                                alt="Background"
-                                className="w-full h-32 object-cover rounded-lg"
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="absolute top-2 right-2"
-                                onClick={() => updateConfig("backgroundImageUrl", "")}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          )}
+                          <S3ImageUpload
+                            value={config.backgroundImageUrl || ""}
+                            onChange={(url) => updateConfig("backgroundImageUrl", url)}
+                            onRemove={() => updateConfig("backgroundImageUrl", "")}
+                            folder="landing-backgrounds"
+                            maxSize={15}
+                            accept="image/png,image/jpeg,image/gif,image/webp"
+                            placeholder="Click to upload background (PNG, JPG, GIF, WebP)"
+                          />
                           
                           {/* URL Input */}
                           <div>
-                            <Label className="text-xs text-gray-600">Image URL</Label>
+                            <Label className="text-xs text-gray-600">Or enter Image URL</Label>
                             <div className="flex gap-2 mt-1">
                               <Input
                                 type="url"
@@ -2386,28 +2316,6 @@ export default function LandingPageConfigPage() {
                                 </Button>
                               )}
                             </div>
-                          </div>
-                          
-                          {/* File Upload */}
-                          <div>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleImageUpload("backgroundImageUrl", file);
-                              }}
-                              className="hidden"
-                              id="background-upload-post"
-                            />
-                            <label htmlFor="background-upload-post">
-                              <Button variant="outline" className="w-full cursor-pointer" asChild>
-                                <span>
-                                  <Upload className="w-4 h-4 mr-2" />
-                                  Upload Background Image
-                                </span>
-                              </Button>
-                            </label>
                           </div>
                           
                           {/* Image Opacity */}
@@ -2437,7 +2345,18 @@ export default function LandingPageConfigPage() {
                 {/* Content Header Configuration */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Content Header</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Content Header</CardTitle>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.hideContentHeader === true}
+                          onChange={(e) => updateConfig("hideContentHeader", e.target.checked)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="text-sm text-gray-600">Hide</span>
+                      </label>
+                    </div>
                     <p className="text-sm text-gray-500 mt-1">Configure what displays in the activity header section</p>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -2459,29 +2378,21 @@ export default function LandingPageConfigPage() {
                       <div className="space-y-4">
                         <div>
                           <Label>Logo Image</Label>
-                          <p className="text-xs text-gray-500 mt-1">Upload a file or enter an image URL</p>
+                          <p className="text-xs text-gray-500 mt-1">Upload to S3 or enter URL for content header logo</p>
                           <div className="mt-2 space-y-3">
-                            {config.contentHeaderLogoUrl && (
-                              <div className="relative">
-                                <img
-                                  src={config.contentHeaderLogoUrl}
-                                  alt="Content Header Logo"
-                                  className="w-full h-32 object-contain rounded-lg bg-gray-50"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="absolute top-2 right-2"
-                                  onClick={() => updateConfig("contentHeaderLogoUrl", "")}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
+                            <S3ImageUpload
+                              value={config.contentHeaderLogoUrl || ""}
+                              onChange={(url) => updateConfig("contentHeaderLogoUrl", url)}
+                              onRemove={() => updateConfig("contentHeaderLogoUrl", "")}
+                              folder="landing-logos"
+                              maxSize={10}
+                              accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                              placeholder="Click to upload logo (PNG, JPG, GIF, SVG, WebP)"
+                            />
                             
                             {/* URL Input */}
                             <div>
-                              <Label className="text-xs text-gray-600">Logo URL</Label>
+                              <Label className="text-xs text-gray-600">Or enter Logo URL</Label>
                               <div className="flex gap-2 mt-1">
                                 <Input
                                   type="url"
@@ -2500,28 +2411,6 @@ export default function LandingPageConfigPage() {
                                   </Button>
                                 )}
                               </div>
-                            </div>
-                            
-                            {/* File Upload */}
-                            <div>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleImageUpload("contentHeaderLogoUrl", file);
-                                }}
-                                className="hidden"
-                                id="content-header-logo-upload"
-                              />
-                              <label htmlFor="content-header-logo-upload">
-                                <Button variant="outline" className="w-full cursor-pointer" asChild>
-                                  <span>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    Upload Logo
-                                  </span>
-                                </Button>
-                              </label>
                             </div>
                           </div>
                         </div>
@@ -2645,6 +2534,78 @@ export default function LandingPageConfigPage() {
                         </p>
                       </div>
                     )}
+                    
+                    {/* Selective Display Controls - NEW */}
+                    {!config.hideContentHeader && (
+                      <div className="border-t border-gray-200 pt-4 mt-4">
+                        <Label className="text-base font-semibold mb-3 block">Display Controls</Label>
+                        <p className="text-xs text-gray-500 mb-4">Select which elements to show in the content header</p>
+                        
+                        <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
+                          <label className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={config.showContentHeaderTitle !== false}
+                              onChange={(e) => updateConfig("showContentHeaderTitle", e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">Show Title</span>
+                              <p className="text-xs text-gray-500">Display event title or custom title/logo</p>
+                            </div>
+                          </label>
+                          
+                          <label className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={config.showContentHeaderStartDate !== false}
+                              onChange={(e) => updateConfig("showContentHeaderStartDate", e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">Show Start Date</span>
+                              <p className="text-xs text-gray-500">Display activity start date</p>
+                            </div>
+                          </label>
+                          
+                          <label className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={config.showContentHeaderEndDate !== false}
+                              onChange={(e) => updateConfig("showContentHeaderEndDate", e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">Show End Date</span>
+                              <p className="text-xs text-gray-500">Display activity end date</p>
+                            </div>
+                          </label>
+                          
+                          <label className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={config.showContentHeaderQuestions !== false}
+                              onChange={(e) => updateConfig("showContentHeaderQuestions", e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">Show Questions Count</span>
+                              <p className="text-xs text-gray-500">Display total number of questions</p>
+                            </div>
+                          </label>
+                        </div>
+                        
+                        {/* Warning when all options disabled */}
+                        {!config.showContentHeaderTitle && !config.showContentHeaderStartDate && 
+                         !config.showContentHeaderEndDate && !config.showContentHeaderQuestions && (
+                          <div className="mt-3 p-3 bg-yellow-50 border border-yellow-300 rounded-lg">
+                            <p className="text-sm text-yellow-800">
+                              ⚠️ <strong>Warning:</strong> All display options are disabled. Consider enabling at least one element or hide the entire header.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -2677,6 +2638,62 @@ export default function LandingPageConfigPage() {
                       />
                     </div>
                     <div>
+                      <Label>Footer Text URL (Optional)</Label>
+                      <Input
+                        type="url"
+                        value={config.footerTextUrl || ""}
+                        onChange={(e) => updateConfig("footerTextUrl", e.target.value)}
+                        placeholder="https://yoursite.com"
+                        className="mt-2"
+                        disabled={config.footerEnabled === false}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Make entire footer text clickable by adding a link URL</p>
+                    </div>
+                    
+                    {/* Footer Hyperlink Configuration */}
+                    <div className="border-t pt-4 mt-4">
+                      <Label className="text-sm font-semibold">Footer Hyperlink (Optional)</Label>
+                      <p className="text-xs text-gray-500 mt-1 mb-3">Add a hyperlink for specific words/phrases within your footer text</p>
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-xs">Link Display Text</Label>
+                          <Input
+                            value={config.footerLinkText || ""}
+                            onChange={(e) => updateConfig("footerLinkText", e.target.value)}
+                            placeholder="e.g., BioQuest Solutions"
+                            className="mt-1"
+                            disabled={config.footerEnabled === false}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Text to be hyperlinked (will be styled in QSights color)</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Link URL</Label>
+                          <Input
+                            type="url"
+                            value={config.footerLinkUrl || ""}
+                            onChange={(e) => updateConfig("footerLinkUrl", e.target.value)}
+                            placeholder="https://example.com"
+                            className="mt-1"
+                            disabled={config.footerEnabled === false}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Open Link In</Label>
+                          <select
+                            value={config.footerLinkTarget || "_blank"}
+                            onChange={(e) => updateConfig("footerLinkTarget", e.target.value)}
+                            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            disabled={config.footerEnabled === false}
+                          >
+                            <option value="_blank">New Tab (_blank)</option>
+                            <option value="_self">Same Tab (_self)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
                       <Label>Footer Text Position</Label>
                       <select
                         value={config.footerTextPosition || "left"}
@@ -2691,15 +2708,19 @@ export default function LandingPageConfigPage() {
                     </div>
                     <div>
                       <Label>Footer Logo</Label>
-                      <p className="text-xs text-gray-500 mt-1">Optional logo for footer area</p>
+                      <p className="text-xs text-gray-500 mt-1">Upload to S3 or enter URL for footer logo</p>
                       <div className="mt-2 space-y-3">
-                        {config.footerLogoUrl && (
-                          <div className="flex items-center justify-center p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                            <img src={config.footerLogoUrl} alt="Footer Logo" className="h-12 max-w-full object-contain" />
-                          </div>
-                        )}
+                        <S3ImageUpload
+                          value={config.footerLogoUrl || ""}
+                          onChange={(url) => updateConfig("footerLogoUrl", url)}
+                          onRemove={() => updateConfig("footerLogoUrl", "")}
+                          folder="landing-logos"
+                          maxSize={10}
+                          accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                          placeholder="Click to upload footer logo (PNG, JPG, GIF, SVG, WebP)"
+                        />
                         <div>
-                          <Label className="text-xs text-gray-600">Logo URL</Label>
+                          <Label className="text-xs text-gray-600">Or enter Logo URL</Label>
                           <div className="flex gap-2 mt-1">
                             <Input
                               type="url"
@@ -2720,27 +2741,6 @@ export default function LandingPageConfigPage() {
                               </Button>
                             )}
                           </div>
-                        </div>
-                        <div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload("footerLogoUrl", file);
-                            }}
-                            className="hidden"
-                            id="footer-logo-upload-post"
-                            disabled={config.footerEnabled === false}
-                          />
-                          <label htmlFor="footer-logo-upload-post">
-                            <Button variant="outline" className="w-full cursor-pointer" asChild disabled={config.footerEnabled === false}>
-                              <span>
-                                <Upload className="w-4 h-4 mr-2" />
-                                Or Upload File (Temporary)
-                              </span>
-                            </Button>
-                          </label>
                         </div>
                       </div>
                     </div>
@@ -3427,19 +3427,50 @@ export default function LandingPageConfigPage() {
                         />
                       </div>
                     </div>
-                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <label className="flex items-center space-x-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={config.thankYouShowConfirmation !== false}
-                          onChange={(e) => updateConfig("thankYouShowConfirmation", e.target.checked)}
-                          className="w-4 h-4 text-blue-600"
-                        />
-                        <div>
-                          <span className="text-sm font-medium text-gray-900">Show email confirmation message</span>
-                          <p className="text-xs text-gray-600 mt-0.5">Display "A confirmation has been sent to your email"</p>
+                    <div className="space-y-3 mt-4">
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <label className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={config.thankYouShowBanner !== false}
+                            onChange={(e) => updateConfig("thankYouShowBanner", e.target.checked)}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Display Top Banner</span>
+                            <p className="text-xs text-blue-700 mt-0.5">Show the configured top banner on Thank You page</p>
+                          </div>
+                        </label>
+                      </div>
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <label className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={config.thankYouShowFooter !== false}
+                            onChange={(e) => updateConfig("thankYouShowFooter", e.target.checked)}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Display Footer</span>
+                            <p className="text-xs text-blue-700 mt-0.5">Show the configured footer on Thank You page</p>
+                          </div>
+                        </label>
+                      </div>
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <label className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={config.thankYouShowConfirmation !== false}
+                            onChange={(e) => updateConfig("thankYouShowConfirmation", e.target.checked)}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Show email confirmation message</span>
+                                                      <p className="text-xs text-gray-600 mt-0.5">Display "A confirmation has been sent to your email"</p>
                         </div>
                       </label>
+                      </div>
+                    </div>
                     <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                       <label className="flex items-center space-x-3 cursor-pointer">
                         <input
@@ -3454,7 +3485,6 @@ export default function LandingPageConfigPage() {
                           <p className="text-xs text-orange-600 mt-1">⚠️ Only works for Registration/Anonymous/Preview links. Hidden for email invitations.</p>
                         </div>
                       </label>
-                    </div>
                     </div>
                   </CardContent>
                 </Card>

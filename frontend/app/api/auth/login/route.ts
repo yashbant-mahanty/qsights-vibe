@@ -9,7 +9,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api
 
 export async function POST(request: NextRequest) {
   try {
-    const isSecureCookie = request.nextUrl.protocol === 'https:';
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    const isSecureCookie = forwardedProto === 'https' || request.nextUrl.protocol === 'https:';
     const body = await request.json();
     const { email, password } = body;
 
@@ -57,6 +58,9 @@ export async function POST(request: NextRequest) {
     const nextResponse = NextResponse.json(
       {
         success: true,
+        // Fallback for legacy clients that expect token in response body.
+        // We still set it as a cookie (`backendToken`) for the app to use.
+        token,
         user: {
           id: user.userId,
           email: user.email,

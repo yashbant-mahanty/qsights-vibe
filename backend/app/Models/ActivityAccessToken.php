@@ -46,24 +46,27 @@ class ActivityAccessToken extends Model
      */
     public static function generateToken($activityId, $participantId, $expiresInDays = 30)
     {
-        // Check if this participant's email is already associated with this activity
+        // Check if this participant exists
         $participant = Participant::find($participantId);
         if (!$participant) {
             throw new \Exception('Participant not found');
         }
 
-        // Check if another participant with same email already has a token for this activity
-        $existingToken = self::where('activity_id', $activityId)
+        // Check if a DIFFERENT participant with the same email already has a token for this activity
+        // This prevents duplicate emails, but allows re-sending notifications to the same participant
+        $existingTokenFromOther = self::where('activity_id', $activityId)
+            ->where('participant_id', '!=', $participantId) // Only check OTHER participants
             ->whereHas('participant', function($query) use ($participant) {
                 $query->where('email', $participant->email);
             })
             ->exists();
 
-        if ($existingToken) {
-            throw new \Exception("A participant with email '{$participant->email}' has already been added to this event. Each email can only be used once per event.");
+        if ($existingTokenFromOther) {
+            throw new \Exception("A different participant with email '{$participant->email}' has already been added to this event. Each email can only be used once per event.");
         }
 
         // Invalidate any existing unused tokens for this participant-activity combination
+        // This allows re-sending notifications with a fresh token
         self::where('activity_id', $activityId)
             ->where('participant_id', $participantId)
             ->whereNull('used_at')

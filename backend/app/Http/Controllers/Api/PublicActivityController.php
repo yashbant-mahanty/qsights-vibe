@@ -11,6 +11,52 @@ use Illuminate\Http\Request;
 
 class PublicActivityController extends Controller
 {
+    private const OTHER_OPTION_VALUE = '__other__';
+    private const OTHER_TEXT_MAX_LEN = 1000;
+
+    /**
+     * Extract "Other" free-text from an answer payload.
+     *
+     * Supported incoming shapes per question:
+     * - scalar: "Option A"
+     * - array: ["A", "B"]
+     * - assoc: { value: "__other__", other_text: "..." }
+     * - assoc: { value_array: ["A", "__other__"], other_text: "..." }
+     *
+     * @return array{0:mixed,1:?string} [normalizedValue, otherText]
+     */
+    private function extractOtherPayload(mixed $answerValue): array
+    {
+        $otherText = null;
+
+        if (is_array($answerValue) && array_key_exists('other_text', $answerValue)) {
+            $otherTextRaw = $answerValue['other_text'] ?? null;
+            if (is_string($otherTextRaw)) {
+                $trimmed = trim($otherTextRaw);
+                $otherText = $trimmed !== '' ? $trimmed : null;
+            }
+
+            if (array_key_exists('value_array', $answerValue)) {
+                $answerValue = $answerValue['value_array'];
+            } elseif (array_key_exists('value', $answerValue)) {
+                $answerValue = $answerValue['value'];
+            }
+        }
+
+        return [$answerValue, $otherText];
+    }
+
+    private function validateOtherTextOrFail(?string $otherText): void
+    {
+        if ($otherText === null) {
+            throw new \InvalidArgumentException('Other text is required.');
+        }
+
+        if (mb_strlen($otherText) > self::OTHER_TEXT_MAX_LEN) {
+            throw new \InvalidArgumentException('Other text is too long.');
+        }
+    }
+
     /**
      * Get or create an anonymous participant for generated links
      * Anonymous participants have IDs like: anon_TAG_TIMESTAMP
@@ -296,6 +342,7 @@ class PublicActivityController extends Controller
         }
         
         $isPreview = $request->input('is_preview', false);
+        $autoSubmitted = (bool) ($request->input('auto_submitted', false));
         
         // Normalize answers format - handle both array of objects and associative array
         $answers = $request->answers;
@@ -309,7 +356,12 @@ class PublicActivityController extends Controller
                 // Convert to associative array: { 'uuid': 'x', ... }
                 foreach ($answers as $answer) {
                     $questionId = $answer['question_id'];
-                    $normalizedAnswers[$questionId] = $answer['value'] ?? $answer['value_array'] ?? $answer;
+                    // If client sent {value/value_array, other_text}, keep full payload so we can persist other_text
+                    if (isset($answer['other_text']) && (isset($answer['value']) || isset($answer['value_array']))) {
+                        $normalizedAnswers[$questionId] = $answer;
+                    } else {
+                        $normalizedAnswers[$questionId] = $answer['value'] ?? $answer['value_array'] ?? $answer;
+                    }
                 }
             } else {
                 // Already in associative array format: { 'uuid': 'x', ... }
@@ -331,6 +383,33 @@ class PublicActivityController extends Controller
             ], 403);
         }
 
+        // Validate "Other" free-text for manual submissions (auto-submits may be incomplete)
+        if (!$autoSubmitted && is_array($normalizedAnswers)) {
+            foreach ($normalizedAnswers as $questionId => $answerValue) {
+                [$normalizedValue, $otherText] = $this->extractOtherPayload($answerValue);
+
+                $isOtherSelected = false;
+                if (is_string($normalizedValue) && $normalizedValue === self::OTHER_OPTION_VALUE) {
+                    $isOtherSelected = true;
+                } elseif (is_array($normalizedValue) && in_array(self::OTHER_OPTION_VALUE, $normalizedValue, true)) {
+                    $isOtherSelected = true;
+                }
+
+                if ($isOtherSelected) {
+                    try {
+                        $this->validateOtherTextOrFail($otherText);
+                    } catch (\InvalidArgumentException $e) {
+                        return response()->json([
+                            'message' => 'Validation error',
+                            'errors' => [
+                                $questionId => [$e->getMessage()],
+                            ],
+                        ], 422);
+                    }
+                }
+            }
+        }
+
         // For preview mode, update existing preview response or create new one
         if ($isPreview) {
             // Find existing preview response for this participant and activity
@@ -338,11 +417,20 @@ class PublicActivityController extends Controller
                 ->where('participant_id', $participant->id)
                 ->where('is_preview', true)
                 ->first();
+
+            // Keep response.answers JSON backward compatible (do not store other_text objects)
+            $legacyAnswers = [];
+            if (is_array($normalizedAnswers)) {
+                foreach ($normalizedAnswers as $questionId => $answerValue) {
+                    [$normalizedValue] = $this->extractOtherPayload($answerValue);
+                    $legacyAnswers[$questionId] = $normalizedValue;
+                }
+            }
             
             $responseData = [
                 'activity_id' => $activityId,
                 'participant_id' => $participant->id,
-                'answers' => $normalizedAnswers,
+                'answers' => $legacyAnswers,
                 'status' => 'submitted',
                 'is_preview' => true,
                 'completed_at' => now(),
@@ -367,6 +455,8 @@ class PublicActivityController extends Controller
                     try {
                         $question = \App\Models\Question::find($questionId);
                         if ($question) {
+                            [$answerValue, $otherText] = $this->extractOtherPayload($answerValue);
+
                             // Check if answer has enhanced value display mode structure
                             $isEnhancedPayload = is_array($answerValue) && isset($answerValue['value_type']);
                             
@@ -377,6 +467,7 @@ class PublicActivityController extends Controller
                                     'question_id' => $questionId,
                                     'value' => json_encode($answerValue),
                                     'value_array' => null,
+                                    'other_text' => null,
                                 ]);
                             } else {
                                 // Legacy behavior for standard answers
@@ -385,6 +476,7 @@ class PublicActivityController extends Controller
                                     'question_id' => $questionId,
                                     'value' => is_array($answerValue) ? null : $answerValue,
                                     'value_array' => is_array($answerValue) ? $answerValue : null,
+                                    'other_text' => $otherText,
                                 ]);
                             }
                         }
@@ -438,6 +530,9 @@ class PublicActivityController extends Controller
         if ($activity->type === 'assessment' && $activity->questionnaire) {
             $totalQuestions = 0;
             $correctAnswers = 0;
+            $sctTotalScore = 0;
+            $sctMaxPossibleScore = 0;
+            $sctQuestionCount = 0;
             
             \Log::info('Assessment Scoring Started', [
                 'activity_id' => $activityId,
@@ -447,8 +542,77 @@ class PublicActivityController extends Controller
             
             foreach ($activity->questionnaire->sections as $section) {
                 foreach ($section->questions as $question) {
+                    // Handle SCT Likert questions with weighted scoring
+                    if ($question->type === 'sct_likert' && isset($question->settings['scores']) && is_array($question->settings['scores'])) {
+                        $sctQuestionCount++;
+                        $questionId = $question->id;
+                        $userAnswer = $normalizedAnswers[$questionId] ?? null;
+                        $questionOptions = $question->options ?? [];
+                        $scores = $question->settings['scores'];
+                        $choiceType = $question->settings['choiceType'] ?? 'single';
+                        $normalizeMultiSelect = $question->settings['normalizeMultiSelect'] ?? true;
+                        
+                        // Calculate max possible score for this question
+                        $maxScore = !empty($scores) ? max($scores) : 0;
+                        $sctMaxPossibleScore += $maxScore;
+                        
+                        \Log::info('SCT Question Scoring', [
+                            'question_id' => $questionId,
+                            'question_text' => $question->text,
+                            'user_answer' => $userAnswer,
+                            'scores_config' => $scores,
+                            'choice_type' => $choiceType,
+                            'max_score' => $maxScore
+                        ]);
+                        
+                        if ($userAnswer !== null) {
+                            $questionScore = 0;
+                            
+                            if ($choiceType === 'multi') {
+                                // Multi-select: sum scores of all selected options
+                                $userAnswerArray = is_array($userAnswer) ? $userAnswer : [$userAnswer];
+                                $selectedScores = [];
+                                
+                                foreach ($userAnswerArray as $answer) {
+                                    $index = array_search($answer, $questionOptions);
+                                    if ($index !== false && isset($scores[$index])) {
+                                        $selectedScores[] = $scores[$index];
+                                    }
+                                }
+                                
+                                if (!empty($selectedScores)) {
+                                    $questionScore = array_sum($selectedScores);
+                                    
+                                    // Normalize if enabled (divide by number of selections)
+                                    if ($normalizeMultiSelect && count($selectedScores) > 1) {
+                                        $questionScore = $questionScore / count($selectedScores);
+                                    }
+                                }
+                                
+                                \Log::info('SCT Multi-select Score', [
+                                    'selected_scores' => $selectedScores,
+                                    'sum' => array_sum($selectedScores),
+                                    'normalized' => $normalizeMultiSelect,
+                                    'final_score' => $questionScore
+                                ]);
+                            } else {
+                                // Single choice: use the score of the selected option
+                                $index = array_search($userAnswer, $questionOptions);
+                                if ($index !== false && isset($scores[$index])) {
+                                    $questionScore = $scores[$index];
+                                }
+                                
+                                \Log::info('SCT Single-choice Score', [
+                                    'selected_index' => $index,
+                                    'score' => $questionScore
+                                ]);
+                            }
+                            
+                            $sctTotalScore += $questionScore;
+                        }
+                    }
                     // Only count questions that have correct answers defined
-                    if (isset($question->settings['correctAnswers']) && is_array($question->settings['correctAnswers'])) {
+                    else if (isset($question->settings['correctAnswers']) && is_array($question->settings['correctAnswers'])) {
                         $totalQuestions++;
                         $questionId = $question->id;
                         $userAnswer = $normalizedAnswers[$questionId] ?? null;
@@ -516,12 +680,47 @@ class PublicActivityController extends Controller
             
             \Log::info('Assessment Scoring Complete', [
                 'total_questions' => $totalQuestions,
-                'correct_answers' => $correctAnswers
+                'correct_answers' => $correctAnswers,
+                'sct_question_count' => $sctQuestionCount,
+                'sct_total_score' => $sctTotalScore,
+                'sct_max_possible' => $sctMaxPossibleScore
             ]);
             
-            if ($totalQuestions > 0) {
-                $score = ($correctAnswers / $totalQuestions) * 100;
-                $correctAnswersCount = $correctAnswers;
+            // Calculate combined score from traditional Q&A and SCT questions
+            if ($totalQuestions > 0 || $sctQuestionCount > 0) {
+                $traditionalScore = 0;
+                $sctScore = 0;
+                
+                // Calculate traditional question score (correct/incorrect)
+                if ($totalQuestions > 0) {
+                    $traditionalScore = ($correctAnswers / $totalQuestions) * 100;
+                    $correctAnswersCount = $correctAnswers;
+                }
+                
+                // Calculate SCT score (weighted scoring)
+                if ($sctQuestionCount > 0 && $sctMaxPossibleScore > 0) {
+                    $sctScore = ($sctTotalScore / $sctMaxPossibleScore) * 100;
+                }
+                
+                // Combine scores proportionally if both types exist
+                if ($totalQuestions > 0 && $sctQuestionCount > 0) {
+                    $totalWeight = $totalQuestions + $sctQuestionCount;
+                    $traditionalWeight = $totalQuestions / $totalWeight;
+                    $sctWeight = $sctQuestionCount / $totalWeight;
+                    $score = ($traditionalScore * $traditionalWeight) + ($sctScore * $sctWeight);
+                } else if ($sctQuestionCount > 0) {
+                    // Only SCT questions
+                    $score = $sctScore;
+                } else {
+                    // Only traditional questions
+                    $score = $traditionalScore;
+                }
+                
+                \Log::info('Final Score Calculation', [
+                    'traditional_score' => $traditionalScore,
+                    'sct_score' => $sctScore,
+                    'combined_score' => $score
+                ]);
                 
                 // Determine pass/fail based on pass_percentage
                 if ($activity->pass_percentage !== null) {
@@ -541,11 +740,20 @@ class PublicActivityController extends Controller
             'status' => 'in_progress', // Find existing in-progress response
         ]);
 
+        // Keep response.answers JSON backward compatible (do not store other_text objects)
+        $legacyAnswers = [];
+        if (is_array($normalizedAnswers)) {
+            foreach ($normalizedAnswers as $questionId => $answerValue) {
+                [$normalizedValue] = $this->extractOtherPayload($answerValue);
+                $legacyAnswers[$questionId] = $normalizedValue;
+            }
+        }
+
         // Update response to submitted status (preserves started_at from first save)
         $response->fill([
             'activity_id' => $activityId,
             'participant_id' => $participant->id,
-            'answers' => $normalizedAnswers, // Keep for backward compatibility
+            'answers' => $legacyAnswers, // Keep for backward compatibility
             'status' => 'submitted', // Mark as submitted
             'attempt_number' => $attemptNumber,
             'score' => $score,
@@ -572,6 +780,8 @@ class PublicActivityController extends Controller
                 try {
                     $question = \App\Models\Question::find($questionId);
                     if ($question) {
+                        [$answerValue, $otherText] = $this->extractOtherPayload($answerValue);
+
                         // Check if answer has enhanced value display mode structure
                         $isEnhancedPayload = is_array($answerValue) && isset($answerValue['value_type']);
                         
@@ -586,6 +796,7 @@ class PublicActivityController extends Controller
                                 [
                                     'value' => json_encode($answerValue),
                                     'value_array' => null,
+                                    'other_text' => null,
                                 ]
                             );
                         } else {
@@ -600,6 +811,7 @@ class PublicActivityController extends Controller
                                 [
                                     'value' => is_array($answerValue) ? null : $answerValue,
                                     'value_array' => is_array($answerValue) ? $answerValue : null,
+                                    'other_text' => $otherText,
                                 ]
                             );
                         }
@@ -784,7 +996,11 @@ class PublicActivityController extends Controller
             if (is_array($firstItem) && isset($firstItem['question_id'])) {
                 foreach ($answers as $answer) {
                     $questionId = $answer['question_id'];
-                    $normalizedAnswers[$questionId] = $answer['value'] ?? $answer['value_array'] ?? $answer;
+                    if (isset($answer['other_text']) && (isset($answer['value']) || isset($answer['value_array']))) {
+                        $normalizedAnswers[$questionId] = $answer;
+                    } else {
+                        $normalizedAnswers[$questionId] = $answer['value'] ?? $answer['value_array'] ?? $answer;
+                    }
                 }
             } else {
                 $normalizedAnswers = $answers;
@@ -837,8 +1053,13 @@ class PublicActivityController extends Controller
         $response->last_saved_at = now();
         
         // Merge new answers with existing answers in JSON (for backward compatibility)
+        $legacyAnswers = [];
+        foreach ($normalizedAnswers as $questionId => $answerValue) {
+            [$normalizedValue] = $this->extractOtherPayload($answerValue);
+            $legacyAnswers[$questionId] = $normalizedValue;
+        }
         $existingAnswers = $response->answers ?? [];
-        $response->answers = array_merge($existingAnswers, $normalizedAnswers);
+        $response->answers = array_merge($existingAnswers, $legacyAnswers);
         
         $response->save();
 
@@ -852,6 +1073,8 @@ class PublicActivityController extends Controller
                 'question_id' => $questionId,
             ]);
 
+            [$answerValue, $otherText] = $this->extractOtherPayload($answerValue);
+
             // Check if answer has enhanced value display mode structure
             $isEnhancedPayload = is_array($answerValue) && isset($answerValue['value_type']);
             
@@ -859,6 +1082,7 @@ class PublicActivityController extends Controller
                 // Store enhanced payload as JSON in value column
                 $answer->value = json_encode($answerValue);
                 $answer->value_array = null;
+                $answer->other_text = null;
             } else {
                 // Legacy behavior for standard answers
                 // Update the answer value (handles back navigation / answer changes)
@@ -869,6 +1093,8 @@ class PublicActivityController extends Controller
                     $answer->value = $answerValue;
                     $answer->value_array = null;
                 }
+
+                $answer->other_text = $otherText;
             }
 
             $answer->save(); // INSERT if new, UPDATE if exists
@@ -935,8 +1161,13 @@ class PublicActivityController extends Controller
 
         // Convert Answer records to question_id => value format
         $answers = [];
+        $otherTexts = [];
         foreach ($response->answers as $answer) {
             $answers[$answer->question_id] = $answer->value_array ?? $answer->value;
+
+            if (!empty($answer->other_text)) {
+                $otherTexts[$answer->question_id] = $answer->other_text;
+            }
         }
 
         return response()->json([
@@ -944,6 +1175,7 @@ class PublicActivityController extends Controller
                 'has_progress' => true,
                 'response_id' => $response->id,
                 'answers' => $answers,
+                'other_texts' => $otherTexts,
                 'last_saved_at' => $response->last_saved_at,
                 'started_at' => $response->started_at,
             ],

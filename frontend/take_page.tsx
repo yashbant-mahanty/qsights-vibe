@@ -53,6 +53,7 @@ interface Activity {
   is_multilingual?: boolean;
   languages?: string[];
   landing_config?: {
+    hideContentHeader?: boolean;
     logoUrl?: string;
     logoSize?: string;
     pageTitle?: string;
@@ -3069,83 +3070,85 @@ export default function TakeActivityPage() {
       <div className="p-4 md:p-6 lg:p-8" style={{ marginTop: shouldShowBanner ? (activity?.landing_config?.bannerHeight || "120px") : 0 }}>
         <div className="max-w-5xl mx-auto space-y-4">
           {/* Ultra Modern Activity Header */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-qsights-cyan via-cyan-500 to-qsights-navy shadow-2xl border border-white/10">
-            {/* Animated background pattern */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.3),rgba(255,255,255,0))]" />
-            
-            {/* Content Container */}
-            <div className="relative z-10 px-6 py-6 md:px-10 md:py-8">
-              {/* Top Row: Title + Type Badge */}
-              <div className="flex items-start justify-between gap-4 mb-6">
-                <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight">
-                  {activity.name}
-                </h1>
-                <div className="flex-shrink-0 px-4 py-1.5 bg-white/95 backdrop-blur-sm rounded-full shadow-lg">
-                  <span className="text-xs font-bold bg-gradient-to-r from-qsights-cyan to-qsights-navy bg-clip-text text-transparent uppercase tracking-wider">
-                    {activity.type}
-                  </span>
+          {activity?.landing_config?.hideContentHeader !== true && (
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-qsights-cyan via-cyan-500 to-qsights-navy shadow-2xl border border-white/10">
+              {/* Animated background pattern */}
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.3),rgba(255,255,255,0))]" />
+              
+              {/* Content Container */}
+              <div className="relative z-10 px-6 py-6 md:px-10 md:py-8">
+                {/* Top Row: Title + Type Badge */}
+                <div className="flex items-start justify-between gap-4 mb-6">
+                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-tight">
+                    {activity.name}
+                  </h1>
+                  <div className="flex-shrink-0 px-4 py-1.5 bg-white/95 backdrop-blur-sm rounded-full shadow-lg">
+                    <span className="text-xs font-bold bg-gradient-to-r from-qsights-cyan to-qsights-navy bg-clip-text text-transparent uppercase tracking-wider">
+                      {activity.type}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Description */}
+                {activity.description && (
+                  <p className="text-base text-blue-50/90 leading-relaxed mb-6 max-w-3xl">
+                    {activity.description}
+                  </p>
+                )}
+
+                {/* Info Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {/* Start Date */}
+                  {activity.start_date && (
+                    <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
+                      <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
+                        <Calendar className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] text-blue-100 uppercase tracking-wider font-semibold">Start Date</span>
+                        <span className="text-sm font-bold text-white truncate">
+                          {new Date(activity.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* End Date */}
+                  {activity.end_date && (
+                    <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
+                      <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
+                        <Calendar className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] text-blue-100 uppercase tracking-wider font-semibold">End Date</span>
+                        <span className="text-sm font-bold text-white truncate">
+                          {new Date(activity.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Questions Count */}
+                  {questionnaire?.sections && (
+                    <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
+                      <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
+                        <FileText className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] text-blue-100 uppercase tracking-wider font-semibold">Questions</span>
+                        <span className="text-sm font-bold text-white">
+                          {questionnaire.sections.reduce((total, section) => total + (section.questions?.length || 0), 0)} Total
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Description */}
-              {activity.description && (
-                <p className="text-base text-blue-50/90 leading-relaxed mb-6 max-w-3xl">
-                  {activity.description}
-                </p>
-              )}
-
-              {/* Info Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Start Date */}
-                {activity.start_date && (
-                  <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
-                    <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
-                      <Calendar className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[10px] text-blue-100 uppercase tracking-wider font-semibold">Start Date</span>
-                      <span className="text-sm font-bold text-white truncate">
-                        {new Date(activity.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* End Date */}
-                {activity.end_date && (
-                  <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
-                    <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
-                      <Calendar className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[10px] text-blue-100 uppercase tracking-wider font-semibold">End Date</span>
-                      <span className="text-sm font-bold text-white truncate">
-                        {new Date(activity.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Questions Count */}
-                {questionnaire?.sections && (
-                  <div className="group flex items-center gap-3 px-4 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 hover:bg-white/20 transition-all duration-300">
-                    <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
-                      <FileText className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[10px] text-blue-100 uppercase tracking-wider font-semibold">Questions</span>
-                      <span className="text-sm font-bold text-white">
-                        {questionnaire.sections.reduce((total, section) => total + (section.questions?.length || 0), 0)} Total
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Gradient Border Bottom */}
+              <div className="h-1 bg-gradient-to-r from-qsights-cyan via-cyan-400 to-cyan-500" />
             </div>
-
-            {/* Gradient Border Bottom */}
-            <div className="h-1 bg-gradient-to-r from-qsights-cyan via-cyan-400 to-cyan-500" />
-          </div>
+          )}
 
         {/* Timer Display */}
         {activity?.time_limit_enabled && activity?.time_limit_minutes && started && !submitted && remainingSeconds !== null && (

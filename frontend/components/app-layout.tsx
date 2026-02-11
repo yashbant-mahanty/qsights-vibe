@@ -195,7 +195,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
       {/* Mobile Overlay */}
       {mobileMenuOpen && (
         <div

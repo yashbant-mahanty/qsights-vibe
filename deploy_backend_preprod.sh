@@ -116,6 +116,26 @@ echo ""
 echo -e "${YELLOW}[7/8] Clearing Caches${NC}"
 ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     cd $BACKEND_PATH
+
+    # DB connectivity check (database cache/session drivers will fail if DB is unreachable)
+    DB_HOST=\$(grep -E '^DB_HOST=' .env | tail -n1 | cut -d= -f2- | tr -d '\"' | tr -d "'")
+    DB_PORT=\$(grep -E '^DB_PORT=' .env | tail -n1 | cut -d= -f2- | tr -d '\"' | tr -d "'")
+    if [ -z \"\$DB_HOST\" ]; then
+        echo '✗ DB_HOST not found in .env (cannot verify database connectivity)'
+        exit 1
+    fi
+    if [ -z \"\$DB_PORT\" ]; then
+        DB_PORT=5432
+    fi
+    echo \"Checking database connectivity to \$DB_HOST:\$DB_PORT ...\"
+    timeout 8 bash -lc \"</dev/tcp/\$DB_HOST/\$DB_PORT\" >/dev/null 2>&1 || {
+        echo \"✗ Database is not reachable from PRE-PROD (TCP timeout to \$DB_HOST:\$DB_PORT).\";
+        echo '  • Fix: allow PRE-PROD instance/SG to access the DB security group on that port.';
+        echo '  • Then rerun this deploy script.';
+        exit 1;
+    }
+    echo '✓ Database reachable'
+
     sudo php artisan config:clear
     sudo php artisan route:clear
     sudo php artisan view:clear
@@ -158,7 +178,9 @@ COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
     sudo mkdir -p $DEPLOY_STATE_DIR
     echo '$COMMIT_SHA' | sudo tee $DEPLOY_STATE_DIR/last_deployed_commit >/dev/null
+    echo '$COMMIT_SHA' | sudo tee $DEPLOY_STATE_DIR/last_backend_deployed_commit >/dev/null
     date -u +%Y-%m-%dT%H:%M:%SZ | sudo tee $DEPLOY_STATE_DIR/last_deployed_utc >/dev/null
+    date -u +%Y-%m-%dT%H:%M:%SZ | sudo tee $DEPLOY_STATE_DIR/last_backend_deployed_utc >/dev/null
     sudo chown -R ubuntu:ubuntu $DEPLOY_STATE_DIR
 "
 echo -e "${GREEN}✓ Deployment state recorded (${COMMIT_SHA})${NC}"
@@ -167,7 +189,7 @@ echo ""
 # Restart services
 echo -e "${YELLOW}[11/11] Restarting Services${NC}"
 ssh -o StrictHostKeyChecking=no -i "$PEM_KEY" "$SERVER_USER@$SERVER_IP" "
-    sudo systemctl reload php8.1-fpm
+    sudo systemctl reload php8.4-fpm 2>/dev/null || sudo systemctl reload php8.1-fpm
     sudo systemctl reload nginx
 "
 echo -e "${GREEN}✓ Services restarted${NC}"
