@@ -819,13 +819,28 @@ export default function ActivityResultsPage() {
                 if (question.type === 'sct_likert') {
                   const scores = question.settings?.scores || [];
                   const options = question.settings?.labels || question.options || [];
+                  const responseType = question.settings?.responseType || question.settings?.choiceType || 'single';
                   const answerValue = answerObj.value_array || answerObj.value;
                   
-                  if (answerValue && options.length > 0 && scores.length > 0) {
-                    const selectedOption = String(answerValue);
-                    const optionIndex = options.findIndex((opt: string) => String(opt) === selectedOption);
-                    if (optionIndex !== -1 && scores[optionIndex] !== undefined) {
-                      row[`${questionLabel} - Score`] = Number(scores[optionIndex]);
+                  if (answerValue && scores.length > 0) {
+                    // Handle Likert response type (numeric point selection)
+                    if (responseType === 'likert') {
+                      const selectedPoint = parseInt(String(answerValue));
+                      if (!isNaN(selectedPoint) && selectedPoint >= 1 && selectedPoint <= scores.length) {
+                        const scoreIndex = selectedPoint - 1; // Convert to 0-based index
+                        row[`${questionLabel} - Score`] = Number(scores[scoreIndex]);
+                      } else {
+                        row[`${questionLabel} - Score`] = 'N/A';
+                      }
+                    } else if (options.length > 0) {
+                      // Handle Single/Multiple choice (text-based selection)
+                      const selectedOption = String(answerValue);
+                      const optionIndex = options.findIndex((opt: string) => String(opt) === selectedOption);
+                      if (optionIndex !== -1 && scores[optionIndex] !== undefined) {
+                        row[`${questionLabel} - Score`] = Number(scores[optionIndex]);
+                      } else {
+                        row[`${questionLabel} - Score`] = 'N/A';
+                      }
                     } else {
                       row[`${questionLabel} - Score`] = 'N/A';
                     }
@@ -2400,7 +2415,8 @@ export default function ActivityResultsPage() {
                         const scores = question.settings?.scores || [];
                         // For SCT Likert, use labels from settings instead of options
                         const options = question.settings?.labels || question.options || [];
-                        const choiceType = question.settings?.choiceType || 'single';
+                        const responseType = question.settings?.responseType || question.settings?.choiceType || 'single';
+                        const choiceType = responseType; // For backward compatibility
                         const normalizeMultiSelect = question.settings?.normalizeMultiSelect !== false;
                         const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
                         
@@ -2414,7 +2430,14 @@ export default function ActivityResultsPage() {
                           
                           let questionScore = 0;
                           
-                          if (choiceType === 'multi') {
+                          if (responseType === 'likert') {
+                            // Likert Scale: answer is a numeric value (1-based point selection)
+                            const selectedPoint = parseInt(String(answer));
+                            if (!isNaN(selectedPoint) && selectedPoint >= 1 && selectedPoint <= scores.length) {
+                              const index = selectedPoint - 1; // Convert to 0-based index
+                              questionScore = scores[index] || 0;
+                            }
+                          } else if (choiceType === 'multi') {
                             const answerArray = Array.isArray(answer) ? answer : [answer];
                             const selectedScores: number[] = [];
                             
@@ -2445,7 +2468,18 @@ export default function ActivityResultsPage() {
                           individualScores.push(questionScore);
                           
                           // Track score distribution
-                          const answerKey = Array.isArray(answer) ? answer.join(', ') : String(answer);
+                          let answerKey: string;
+                          if (responseType === 'likert') {
+                            // For Likert, use the label of the selected point
+                            const selectedPoint = parseInt(String(answer));
+                            if (!isNaN(selectedPoint) && selectedPoint >= 1 && selectedPoint <= options.length) {
+                              answerKey = options[selectedPoint - 1] || `Point ${selectedPoint}`;
+                            } else {
+                              answerKey = String(answer);
+                            }
+                          } else {
+                            answerKey = Array.isArray(answer) ? answer.join(', ') : String(answer);
+                          }
                           if (!scoreDistribution[answerKey]) {
                             scoreDistribution[answerKey] = { count: 0, score: questionScore };
                           }
@@ -2486,10 +2520,21 @@ export default function ActivityResultsPage() {
                         // Calculate score for sct_likert questions
                         let participantScore: number | null = null;
                         if (question.type === 'sct_likert' && answerValue && sctScoreData) {
-                          const selectedOption = String(answerValue);
-                          const optionIndex = sctScoreData.options?.findIndex((opt: string) => String(opt) === selectedOption);
-                          if (optionIndex !== undefined && optionIndex !== -1 && sctScoreData.scores && sctScoreData.scores[optionIndex] !== undefined) {
-                            participantScore = Number(sctScoreData.scores[optionIndex]);
+                          const responseType = question.settings?.responseType || question.settings?.choiceType || 'single';
+                          
+                          if (responseType === 'likert') {
+                            // Likert Scale: answerValue is a numeric point selection
+                            const selectedPoint = parseInt(String(answerValue));
+                            if (!isNaN(selectedPoint) && selectedPoint >= 1 && sctScoreData.scores && selectedPoint <= sctScoreData.scores.length) {
+                              participantScore = Number(sctScoreData.scores[selectedPoint - 1]);
+                            }
+                          } else {
+                            // Single/Multiple choice: answerValue is option text
+                            const selectedOption = String(answerValue);
+                            const optionIndex = sctScoreData.options?.findIndex((opt: string) => String(opt) === selectedOption);
+                            if (optionIndex !== undefined && optionIndex !== -1 && sctScoreData.scores && sctScoreData.scores[optionIndex] !== undefined) {
+                              participantScore = Number(sctScoreData.scores[optionIndex]);
+                            }
                           }
                         }
                         

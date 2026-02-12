@@ -114,12 +114,21 @@ export interface StarRatingSettings {
 }
 
 export interface SCTLikertSettings {
-  scale?: 3 | 5 | 7 | 9;
-  choiceType?: 'single' | 'multi';
+  scale?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  responseType?: 'single' | 'multi' | 'likert'; // Single Choice, Multiple Choice, or Likert Scale
+  choiceType?: 'single' | 'multi'; // DEPRECATED: Use responseType instead
   labels?: string[];
   scores?: number[];
   showScores?: boolean; // Whether to show scores to admin during configuration
   normalizeMultiSelect?: boolean; // Normalize scores for multi-select to avoid inflation
+  // Likert Scale specific settings
+  likertConfig?: {
+    iconStyle?: 'emoji' | 'face' | 'simple' | 'custom';
+    size?: 'sm' | 'md' | 'lg';
+    showLabels?: boolean;
+    showIcons?: boolean;
+    customImages?: Array<{ value: number; imageUrl: string }>;
+  };
 }
 
 // Question type constants
@@ -208,12 +217,66 @@ export const DEFAULT_SETTINGS = {
   },
   sct_likert: {
     scale: 5,
-    choiceType: 'single',
+    responseType: 'single',
+    choiceType: 'single', // For backward compatibility
     labels: ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree'],
     scores: [1, 2, 3, 4, 5],
     showScores: true,
     normalizeMultiSelect: true,
+    likertConfig: {
+      iconStyle: 'emoji',
+      size: 'md',
+      showLabels: true,
+      showIcons: true,
+    },
   } as SCTLikertSettings,
+};
+
+// Helper function to generate symmetric scores around midpoint
+export const generateSymmetricScores = (scale: number): number[] => {
+  if (scale % 2 === 0) {
+    // Even number: no zero midpoint
+    const half = scale / 2;
+    const scores: number[] = [];
+    for (let i = -half; i <= half; i++) {
+      if (i !== 0) scores.push(i);
+    }
+    return scores;
+  } else {
+    // Odd number: include 0 midpoint
+    const half = Math.floor(scale / 2);
+    const scores: number[] = [];
+    for (let i = -half; i <= half; i++) {
+      scores.push(i);
+    }
+    return scores;
+  }
+};
+
+// Helper to get default labels for a given scale
+export const getDefaultLabelsForScale = (scale: number): string[] => {
+  switch (scale) {
+    case 2:
+      return ['Disagree', 'Agree'];
+    case 3:
+      return ['Disagree', 'Neutral', 'Agree'];
+    case 4:
+      return ['Strongly Disagree', 'Disagree', 'Agree', 'Strongly Agree'];
+    case 5:
+      return ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree'];
+    case 6:
+      return ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+    case 7:
+      return ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+    case 8:
+      return ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Slightly Disagree', 'Slightly Agree', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+    case 9:
+      return ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Slightly Disagree', 'Neutral', 'Slightly Agree', 'Somewhat Agree', 'Agree', 'Strongly Agree'];
+    case 10:
+      return ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    default:
+      return Array.from({ length: scale }, (_, i) => `Point ${i + 1}`);
+  }
 };
 
 // Helper to get component by type

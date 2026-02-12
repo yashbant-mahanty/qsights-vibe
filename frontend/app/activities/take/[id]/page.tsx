@@ -39,6 +39,7 @@ import {
   StarRating,
   DragDropBucket,
   DEFAULT_SETTINGS,
+  getDefaultLabelsForScale,
 } from "@/components/questions";
 import { createAnswerPayload } from "@/lib/valueDisplayUtils";
 import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
@@ -3035,20 +3036,40 @@ export default function TakeActivityPage() {
 
       case "sct_likert":
         const sctSettings = question.settings || DEFAULT_SETTINGS.sct_likert;
-        const sctChoiceType = sctSettings.choiceType || 'single';
+        const sctResponseType = sctSettings.responseType || sctSettings.choiceType || 'single';
+        const sctChoiceType = sctResponseType; // For backward compatibility
         const sctScale = sctSettings.scale || 5;
         
         // Fallback: Generate default options if options array is empty
         let sctOptions = question.options || [];
         if (sctOptions.length === 0) {
           // Auto-generate default labels based on scale
-          sctOptions = sctScale === 3 
-            ? ['Disagree', 'Neutral', 'Agree']
-            : sctScale === 5
-            ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
-            : sctScale === 7
-            ? ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree']
-            : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Slightly Disagree', 'Slightly Agree', 'Somewhat Agree', 'Agree', 'Strongly Agree', 'Completely Agree'];
+          sctOptions = getDefaultLabelsForScale(sctScale);
+        }
+        
+        // If Response Type is 'likert', render as visual Likert scale
+        if (sctResponseType === 'likert') {
+          const likertConfig = sctSettings.likertConfig || {};
+          const likertSettings = {
+            scale: sctScale,
+            labels: sctOptions,
+            showLabels: likertConfig.showLabels !== false,
+            showIcons: likertConfig.showIcons !== false,
+            iconStyle: likertConfig.iconStyle || 'emoji',
+            size: likertConfig.size || 'md',
+            customImages: likertConfig.customImages,
+          };
+          
+          return (
+            <div className="py-4">
+              <LikertVisual
+                value={responses[questionId] !== undefined ? responses[questionId] : null}
+                onChange={(value) => !isSubmitted && handleResponseChange(questionId, value)}
+                settings={likertSettings}
+                disabled={isSubmitted}
+              />
+            </div>
+          );
         }
         
         if (sctChoiceType === 'multi') {

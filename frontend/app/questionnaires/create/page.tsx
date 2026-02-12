@@ -57,6 +57,8 @@ import {
   NPSScale,
   StarRating,
   DEFAULT_SETTINGS,
+  generateSymmetricScores,
+  getDefaultLabelsForScale,
 } from "@/components/questions";
 import { questionnairesApi, programsApi, type Program } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -3889,19 +3891,19 @@ function QuestionnaireBuilderPageContent() {
       case "sct_likert":
         const sctSettings = question.settings || DEFAULT_SETTINGS.sct_likert;
         const sctScale = sctSettings.scale || 5;
-        const sctChoiceType = sctSettings.choiceType || 'single';
+        
+        // Support both responseType (new) and choiceType (legacy) for backward compatibility
+        const sctResponseType = sctSettings.responseType || sctSettings.choiceType || 'single';
+        const sctChoiceType = sctResponseType; // Alias for backward compatibility
+        
         const sctScores = sctSettings.scores || Array.from({ length: sctScale }, (_, i) => i + 1);
         const sctShowScores = sctSettings.showScores !== false;
         const sctNormalize = sctSettings.normalizeMultiSelect !== false;
+        const sctLikertConfig = sctSettings.likertConfig || DEFAULT_SETTINGS.sct_likert.likertConfig || {};
         
         // Initialize options with default labels if empty or length doesn't match scale
-        const defaultLabels = sctScale === 3 
-          ? ['Disagree', 'Neutral', 'Agree']
-          : sctScale === 5
-          ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
-          : sctScale === 7
-          ? ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somehow Agree', 'Agree', 'Strongly Agree']
-          : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Slightly Disagree', 'Slightly Agree', 'Somewhat Agree', 'Agree', 'Strongly Agree', 'Completely Agree'];
+        const defaultLabels = getDefaultLabelsForScale(sctScale);
+
         
         // Ensure options array exists and matches scale length - MUST be called unconditionally (React Hooks rule)
         React.useEffect(() => {
@@ -3945,16 +3947,11 @@ function QuestionnaireBuilderPageContent() {
                       value={sctScale}
                       onChange={(e) => {
                         withPreservedScroll(() => {
-                          const newScale = parseInt(e.target.value) as 3 | 5 | 7 | 9;
-                          const newLabels = newScale === 3 
-                            ? ['Disagree', 'Neutral', 'Agree']
-                            : newScale === 5
-                            ? ['Strongly Disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly Agree']
-                            : newScale === 7
-                            ? ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Neutral', 'Somewhat Agree', 'Agree', 'Strongly Agree']
-                            : ['Strongly Disagree', 'Disagree', 'Somewhat Disagree', 'Slightly Disagree', 'Slightly Agree', 'Somewhat Agree', 'Agree', 'Strongly Agree', 'Completely Agree'];
+                          const newScale = parseInt(e.target.value) as 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+                          const newLabels = getDefaultLabelsForScale(newScale);
                           
-                          const newScores = Array.from({ length: newScale }, (_, i) => i + 1);
+                          // Auto-generate symmetric scores
+                          const newScores = generateSymmetricScores(newScale);
                           const newOptions = newLabels;
                           
                           setSections(prevSections =>
@@ -3979,14 +3976,19 @@ function QuestionnaireBuilderPageContent() {
                       }}
                       className="w-full text-sm border border-gray-300 rounded-md px-3 py-2"
                     >
+                      <option value="2">2-Point Scale</option>
                       <option value="3">3-Point Scale</option>
+                      <option value="4">4-Point Scale</option>
                       <option value="5">5-Point Scale</option>
+                      <option value="6">6-Point Scale</option>
                       <option value="7">7-Point Scale</option>
+                      <option value="8">8-Point Scale</option>
                       <option value="9">9-Point Scale</option>
+                      <option value="10">10-Point Scale</option>
                     </select>
                   </div>
 
-                  {/* Choice Type Toggle */}
+                  {/* Response Type Toggle */}
                   <div className="mb-4">
                     <Label className="text-xs text-gray-600 block mb-2">Response Type</Label>
                     <div className="flex gap-2">
@@ -4001,7 +4003,7 @@ function QuestionnaireBuilderPageContent() {
                                       ...section,
                                       questions: section.questions.map((q: any) =>
                                         q.id === question.id
-                                          ? { ...q, settings: { ...sctSettings, choiceType: 'single' } }
+                                          ? { ...q, settings: { ...sctSettings, responseType: 'single', choiceType: 'single' } }
                                           : q
                                       )
                                     }
@@ -4011,7 +4013,7 @@ function QuestionnaireBuilderPageContent() {
                           });
                         }}
                         className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
-                          sctChoiceType === 'single'
+                          sctResponseType === 'single'
                             ? 'bg-indigo-600 text-white'
                             : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
                         }`}
@@ -4029,7 +4031,7 @@ function QuestionnaireBuilderPageContent() {
                                       ...section,
                                       questions: section.questions.map((q: any) =>
                                         q.id === question.id
-                                          ? { ...q, settings: { ...sctSettings, choiceType: 'multi' } }
+                                          ? { ...q, settings: { ...sctSettings, responseType: 'multi', choiceType: 'multi' } }
                                           : q
                                       )
                                     }
@@ -4039,18 +4041,46 @@ function QuestionnaireBuilderPageContent() {
                           });
                         }}
                         className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
-                          sctChoiceType === 'multi'
+                          sctResponseType === 'multi'
                             ? 'bg-indigo-600 text-white'
                             : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
                         }`}
                       >
                         Multiple Choice
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          withPreservedScroll(() => {
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? { ...q, settings: { ...sctSettings, responseType: 'likert', choiceType: 'single' } }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          });
+                        }}
+                        className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                          sctResponseType === 'likert'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Likert Scale
+                      </button>
                     </div>
                   </div>
 
                   {/* Multi-Select Normalization */}
-                  {sctChoiceType === 'multi' && (
+                  {sctResponseType === 'multi' && (
                     <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 rounded-md border border-blue-200">
                       <input
                         type="checkbox"
@@ -4079,19 +4109,174 @@ function QuestionnaireBuilderPageContent() {
                       </Label>
                     </div>
                   )}
+
+                  {/* Likert Scale Configuration Panel */}
+                  {sctResponseType === 'likert' && (
+                    <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Smile className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm font-medium text-gray-700">Likert Visual Configuration</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        {/* Icon Style Selection */}
+                        <div>
+                          <Label className="text-xs text-gray-600">Icon Style</Label>
+                          <select
+                            value={sctLikertConfig.iconStyle || 'emoji'}
+                            onChange={(e) => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                settings: {
+                                                  ...sctSettings,
+                                                  likertConfig: { ...sctLikertConfig, iconStyle: e.target.value as any }
+                                                }
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          >
+                            <option value="emoji">Emoji</option>
+                            <option value="face">Face Icons</option>
+                            <option value="simple">Simple Numbers</option>
+                          </select>
+                        </div>
+                        
+                        {/* Size Selection */}
+                        <div>
+                          <Label className="text-xs text-gray-600">Size</Label>
+                          <select
+                            value={sctLikertConfig.size || 'md'}
+                            onChange={(e) => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                settings: {
+                                                  ...sctSettings,
+                                                  likertConfig: { ...sctLikertConfig, size: e.target.value as any }
+                                                }
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="w-full mt-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          >
+                            <option value="sm">Small</option>
+                            <option value="md">Medium</option>
+                            <option value="lg">Large</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {/* Show Labels Toggle */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`sct-likert-show-labels-${question.id}`}
+                            checked={sctLikertConfig.showLabels !== false}
+                            onChange={(e) => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                settings: {
+                                                  ...sctSettings,
+                                                  likertConfig: { ...sctLikertConfig, showLabels: e.target.checked }
+                                                }
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="w-4 h-4 text-purple-600 rounded"
+                          />
+                          <Label htmlFor={`sct-likert-show-labels-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                            Show Labels
+                          </Label>
+                        </div>
+                        
+                        {/* Show Icons Toggle */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`sct-likert-show-icons-${question.id}`}
+                            checked={sctLikertConfig.showIcons !== false}
+                            onChange={(e) => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                settings: {
+                                                  ...sctSettings,
+                                                  likertConfig: { ...sctLikertConfig, showIcons: e.target.checked }
+                                                }
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="w-4 h-4 text-purple-600 rounded"
+                          />
+                          <Label htmlFor={`sct-likert-show-icons-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                            Show Icons
+                          </Label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Score Configuration */}
-                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-medium text-gray-700">Score Assignment</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Assign scores to each option. These scores will be used to calculate the assessment result.
-                  </p>
-                  
-                  {/* Show Scores Toggle */}
-                  <div className="flex items-center gap-2 mb-4">
+                {/* Score Configuration - Show for Single/Multiple, Hide for Likert */}
+                {sctResponseType !== 'likert' && (
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-sm font-medium text-gray-700">Score Assignment</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Assign scores to each option. These scores will be used to calculate the assessment result.
+                    </p>
+                    
+                    {/* Show Scores Toggle */}
+                    <div className="flex items-center gap-2 mb-4">
                     <input
                       type="checkbox"
                       id={`sct-show-scores-${question.id}`}
@@ -4182,6 +4367,90 @@ function QuestionnaireBuilderPageContent() {
                     ))}
                   </div>
                 </div>
+                )}
+
+                {/* Likert Scale Point Configuration - Custom labels and scores */}
+                {sctResponseType === 'likert' && (
+                  <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Settings className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium text-gray-700">Scale Points Configuration</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Customize labels and scores for each scale point. Scores support negative values for symmetric scoring.
+                    </p>
+                    
+                    <div className="space-y-2">
+                      {(question.options || []).map((option: string, idx: number) => {
+                        const pointNumber = idx + 1;
+                        const score = sctScores[idx] !== undefined ? sctScores[idx] : 0;
+                        
+                        return (
+                          <div key={idx} className="flex flex-wrap items-center gap-2 sm:gap-3 bg-white p-3 rounded border border-blue-200">
+                            <span className="text-xs font-medium text-blue-600 w-8 flex-shrink-0">
+                              Point {pointNumber}
+                            </span>
+                            <Input
+                              type="text"
+                              value={option}
+                              onChange={(e) => {
+                                withPreservedScroll(() => {
+                                  const newOptions = [...(question.options || [])];
+                                  newOptions[idx] = e.target.value;
+                                  setSections(prevSections =>
+                                    prevSections.map(section =>
+                                      section.id === sectionId
+                                        ? {
+                                            ...section,
+                                            questions: section.questions.map((q: any) =>
+                                              q.id === question.id
+                                                ? { ...q, options: newOptions }
+                                                : q
+                                            )
+                                          }
+                                        : section
+                                    )
+                                  );
+                                });
+                              }}
+                              placeholder={`Label for point ${pointNumber}`}
+                              className="flex-1 min-w-0 text-xs h-9"
+                            />
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <Label className="text-xs text-gray-500 whitespace-nowrap">Score:</Label>
+                              <Input
+                                type="number"
+                                value={score}
+                                onChange={(e) => {
+                                  withPreservedScroll(() => {
+                                    const newScores = [...sctScores];
+                                    newScores[idx] = parseFloat(e.target.value) || 0;
+                                    setSections(prevSections =>
+                                      prevSections.map(section =>
+                                        section.id === sectionId
+                                          ? {
+                                              ...section,
+                                              questions: section.questions.map((q: any) =>
+                                                q.id === question.id
+                                                  ? { ...q, settings: { ...sctSettings, scores: newScores } }
+                                                  : q
+                                              )
+                                            }
+                                          : section
+                                      )
+                                    );
+                                  });
+                                }}
+                                className="w-20 text-xs h-9"
+                                step="0.5"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

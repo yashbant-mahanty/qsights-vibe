@@ -549,7 +549,10 @@ class PublicActivityController extends Controller
                         $userAnswer = $normalizedAnswers[$questionId] ?? null;
                         $questionOptions = $question->options ?? [];
                         $scores = $question->settings['scores'];
-                        $choiceType = $question->settings['choiceType'] ?? 'single';
+                        
+                        // Support both responseType (new) and choiceType (legacy)
+                        $responseType = $question->settings['responseType'] ?? $question->settings['choiceType'] ?? 'single';
+                        $choiceType = $responseType; // For backward compatibility
                         $normalizeMultiSelect = $question->settings['normalizeMultiSelect'] ?? true;
                         
                         // Calculate max possible score for this question
@@ -561,14 +564,29 @@ class PublicActivityController extends Controller
                             'question_text' => $question->text,
                             'user_answer' => $userAnswer,
                             'scores_config' => $scores,
-                            'choice_type' => $choiceType,
+                            'response_type' => $responseType,
                             'max_score' => $maxScore
                         ]);
                         
                         if ($userAnswer !== null) {
                             $questionScore = 0;
                             
-                            if ($choiceType === 'multi') {
+                            if ($responseType === 'likert') {
+                                // Likert Scale: userAnswer is a numeric value (1-based index)
+                                // Convert to 0-based index to access the scores array
+                                $selectedPoint = is_numeric($userAnswer) ? intval($userAnswer) : null;
+                                
+                                if ($selectedPoint !== null && $selectedPoint >= 1 && $selectedPoint <= count($scores)) {
+                                    $index = $selectedPoint - 1; // Convert to 0-based index
+                                    $questionScore = $scores[$index];
+                                }
+                                
+                                \Log::info('SCT Likert Score', [
+                                    'selected_point' => $selectedPoint,
+                                    'index' => $index ?? null,
+                                    'score' => $questionScore
+                                ]);
+                            } elseif ($choiceType === 'multi') {
                                 // Multi-select: sum scores of all selected options
                                 $userAnswerArray = is_array($userAnswer) ? $userAnswer : [$userAnswer];
                                 $selectedScores = [];
