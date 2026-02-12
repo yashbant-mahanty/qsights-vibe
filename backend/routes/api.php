@@ -244,6 +244,19 @@ Route::middleware(['auth:sanctum'])->prefix('uploads/s3')->group(function () {
     Route::post('/bulk-view-urls', [App\Http\Controllers\Api\S3UploadController::class, 'getBulkViewUrls']);
 });
 
+// Video Upload Routes (Questionnaire Videos)
+Route::middleware(['auth:sanctum'])->prefix('videos')->group(function () {
+    Route::post('/upload', [App\Http\Controllers\Api\VideoUploadController::class, 'uploadVideo']);
+    Route::post('/metadata', [App\Http\Controllers\Api\VideoUploadController::class, 'saveVideoMetadata']);
+    Route::get('/questionnaire/{questionnaireId}', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoByQuestionnaire']);
+    Route::delete('/{videoId}', [App\Http\Controllers\Api\VideoUploadController::class, 'deleteVideo']);
+    Route::get('/statistics/{questionnaireId}', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoStatistics']);
+});
+
+// Public Video View Logging (No auth required for participants)
+Route::post('/public/videos/log-view', [App\Http\Controllers\Api\VideoUploadController::class, 'logVideoView']);
+Route::post('/public/videos/watch-log', [App\Http\Controllers\Api\VideoUploadController::class, 'getParticipantWatchLog']);
+
 // Questionnaire Routes
 Route::middleware(['auth:sanctum'])->group(function () {
 

@@ -42,6 +42,7 @@ import {
 } from "@/components/questions";
 import { createAnswerPayload } from "@/lib/valueDisplayUtils";
 import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
+import VideoPlayer from "@/components/VideoPlayer";
 
 interface FormField {
   id: string;
@@ -459,6 +460,15 @@ export default function TakeActivityPage() {
   const [presignedLogoUrl, setPresignedLogoUrl] = useState<string | null>(null);
   // Presigned URL state for footer logo
   const [presignedFooterLogoUrl, setPresignedFooterLogoUrl] = useState<string | null>(null);
+
+  // Video intro state
+  const [videoIntro, setVideoIntro] = useState<any>(null);
+  const [videoCompleted, setVideoCompleted] = useState(false);
+  const [videoWatchTime, setVideoWatchTime] = useState(0);
+  const [showVideoIntro, setShowVideoIntro] = useState(false);
+  const [existingWatchLog, setExistingWatchLog] = useState<any>(null);
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [resumePosition, setResumePosition] = useState(0);
 
   // Add to Calendar handler
   const handleAddToCalendar = () => {
@@ -1188,6 +1198,22 @@ export default function TakeActivityPage() {
       if (activityData.data.questionnaire) {
         console.log('Loaded questionnaire:', activityData.data.questionnaire);
         setQuestionnaire(activityData.data.questionnaire);
+        
+        // Fetch video intro for this questionnaire
+        try {
+          const videoResponse = await fetch(`/api/videos/questionnaire/${activityData.data.questionnaire.id}`);
+          if (videoResponse.ok) {
+            const videoData = await videoResponse.json();
+            if (videoData.data) {
+              console.log('Loaded video intro:', videoData.data);
+              setVideoIntro(videoData.data);
+              // Video intro will be shown after registration/form, before questionnaire starts
+            }
+          }
+        } catch (videoErr) {
+          console.log('No video intro found or error loading:', videoErr);
+          // Not a critical error, continue without video
+        }
       }
       
       // Don't set default language - let user select on registration page
@@ -1248,14 +1274,28 @@ export default function TakeActivityPage() {
       // Clear any old timer storage to prevent auto-expiration
       localStorage.removeItem(`activity_${activityId}_start_time`);
       
-      setShowForm(false);
-      setStarted(true);
-      toast({ 
-        title: "Preview Mode", 
-        description: "Testing only - No data will be saved or counted in reports", 
-        variant: "warning",
-        duration: 3000
-      });
+      // Check if video intro exists - show it before starting questionnaire
+      if (videoIntro) {
+        console.log('[Preview Mode] Video intro found, showing video screen first');
+        setShowForm(false);
+        setShowVideoIntro(true);
+        setStarted(false);
+        toast({ 
+          title: "Preview Mode", 
+          description: "Testing only - No data will be saved or counted in reports", 
+          variant: "warning",
+          duration: 3000
+        });
+      } else {
+        setShowForm(false);
+        setStarted(true);
+        toast({ 
+          title: "Preview Mode", 
+          description: "Testing only - No data will be saved or counted in reports", 
+          variant: "warning",
+          duration: 3000
+        });
+      }
       return;
     }
 
@@ -1298,15 +1338,28 @@ export default function TakeActivityPage() {
         // Clear any old timer storage to prevent auto-expiration
         localStorage.removeItem(`activity_${activityId}_start_time`);
         
-        setShowForm(false);
-        setStarted(true);
-        
-        toast({ 
-          title: "Anonymous Access", 
-          description: "Your responses will be saved anonymously", 
-          variant: "success",
-          duration: 2000
-        });
+        // Check if video intro exists - show it before starting questionnaire
+        if (videoIntro) {
+          console.log('[Anonymous Mode] Video intro found, showing video screen first');
+          setShowForm(false);
+          setShowVideoIntro(true);
+          setStarted(false);
+          toast({ 
+            title: "Anonymous Access", 
+            description: "Your responses will be saved anonymously", 
+            variant: "success",
+            duration: 2000
+          });
+        } else {
+          setShowForm(false);
+          setStarted(true);
+          toast({ 
+            title: "Anonymous Access", 
+            description: "Your responses will be saved anonymously", 
+            variant: "success",
+            duration: 2000
+          });
+        }
         
         return;
       } catch (err) {
@@ -1538,8 +1591,16 @@ export default function TakeActivityPage() {
         }
       }
       
-      setShowForm(false);
-      setStarted(true);
+      // Check if video intro exists - show it before starting questionnaire
+      if (videoIntro) {
+        console.log('Video intro found, showing video screen first');
+        setShowForm(false);
+        setShowVideoIntro(true); // Show video intro screen
+        setStarted(false); // Don't start questionnaire yet
+      } else {
+        setShowForm(false);
+        setStarted(true); // No video, start questionnaire directly
+      }
     } catch (err) {
       console.error("Registration error:", err);
       toast({ title: "Error", description: "Failed to register: " + (err instanceof Error ? err.message : "Unknown error"), variant: "error" });
@@ -1570,6 +1631,143 @@ export default function TakeActivityPage() {
     } catch (err) {
       console.error('Failed to load progress:', err);
     }
+  };
+
+  // Handle video intro completion
+  const handleVideoComplete = () => {
+    console.log('[Video Intro] Video marked as completed, can start questionnaire');
+    setVideoCompleted(true);
+  };
+
+  // Handle video watch time update
+  const handleVideoTimeUpdate = (currentTime: number, duration: number, percentage: number) => {
+    setVideoWatchTime(Math.floor(currentTime));
+  };
+
+  // Periodic save handler - saves watch progress every 30 seconds
+  const handlePeriodicVideoSave = async (currentTime: number, duration: number, percentage: number, completed: boolean) => {
+    if (!videoIntro || !questionnaire?.id || !activityId || !participantId) return;
+
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/videos/log-view`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          questionnaire_id: questionnaire.id,
+          video_id: videoIntro.id,
+          activity_id: activityId,
+          participant_id: participantId,
+          participant_email: isPreview && currentUser ? currentUser.email : (participantData.email || 'anonymous'),
+          participant_name: isPreview && currentUser ? currentUser.name : (participantData.name || participantData.full_name || 'Anonymous'),
+          watch_duration_seconds: Math.floor(currentTime),
+          completed: completed,
+          completion_percentage: Math.floor(percentage),
+        }),
+      });
+      console.log('[Video Intro] Periodic save successful at', Math.floor(currentTime), 'seconds');
+    } catch (err) {
+      console.error('[Video Intro] Periodic save failed:', err);
+      // Non-blocking - don't show error to user
+    }
+  };
+
+  // Check for existing watch log on mount (for resume functionality)
+  useEffect(() => {
+    const checkExistingWatchLog = async () => {
+      if (!videoIntro || !activityId || !participantId || !questionnaire?.id) return;
+      if (showVideoIntro && !showResumeDialog) {
+        try {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/videos/watch-log`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              video_id: videoIntro.id,
+              activity_id: activityId,
+              participant_id: participantId,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.data && data.data.watch_duration_seconds > 10) {
+              // Found existing watch log with >10 seconds watched
+              setExistingWatchLog(data.data);
+              setResumePosition(data.data.watch_duration_seconds);
+              setShowResumeDialog(true);
+              console.log('[Video Intro] Found existing watch log, offering resume from', data.data.watch_duration_seconds, 'seconds');
+            }
+          }
+        } catch (err) {
+          console.error('[Video Intro] Failed to check existing watch log:', err);
+          // Non-blocking - continue without resume option
+        }
+      }
+    };
+
+    checkExistingWatchLog();
+  }, [videoIntro, activityId, participantId, questionnaire?.id, showVideoIntro]);
+
+  // Handle resume choice
+  const handleResumeVideo = () => {
+    setShowResumeDialog(false);
+    if (existingWatchLog?.completed) {
+      setVideoCompleted(true);
+      setVideoWatchTime(existingWatchLog.watch_duration_seconds);
+    } else {
+      setVideoWatchTime(resumePosition);
+    }
+  };
+
+  const handleStartOverVideo = () => {
+    setShowResumeDialog(false);
+    setResumePosition(0);
+    setVideoWatchTime(0);
+  };
+
+  // Start questionnaire after video intro (log view and start)
+  const handleStartAfterVideo = async () => {
+    if (videoIntro?.must_watch && !videoCompleted) {
+      toast({
+        title: "Video Required",
+        description: "Please watch the video to at least 90% before starting",
+        variant: "warning"
+      });
+      return;
+    }
+
+    // Log video view
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/videos/log-view`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          questionnaire_id: questionnaire?.id,
+          video_id: videoIntro.id,
+          activity_id: activityId,
+          participant_id: participantId,
+          participant_email: isPreview && currentUser ? currentUser.email : (participantData.email || 'anonymous'),
+          participant_name: isPreview && currentUser ? currentUser.name : (participantData.name || participantData.full_name || 'Anonymous'),
+          watch_duration_seconds: videoWatchTime,
+          completed: videoCompleted,
+          completion_percentage: videoCompleted ? 100 : Math.floor((videoWatchTime / (videoIntro.video_duration_seconds || 1)) * 100),
+        }),
+      });
+      console.log('[Video Intro] View logged successfully');
+    } catch (err) {
+      console.error('[Video Intro] Failed to log view:', err);
+      // Don't block questionnaire start if logging fails
+    }
+
+    // Start questionnaire
+    console.log('[Video Intro] Starting questionnaire');
+    setShowVideoIntro(false);
+    setStarted(true);
   };
 
   // Save progress incrementally to backend
@@ -4396,6 +4594,177 @@ export default function TakeActivityPage() {
             </div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  // Show video intro screen after registration, before questionnaire
+  if (showVideoIntro && videoIntro) {
+    return (
+      <div 
+        className="min-h-screen relative flex items-center justify-center"
+        style={{ 
+          backgroundColor: activity?.landing_config?.backgroundStyle === "solid" || !activity?.landing_config?.backgroundStyle
+            ? (activity?.landing_config?.backgroundColor || "#F9FAFB")
+            : activity?.landing_config?.backgroundStyle === "gradient"
+            ? undefined
+            : undefined,
+          backgroundImage: activity?.landing_config?.backgroundStyle === "gradient"
+            ? `linear-gradient(to bottom right, ${activity?.landing_config?.gradientFrom || "#F3F4F6"}, ${activity?.landing_config?.gradientTo || "#DBEAFE"})`
+            : undefined,
+        }}
+      >
+        {/* Background Image with Opacity */}
+        {activity?.landing_config?.backgroundStyle === "image" && activity?.landing_config?.backgroundImageUrl && (
+          <div 
+            className="fixed inset-0 z-0"
+            style={{
+              backgroundImage: `url(${activity.landing_config.backgroundImageUrl})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundAttachment: "fixed",
+              opacity: (activity?.landing_config?.backgroundImageOpacity ?? 100) / 100,
+            }}
+          />
+        )}
+
+        <div className="relative z-10 w-full max-w-5xl px-4 py-8 mx-auto">
+          <Card className="shadow-2xl border-0 overflow-hidden">
+            <CardContent className="p-8">
+              {/* Header */}
+              <div className="text-center mb-6">
+                {activity?.landing_config?.logoUrl && (
+                  <div className="flex justify-center mb-4">
+                    <img 
+                      src={presignedLogoUrl || activity.landing_config.logoUrl} 
+                      alt="Logo" 
+                      className="object-contain"
+                      style={{
+                        height: activity.landing_config.logoSize === 'small' ? '48px' 
+                          : activity.landing_config.logoSize === 'large' ? '80px' 
+                          : '64px'
+                      }}
+                    />
+                  </div>
+                )}
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {activity?.name || "Welcome"}
+                </h1>
+                <p className="text-gray-600">
+                  Please watch the introductory video before starting
+                </p>
+              </div>
+
+              {/* Video Player */}
+              <div className="mb-6">
+                {/* Resume Dialog */}
+                {showResumeDialog && existingWatchLog && (
+                  <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                      Welcome back!
+                    </h3>
+                    <p className="text-sm text-blue-700 mb-4">
+                      {existingWatchLog.completed
+                        ? "You've already watched this video. Would you like to watch it again?"
+                        : `You previously watched ${Math.floor(resumePosition / 60)}:${(resumePosition % 60).toString().padStart(2, '0')} of this video.`}
+                    </p>
+                    <div className="flex gap-3">
+                      {!existingWatchLog.completed && (
+                        <Button
+                          onClick={handleResumeVideo}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Resume from {Math.floor(resumePosition / 60)}:{(resumePosition % 60).toString().padStart(2, '0')}
+                        </Button>
+                      )}
+                      <Button
+                        onClick={handleStartOverVideo}
+                        variant="outline"
+                        className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                      >
+                        {existingWatchLog.completed ? 'Watch Again' : 'Start Over'}
+                      </Button>
+                      {existingWatchLog.completed && (
+                        <Button
+                          onClick={() => {
+                            setShowResumeDialog(false);
+                            setVideoCompleted(true);
+                          }}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          Continue to Questionnaire
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <VideoPlayer
+                  videoUrl={videoIntro.video_url}
+                  thumbnailUrl={videoIntro.thumbnail_url}
+                  autoplay={videoIntro.autoplay || false}
+                  mustWatch={videoIntro.must_watch || false}
+                  displayMode={videoIntro.display_mode || 'inline'}
+                  onComplete={handleVideoComplete}
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  enablePeriodicSave={true}
+                  onPeriodicSave={handlePeriodicVideoSave}
+                  initialPosition={showResumeDialog ? 0 : resumePosition}
+                />
+              </div>
+
+              {/* Must Watch Warning */}
+              {videoIntro.must_watch && !videoCompleted && (
+                <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
+                  <Bell className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-yellow-900 mb-1">
+                      Video Required
+                    </p>
+                    <p className="text-xs text-yellow-700">
+                      You must watch at least 90% of the video to proceed to the questionnaire.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Start Button */}
+              <div className="flex justify-center">
+                <Button
+                  onClick={handleStartAfterVideo}
+                  disabled={videoIntro.must_watch && !videoCompleted}
+                  className={`px-8 py-6 text-lg font-semibold rounded-xl transition-all shadow-lg ${
+                    videoIntro.must_watch && !videoCompleted
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-qsights-cyan to-qsights-blue text-white hover:shadow-xl hover:scale-105'
+                  }`}
+                >
+                  {videoIntro.must_watch && !videoCompleted ? (
+                    <>
+                      <Circle className="w-5 h-5 mr-2" />
+                      Watch Video to Continue
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight className="w-5 h-5 mr-2" />
+                      Start Questionnaire
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Watch Status */}
+              {videoWatchTime > 0 && (
+                <div className="mt-4 text-center text-sm text-gray-500">
+                  Watched: {Math.floor(videoWatchTime / 60)}:{(videoWatchTime % 60).toString().padStart(2, '0')} / {Math.floor((videoIntro.video_duration_seconds || 0) / 60)}:{((videoIntro.video_duration_seconds || 0) % 60).toString().padStart(2, '0')}
+                  {videoCompleted && (
+                    <span className="ml-2 text-green-600 font-semibold">✓ Completed</span>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

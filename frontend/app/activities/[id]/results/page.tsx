@@ -411,6 +411,8 @@ export default function ActivityResultsPage() {
   const [statistics, setStatistics] = useState<any>(null);
   const [responses, setResponses] = useState<any[]>([]);
   const [questionnaire, setQuestionnaire] = useState<any>(null);
+  const [videoStatistics, setVideoStatistics] = useState<any>(null);
+  const [videoViewLogs, setVideoViewLogs] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -583,6 +585,39 @@ export default function ActivityResultsPage() {
           const questionnaireData = await fetch(`/api/public/questionnaire/${activityData.questionnaire_id}`);
           console.log('📥 Questionnaire response status:', questionnaireData.status, questionnaireData.ok);
           
+          // Fetch video statistics if questionnaire exists
+          try {
+            const videoStatsResponse = await fetch(`/api/videos/statistics/${activityData.questionnaire_id}`);
+            if (videoStatsResponse.ok) {
+              const videoStatsData = await videoStatsResponse.json();
+              console.log('📹 Video statistics loaded:', videoStatsData.data);
+              setVideoStatistics(videoStatsData.data);
+              
+              // Fetch video view logs for all participants
+              if (videoStatsData.data && videoStatsData.data.video_id) {
+                try {
+                  const viewLogsResponse = await fetch(`/api/videos/${videoStatsData.data.video_id}/view-logs`);
+                  if (viewLogsResponse.ok) {
+                    const viewLogsData = await viewLogsResponse.json();
+                    // Create a map of participant_id -> video view data
+                    const logsMap: Record<string, any> = {};
+                    viewLogsData.data.forEach((log: any) => {
+                      if (log.participant_id) {
+                        logsMap[log.participant_id] = log;
+                      }
+                    });
+                    setVideoViewLogs(logsMap);
+                    console.log('📹 Video view logs loaded:', Object.keys(logsMap).length, 'participants');
+                  }
+                } catch (viewErr) {
+                  console.log('No video view logs available:', viewErr);
+                }
+              }
+            }
+          } catch (videoErr) {
+            console.log('No video statistics available:', videoErr);
+          }
+          
           if (questionnaireData.ok) {
             const qData = await questionnaireData.json();
             console.log('✅ Questionnaire data received:', {
@@ -685,6 +720,18 @@ export default function ActivityResultsPage() {
             : 'N/A';
           row['Is Orphaned'] = orphanedResponses.includes(response.id) ? 'YES' : 'NO';
 
+          // Add video watch data if available
+          if (videoViewLogs && response.participant_id && videoViewLogs[response.participant_id]) {
+            const videoLog = videoViewLogs[response.participant_id];
+            row['Video Watch Duration'] = videoLog.watch_duration || '0:00';
+            row['Completed Video?'] = videoLog.completed ? 'Yes' : 'No';
+            row['Video Completion %'] = videoLog.completion_percentage ? `${Math.round(videoLog.completion_percentage)}%` : '0%';
+          } else if (videoStatistics && videoStatistics.total_views > 0) {
+            row['Video Watch Duration'] = 'Not watched';
+            row['Completed Video?'] = 'No';
+            row['Video Completion %'] = '0%';
+          }
+
           // Add ALL answers regardless of whether question exists in current questionnaire
           if (Array.isArray(response.answers) && response.answers.length > 0) {
             response.answers.forEach((answer: any, idx: number) => {
@@ -743,6 +790,19 @@ export default function ActivityResultsPage() {
             ? new Date(response.submitted_at).toLocaleString()
             : 'N/A';
 
+        // Add video watch data if available
+        if (videoViewLogs && response.participant_id && videoViewLogs[response.participant_id]) {
+          const videoLog = videoViewLogs[response.participant_id];
+          row['Video Watch Duration'] = videoLog.watch_duration || '0:00';
+          row['Completed Video?'] = videoLog.completed ? 'Yes' : 'No';
+          row['Video Completion %'] = videoLog.completion_percentage ? `${Math.round(videoLog.completion_percentage)}%` : '0%';
+        } else if (videoStatistics && videoStatistics.total_views > 0) {
+          // Video exists but this participant didn't watch it
+          row['Video Watch Duration'] = 'Not watched';
+          row['Completed Video?'] = 'No';
+          row['Video Completion %'] = '0%';
+        }
+
         // Add question responses
         // answers is an array of {question_id, value, value_array}
         questionnaire?.sections?.forEach((section: any) => {
@@ -754,11 +814,36 @@ export default function ActivityResultsPage() {
               const answerObj = response.answers.find((a: any) => a.question_id === question.id);
               if (answerObj) {
                 row[questionLabel] = formatAnswerObjectForExport(answerObj);
+                
+                // Add score column for SCT Likert questions
+                if (question.type === 'sct_likert') {
+                  const scores = question.settings?.scores || [];
+                  const options = question.settings?.labels || question.options || [];
+                  const answerValue = answerObj.value_array || answerObj.value;
+                  
+                  if (answerValue && options.length > 0 && scores.length > 0) {
+                    const selectedOption = String(answerValue);
+                    const optionIndex = options.findIndex((opt: string) => String(opt) === selectedOption);
+                    if (optionIndex !== -1 && scores[optionIndex] !== undefined) {
+                      row[`${questionLabel} - Score`] = Number(scores[optionIndex]);
+                    } else {
+                      row[`${questionLabel} - Score`] = 'N/A';
+                    }
+                  } else {
+                    row[`${questionLabel} - Score`] = 'N/A';
+                  }
+                }
               } else {
                 row[questionLabel] = 'No response';
+                if (question.type === 'sct_likert') {
+                  row[`${questionLabel} - Score`] = 'N/A';
+                }
               }
             } else {
               row[questionLabel] = 'No response';
+              if (question.type === 'sct_likert') {
+                row[`${questionLabel} - Score`] = 'N/A';
+              }
             }
           });
         });
@@ -970,8 +1055,112 @@ export default function ActivityResultsPage() {
 
             const questionResponses = questionResponsesWithDetails.map(r => r!.value);
 
+            // Calculate statistics for SCT Likert questions (with scores)
+            if (question.type === 'sct_likert') {
+              const scores = question.settings?.scores || [];
+              const options = question.settings?.labels || question.options || [];
+              
+              const stats: Record<string, number> = {};
+              const scoreStats: Record<string, number> = {};
+              let totalScore = 0;
+              let scoreCount = 0;
+              
+              questionResponses.forEach((answer: any) => {
+                const key = String(answer);
+                stats[key] = (stats[key] || 0) + 1;
+                
+                // Calculate score
+                const optionIndex = options.findIndex((opt: string) => String(opt) === key);
+                if (optionIndex !== -1 && scores[optionIndex] !== undefined) {
+                  const score = Number(scores[optionIndex]);
+                  scoreStats[key] = score;
+                  totalScore += score;
+                  scoreCount++;
+                }
+              });
+
+              const avgScore = scoreCount > 0 ? (totalScore / scoreCount).toFixed(2) : '0';
+              const maxPossibleScore = scores.length > 0 ? Math.max(...scores) : 0;
+
+              // Display average score info
+              doc.setFontSize(9);
+              doc.setTextColor(147, 51, 234); // Purple color for SCT
+              doc.text(`SCT Likert - Average Score: ${avgScore} / ${maxPossibleScore} (${questionResponses.length} responses)`, 20, currentY);
+              currentY += 7;
+
+              const statsData = Object.entries(stats).map(([option, count]) => [
+                option,
+                count,
+                `${((count / questionResponses.length) * 100).toFixed(1)}%`,
+                scoreStats[option] !== undefined ? `${scoreStats[option]} pts` : 'N/A'
+              ]);
+
+              // Draw a simple bar chart
+              const chartX = 20;
+              const chartY = currentY;
+              const chartWidth = 120;
+              const chartHeight = 60;
+              const maxCount = Math.max(...Object.values(stats));
+
+              // Chart title
+              doc.setFontSize(9);
+              doc.setTextColor(100, 100, 100);
+              doc.text(`Response & Score Distribution`, chartX, chartY);
+              
+              // Draw bars
+              const barSpacing = 4;
+              const barWidth = Math.min(15, (chartWidth - (statsData.length - 1) * barSpacing) / statsData.length);
+              let barX = chartX;
+
+              statsData.forEach(([option, count], index) => {
+                const barHeight = (Number(count) / maxCount) * chartHeight;
+                const barY = chartY + 10 + chartHeight - barHeight;
+
+                // Bar with purple color for SCT
+                doc.setFillColor(147, 51, 234); // Purple
+                doc.rect(barX, barY, barWidth, barHeight, 'F');
+
+                // Count label on top of bar
+                doc.setFontSize(8);
+                doc.setTextColor(40, 40, 40);
+                doc.text(String(count), barX + barWidth / 2, barY - 2, { align: 'center' });
+
+                // Option label (truncated)
+                doc.setFontSize(7);
+                doc.setTextColor(100, 100, 100);
+                const optionLabel = String(option).length > 10 ? String(option).substring(0, 10) + '...' : String(option);
+                doc.text(optionLabel, barX + barWidth / 2, chartY + 12 + chartHeight + 3, { 
+                  align: 'center',
+                  maxWidth: barWidth + 5
+                });
+
+                barX += barWidth + barSpacing;
+              });
+
+              currentY = chartY + 12 + chartHeight + 10;
+
+              // Add stats table below chart with scores
+              autoTable(doc, {
+                head: [['Option', 'Count', 'Percentage', 'Score']],
+                body: statsData,
+                startY: currentY,
+                theme: 'striped',
+                headStyles: {
+                  fillColor: [147, 51, 234],
+                  textColor: [255, 255, 255],
+                  fontStyle: 'bold',
+                },
+                styles: {
+                  fontSize: 9,
+                  cellPadding: 2,
+                },
+                margin: { left: 20, right: 20 },
+              });
+
+              currentY = (doc as any).lastAutoTable.finalY + 10;
+            }
             // Calculate statistics for choice questions (MCQ, Radio, Checkboxes)
-            if (['single_choice', 'multiple_choice', 'radio', 'checkbox'].includes(question.type)) {
+            else if (['single_choice', 'multiple_choice', 'radio', 'checkbox'].includes(question.type)) {
               const stats: Record<string, number> = {};
               questionResponses.forEach((answer: any) => {
                 const value = Array.isArray(answer) ? answer : [answer];
@@ -1618,6 +1807,70 @@ export default function ActivityResultsPage() {
           />
         </div>
 
+        {/* Video Engagement Statistics (if video intro exists) */}
+        {videoStatistics && videoStatistics.total_views > 0 && (
+          <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg">
+            <CardHeader className="border-b border-purple-200 bg-white/50 backdrop-blur-sm">
+              <CardTitle className="text-lg font-bold flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Eye className="w-5 h-5 text-purple-600" />
+                </div>
+                <span>Video Intro Engagement</span>
+                <span className="ml-auto px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">
+                  {videoStatistics.total_views} {videoStatistics.total_views === 1 ? 'View' : 'Views'}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                    </div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Completed Views</p>
+                  </div>
+                  <p className="text-3xl font-bold text-gray-900 mb-1">{videoStatistics.completed_views}</p>
+                  <p className="text-sm text-gray-600">{videoStatistics.total_views > 0 ? Math.round((videoStatistics.completed_views / videoStatistics.total_views) * 100) : 0}% completion rate</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Clock className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Watch Time</p>
+                  </div>
+                  <p className="text-3xl font-bold text-gray-900 mb-1">{videoStatistics.average_watch_duration || '0:00'}</p>
+                  <p className="text-sm text-gray-600">Per participant</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <TrendingUp className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Completion Rate</p>
+                  </div>
+                  <p className="text-3xl font-bold text-gray-900 mb-1">{Math.round(videoStatistics.completion_rate)}%</p>
+                  <p className="text-sm text-gray-600">Watched to ≥90%</p>
+                </div>
+
+                <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-amber-100 rounded-lg">
+                      <Eye className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Engagement</p>
+                  </div>
+                  <p className="text-3xl font-bold text-gray-900 mb-1">{videoStatistics.total_views}</p>
+                  <p className="text-sm text-gray-600">Total video views</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Tabs for Different Views */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200 flex-wrap gap-1 mb-6">
@@ -2145,7 +2398,8 @@ export default function ActivityResultsPage() {
                         if (question.type !== 'sct_likert') return null;
                         
                         const scores = question.settings?.scores || [];
-                        const options = question.options || [];
+                        // For SCT Likert, use labels from settings instead of options
+                        const options = question.settings?.labels || question.options || [];
                         const choiceType = question.settings?.choiceType || 'single';
                         const normalizeMultiSelect = question.settings?.normalizeMultiSelect !== false;
                         const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
@@ -2165,7 +2419,8 @@ export default function ActivityResultsPage() {
                             const selectedScores: number[] = [];
                             
                             answerArray.forEach((ans: any) => {
-                              const index = options.indexOf(ans);
+                              const answerStr = String(ans);
+                              const index = options.findIndex((opt: string) => String(opt) === answerStr);
                               if (index !== -1 && scores[index] !== undefined) {
                                 selectedScores.push(scores[index]);
                               }
@@ -2178,7 +2433,8 @@ export default function ActivityResultsPage() {
                               }
                             }
                           } else {
-                            const index = options.indexOf(answer);
+                            const answerStr = String(answer);
+                            const index = options.findIndex((opt: string) => String(opt) === answerStr);
                             if (index !== -1 && scores[index] !== undefined) {
                               questionScore = scores[index];
                             }
@@ -2231,8 +2487,8 @@ export default function ActivityResultsPage() {
                         let participantScore: number | null = null;
                         if (question.type === 'sct_likert' && answerValue && sctScoreData) {
                           const selectedOption = String(answerValue);
-                          const optionIndex = sctScoreData.options?.findIndex((opt: string) => opt === selectedOption);
-                          if (optionIndex !== -1 && sctScoreData.scores && sctScoreData.scores[optionIndex] !== undefined) {
+                          const optionIndex = sctScoreData.options?.findIndex((opt: string) => String(opt) === selectedOption);
+                          if (optionIndex !== undefined && optionIndex !== -1 && sctScoreData.scores && sctScoreData.scores[optionIndex] !== undefined) {
                             participantScore = Number(sctScoreData.scores[optionIndex]);
                           }
                         }

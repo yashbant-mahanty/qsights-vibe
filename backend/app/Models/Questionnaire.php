@@ -84,6 +84,22 @@ class Questionnaire extends Model
         );
     }
 
+    /**
+     * Get all videos for the questionnaire
+     */
+    public function videos()
+    {
+        return $this->hasMany(QuestionnaireVideo::class);
+    }
+
+    /**
+     * Get the intro video (if exists)
+     */
+    public function introVideo()
+    {
+        return $this->hasOne(QuestionnaireVideo::class)->where('video_type', 'intro');
+    }
+
 
     /**
      * Scope to filter by program

@@ -11,6 +11,7 @@ import IsolatedTextInput from "@/components/IsolatedTextInput";
 import EnhancedConditionalLogicEditor from "@/components/EnhancedConditionalLogicEditor";
 import ImportPreviewModal from "@/components/ImportPreviewModal";
 import S3ImageUpload from "@/components/S3ImageUpload";
+import S3VideoUpload from "@/components/S3VideoUpload";
 import BulkImageUpload from "@/components/BulkImageUpload";
 import { ValueDisplayModeConfig } from "@/components/ValueDisplayModeConfig";
 import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
@@ -127,6 +128,15 @@ function QuestionnaireBuilderPageContent() {
   const [customHeaderText, setCustomHeaderText] = useState('');
   const [showSectionHeader, setShowSectionHeader] = useState(true);
   const [sectionHeaderFormat, setSectionHeaderFormat] = useState<'numbered' | 'titleOnly'>('numbered');
+
+  // Video Intro Block state
+  const [videoIntroEnabled, setVideoIntroEnabled] = useState(false);
+  const [videoIntroUrl, setVideoIntroUrl] = useState('');
+  const [videoThumbnailUrl, setVideoThumbnailUrl] = useState('');
+  const [videoDisplayMode, setVideoDisplayMode] = useState<'inline' | 'modal'>('inline');
+  const [videoMustWatch, setVideoMustWatch] = useState(false);
+  const [videoAutoplay, setVideoAutoplay] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -935,6 +945,30 @@ function QuestionnaireBuilderPageContent() {
       };
 
       const createdQuestionnaire = await questionnairesApi.create(questionnaireData as any);
+      
+      // Save video metadata if video intro is enabled
+      if (videoIntroEnabled && videoIntroUrl && createdQuestionnaire.id) {
+        try {
+          await fetchWithAuth('/videos/metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              questionnaire_id: createdQuestionnaire.id,
+              video_url: videoIntroUrl,
+              thumbnail_url: videoThumbnailUrl || null,
+              video_type: 'intro',
+              display_mode: videoDisplayMode,
+              must_watch: videoMustWatch,
+              autoplay: videoAutoplay,
+              video_duration_seconds: videoDuration,
+            }),
+          });
+        } catch (videoError) {
+          console.error('Failed to save video metadata:', videoError);
+          toast({ title: "Warning", description: "Questionnaire saved but video metadata failed to save", variant: "warning" });
+        }
+      }
+      
       toast({ title: "Success!", description: "Questionnaire saved successfully!", variant: "success" });
       
       // If in selection mode, redirect back to evaluation with the newly created questionnaire
@@ -5056,6 +5090,114 @@ function QuestionnaireBuilderPageContent() {
                     )}
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Video Intro Block */}
+            <Card>
+              <CardHeader className="border-b border-gray-200">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-qsights-blue" />
+                  Video Intro Block
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-700">Enable Video Intro</span>
+                  <input 
+                    type="checkbox" 
+                    checked={videoIntroEnabled}
+                    onChange={(e) => setVideoIntroEnabled(e.target.checked)}
+                    className="w-4 h-4 cursor-pointer" 
+                  />
+                </div>
+
+                {videoIntroEnabled && (
+                  <div className="space-y-4 pt-2 border-t border-gray-200">
+                    {/* Video Upload */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Upload Video
+                      </label>
+                      <S3VideoUpload
+                        value={videoIntroUrl}
+                        onChange={setVideoIntroUrl}
+                        onRemove={() => setVideoIntroUrl('')}
+                        questionnaireId={questionnaireName}
+                        maxSize={100}
+                        onMetadataChange={(metadata) => setVideoDuration(metadata.duration)}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">MP4, WEBM up to 100MB</p>
+                    </div>
+
+                    {/* Thumbnail Upload */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Upload Thumbnail (Optional)
+                      </label>
+                      <S3ImageUpload
+                        value={videoThumbnailUrl}
+                        onChange={setVideoThumbnailUrl}
+                        onRemove={() => setVideoThumbnailUrl('')}
+                        folder="video-thumbnails"
+                        maxSize={5}
+                        showPreview={true}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
+                    </div>
+
+                    {/* Display Mode */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Display Mode
+                      </label>
+                      <select
+                        value={videoDisplayMode}
+                        onChange={(e) => setVideoDisplayMode(e.target.value as 'inline' | 'modal')}
+                        className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                      >
+                        <option value="inline">Inline (Play within page)</option>
+                        <option value="modal">Modal (Open in popup)</option>
+                      </select>
+                    </div>
+
+                    {/* Must Watch */}
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <span className="text-xs font-medium text-gray-700 block">Must Watch Before Starting</span>
+                        <span className="text-xs text-gray-500">Require completion to continue</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={videoMustWatch}
+                        onChange={(e) => setVideoMustWatch(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer" 
+                      />
+                    </div>
+
+                    {/* Autoplay */}
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <span className="text-xs font-medium text-gray-700 block">Autoplay</span>
+                        <span className="text-xs text-gray-500">Start playing automatically</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={videoAutoplay}
+                        onChange={(e) => setVideoAutoplay(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer" 
+                      />
+                    </div>
+
+                    {videoDuration > 0 && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs text-blue-800">
+                          <strong>Video Duration:</strong> {Math.floor(videoDuration / 60)}:{(videoDuration % 60).toString().padStart(2, '0')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
