@@ -44,6 +44,7 @@ import {
 import { createAnswerPayload } from "@/lib/valueDisplayUtils";
 import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 import VideoPlayer from "@/components/VideoPlayer";
+import VideoPlayerWithTracking from "@/components/VideoPlayerWithTracking";
 
 interface FormField {
   id: string;
@@ -1825,6 +1826,27 @@ export default function TakeActivityPage() {
 
   const handleSubmit = async (autoSubmit: boolean = false) => {
     try {
+      // Validate mandatory video questions first
+      if (!autoSubmit) {
+        const allSections = questionnaire?.sections || [];
+        const allQuestions = allSections.flatMap((section: any) => section.questions || []);
+        const videoQuestions = allQuestions.filter((q: any) => q.type === 'video' && q.settings?.isMandatoryWatch);
+        
+        for (const videoQuestion of videoQuestions) {
+          const response = responses[videoQuestion.id];
+          if (!response || !response.completed || !response.watchedAtLeast95) {
+            toast({
+              title: "Video Required",
+              description: `Please watch the video "${videoQuestion.title || videoQuestion.question}" to at least 95% completion before submitting.`,
+              variant: "warning",
+              duration: 5000
+            });
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+      
       // Validate all answers before submitting (unless auto-submit from timer)
       if (!autoSubmit && !validateCurrentAnswers()) {
         setSubmitting(false);
@@ -3188,6 +3210,49 @@ export default function TakeActivityPage() {
               {/* Hyperlinks at bottom */}
               {hyperlinksPosition === 'bottom' && hyperlinkButtons}
             </div>
+          </div>
+        );
+
+      case "video":
+        const videoSettings = question.settings || {
+          videoUrl: "",
+          videoThumbnailUrl: "",
+          videoDurationSeconds: 0,
+          isMandatoryWatch: false,
+          videoPlayMode: "inline"
+        };
+        
+        // If no video URL configured, show error message
+        if (!videoSettings.videoUrl) {
+          return (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                This video question is not properly configured. Please contact the administrator.
+              </p>
+            </div>
+          );
+        }
+        
+        return (
+          <div className="py-4">
+            <VideoPlayerWithTracking
+              videoUrl={videoSettings.videoUrl}
+              thumbnailUrl={videoSettings.videoThumbnailUrl}
+              duration={videoSettings.videoDurationSeconds}
+              isMandatory={videoSettings.isMandatoryWatch}
+              playMode={videoSettings.videoPlayMode || "inline"}
+              questionId={questionId}
+              activityId={activity?.id || ""}
+              responseId={participantId || ""}  // Use participantId as temporary response identifier
+              participantId={participantId || undefined}
+              onCompletionChange={(completed: boolean) => {
+                // Store completion status for validation
+                handleResponseChange(questionId, {
+                  completed,
+                  watchedAtLeast95: completed
+                });
+              }}
+            />
           </div>
         );
 
