@@ -28,6 +28,12 @@ class Question extends Model
         'translations',
         'is_required',
         'order',
+        // Video-specific fields
+        'video_url',
+        'video_thumbnail_url',
+        'video_duration_seconds',
+        'is_mandatory_watch',
+        'video_play_mode',
     ];
 
     protected $casts = [
@@ -40,6 +46,9 @@ class Question extends Model
         'is_rich_text' => 'boolean',
         'order' => 'integer',
         'nesting_level' => 'integer',
+        // Video-specific casts
+        'is_mandatory_watch' => 'boolean',
+        'video_duration_seconds' => 'integer',
     ];
     
     protected $appends = [];

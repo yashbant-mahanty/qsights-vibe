@@ -31,6 +31,9 @@ import {
   Calendar,
   Activity as ActivityIcon,
   Award,
+  ClipboardList,
+  TrendingDown,
+  Hash,
 } from "lucide-react";
 import { activitiesApi, responsesApi, notificationsApi, type Activity } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -389,6 +392,558 @@ function formatDragDropResponse(answer: any, questionSettings: any): React.React
   );
 }
 
+// SCT Report Section Component
+interface SCTReportSectionProps {
+  activityId: string;
+  questionnaire: any;
+  responses: any[];
+  activity: any;
+}
+
+function SCTReportSection({ activityId, questionnaire, responses, activity }: SCTReportSectionProps) {
+  const [activeSubTab, setActiveSubTab] = useState('breakdown');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Check if activity allows anonymous responses
+  const isAnonymous = activity?.allow_anonymous || false;
+  
+  // Extract SCT questions from questionnaire
+  const sctQuestions = useMemo(() => {
+    if (!questionnaire?.sections) return [];
+    
+    const questions: any[] = [];
+    questionnaire.sections.forEach((section: any, sectionIdx: number) => {
+      section.questions?.forEach((q: any, qIdx: number) => {
+        if (q.type === 'sct_likert' || q.type === 'likert_visual') {
+          questions.push({
+            ...q,
+            sectionIndex: sectionIdx,
+            questionIndex: qIdx,
+            questionCode: `Q${questions.length + 1}`,
+          });
+        }
+      });
+    });
+    return questions;
+  }, [questionnaire]);
+  
+  // Calculate participant-wise SCT scores
+  const participantScores = useMemo(() => {
+    const scores: any[] = [];
+    
+    responses.forEach((response: any) => {
+      const participantId = response.participant_id || response.guest_identifier || response.id;
+      const participantName = response.participant?.name || `P${String(response.id).padStart(3, '0')}`;
+      const participantEmail = response.participant?.email || response.guest_identifier || '';
+      
+      const questionScores: any[] = [];
+      let totalScore = 0;
+      let questionsAttempted = 0;
+      
+      sctQuestions.forEach((question) => {
+        const answer = response.answers?.find((a: any) => a.question_id === question.id);
+        
+        if (answer) {
+          let questionScore = 0;
+          let selectedOptions = [];
+          let questionType = '';
+          
+          // Determine question type and calculate score
+          if (question.type === 'sct_likert') {
+            const settings = question.settings || {};
+            const responseType = settings.responseType || settings.choiceType || 'single';
+            const scores = settings.scores || [];
+            const labels = settings.labels || [];
+            const normalizeMulti = settings.normalizeMultiSelect !== false;
+            
+            questionType = responseType === 'likert' ? 'SCT Likert' :
+                          responseType === 'multi' ? 'SCT Multi Select' : 'SCT Single Choice';
+            
+            if (responseType === 'likert') {
+              // Likert scale - could be label string or numeric point
+              const answerValue = answer.value || answer.answer;
+              
+              // Try to find label index first
+              let labelIndex = labels.findIndex((label: string) => label === answerValue);
+              
+              if (labelIndex >= 0 && labelIndex < scores.length) {
+                questionScore = scores[labelIndex] || 0;
+                selectedOptions = [labels[labelIndex]];
+              } else {
+                // Fallback: try as numeric point (1-based)
+                const selectedPoint = parseInt(answerValue);
+                if (!isNaN(selectedPoint) && selectedPoint >= 1 && selectedPoint <= scores.length) {
+                  questionScore = scores[selectedPoint - 1] || 0;
+                  selectedOptions = [`Point ${selectedPoint}`];
+                }
+              }
+            } else if (responseType === 'multi') {
+              // Multiple select - use value_array
+              const answerArray = answer.value_array || (Array.isArray(answer.value) ? answer.value : [answer.value]);
+              
+              answerArray.forEach((selectedValue: any) => {
+                // Find index of the selected label
+                let labelIndex = labels.findIndex((label: string) => label === selectedValue);
+                
+                if (labelIndex >= 0 && labelIndex < scores.length) {
+                  questionScore += scores[labelIndex] || 0;
+                  selectedOptions.push(labels[labelIndex]);
+                } else {
+                  // Fallback: try as numeric index
+                  const index = parseInt(selectedValue);
+                  if (!isNaN(index) && index >= 0 && index < scores.length) {
+                    questionScore += scores[index] || 0;
+                    selectedOptions.push(labels[index] || `Option ${index + 1}`);
+                  }
+                }
+              });
+              
+              // Normalize if enabled
+              if (normalizeMulti && answerArray.length > 0) {
+                questionScore = questionScore / answerArray.length;
+              }
+            } else {
+              // Single select - value is the label string
+              const selectedLabel = answer.value || answer.answer;
+              const labelIndex = labels.findIndex((label: string) => label === selectedLabel);
+              
+              if (labelIndex >= 0 && labelIndex < scores.length) {
+                questionScore = scores[labelIndex] || 0;
+                selectedOptions = [labels[labelIndex]];
+              } else {
+                // Fallback: try as numeric index
+                const selectedIndex = parseInt(selectedLabel);
+                if (!isNaN(selectedIndex) && selectedIndex >= 0 && selectedIndex < scores.length) {
+                  questionScore = scores[selectedIndex] || 0;
+                  selectedOptions = [labels[selectedIndex] || `Option ${selectedIndex + 1}`];
+                }
+              }
+            }
+          } else if (question.type === 'likert_visual') {
+            // Likert Visual - handle numeric value
+            questionType = 'SCT Visual';
+            const answerValue = answer.value || answer.answer;
+            const selectedValue = parseInt(answerValue);
+            if (!isNaN(selectedValue)) {
+              // For likert_visual, score is typically the selected value itself
+              // or you can configure custom scoring in settings
+              questionScore = selectedValue;
+              selectedOptions = [`${selectedValue}`];
+            }
+          }
+          
+          questionScores.push({
+            questionId: question.id,
+            questionCode: question.questionCode,
+            questionText: question.question,
+            questionType,
+            selectedOptions: selectedOptions.join(', '),
+            questionScore: parseFloat(questionScore.toFixed(2)),
+          });
+          
+          totalScore += questionScore;
+          questionsAttempted++;
+        }
+      });
+      
+      // Only include participants who attempted at least one SCT question
+      if (questionsAttempted > 0) {
+        scores.push({
+          participantId,
+          participantName: isAnonymous ? `P${String(scores.length + 1).padStart(3, '0')}` : participantName,
+          participantEmail: isAnonymous ? '' : participantEmail,
+          questionScores,
+          totalScore: parseFloat(totalScore.toFixed(2)),
+          questionsAttempted,
+          averageScore: questionsAttempted > 0 ? parseFloat((totalScore / questionsAttempted).toFixed(2)) : 0,
+        });
+      }
+    });
+    
+    return scores;
+  }, [responses, sctQuestions, isAnonymous]);
+  
+  // Filtered and sorted participants
+  const filteredParticipants = useMemo(() => {
+    let filtered = participantScores;
+    
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = participantScores.filter(p => 
+        p.participantName.toLowerCase().includes(query) ||
+        p.participantEmail.toLowerCase().includes(query) ||
+        p.questionScores.some((qs: any) => 
+          qs.questionText.toLowerCase().includes(query) ||
+          qs.selectedOptions.toLowerCase().includes(query)
+        )
+      );
+    }
+    
+    return filtered;
+  }, [participantScores, searchQuery]);
+  
+  // Leaderboard (sorted by total score)
+  const leaderboard = useMemo(() => {
+    return [...participantScores]
+      .sort((a, b) => b.totalScore - a.totalScore)
+      .map((p, idx) => ({ ...p, rank: idx + 1 }));
+  }, [participantScores]);
+  
+  // Export to CSV
+  const exportToCSV = (type: 'breakdown' | 'leaderboard') => {
+    let csvRows: string[] = [];
+    
+    if (type === 'breakdown') {
+      // CSV Header
+      csvRows.push('Participant,Email,Question Code,Question Type,Selected Options,Question Score,Total Score,Average Score');
+      
+      // CSV Data
+      filteredParticipants.forEach(participant => {
+        participant.questionScores.forEach((qs: any, idx: number) => {
+          const row = [
+            `"${participant.participantName}"`,
+            `"${participant.participantEmail}"`,
+            qs.questionCode,
+            qs.questionType,
+            `"${qs.selectedOptions}"`,
+            qs.questionScore,
+            idx === 0 ? participant.totalScore : '', // Only show total on first row
+            idx === 0 ? participant.averageScore : '', // Only show average on first row
+          ];
+          csvRows.push(row.join(','));
+        });
+      });
+    } else {
+      // Leaderboard CSV
+      csvRows.push('Rank,Participant,Email,Total Score,Questions Attempted,Average Score');
+      
+      leaderboard.forEach(p => {
+        const row = [
+          p.rank,
+          `"${p.participantName}"`,
+          `"${p.participantEmail}"`,
+          p.totalScore,
+          p.questionsAttempted,
+          p.averageScore,
+        ];
+        csvRows.push(row.join(','));
+      });
+    }
+    
+    // Download CSV
+    const csvContent = '\\uFEFF' + csvRows.join('\\n'); // Add BOM for UTF-8
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `sct-report-${type}-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast.success(`${type === 'breakdown' ? 'Participant Breakdown' : 'Leaderboard'} exported successfully`);
+  };
+  
+  // Check if no SCT questions
+  if (sctQuestions.length === 0) {
+    return (
+      <Card className="shadow-lg">
+        <CardContent className="p-12 text-center">
+          <ClipboardList className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-lg font-medium text-gray-500 mb-2">
+            This Event/Activity does not contain any Script Concordance (SCT) type questionnaire.
+          </p>
+          <p className="text-sm text-gray-400">
+            SCT questions include: SCT Single Choice, SCT Multi Select, SCT Likert, and SCT Visual
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  return (
+    <div className="space-y-6">
+      {/* SCT Report Header */}
+      <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-l-4 border-l-purple-500 shadow-sm">
+        <CardContent className="p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl shadow-lg">
+                <ClipboardList className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Script Concordance (SCT) Report</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Dedicated scoring report for {sctQuestions.length} SCT question{sctQuestions.length !== 1 ? 's' : ''} •{' '}
+                  {participantScores.length} participant{participantScores.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              <button
+                onClick={() => exportToCSV(activeSubTab === 'breakdown' ? 'breakdown' : 'leaderboard')}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-300 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-50 transition-colors shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                Export CSV
+              </button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      {/* Sub-tabs for Breakdown and Leaderboard */}
+      <Card className="shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 px-6 py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveSubTab('breakdown')}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  activeSubTab === 'breakdown'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <List className="w-4 h-4" />
+                  Participant Breakdown
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveSubTab('leaderboard')}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  activeSubTab === 'leaderboard'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Award className="w-4 h-4" />
+                  Leaderboard
+                </div>
+              </button>
+            </div>
+            
+            {activeSubTab === 'breakdown' && (
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Search participants or questions..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FileSpreadsheet className="w-4 h-4 text-gray-400" />
+                </div>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        
+        <CardContent className="p-0">
+          {activeSubTab === 'breakdown' ? (
+            /* Participant Breakdown Table */
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-purple-100 to-pink-100 border-b-2 border-purple-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Participant
+                    </th>
+                    {!isAnonymous && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Email
+                      </th>
+                    )}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Question Code
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Question Type
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Selected Options
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Question Score
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Total Score
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Average
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredParticipants.length === 0 ? (
+                    <tr>
+                      <td colSpan={isAnonymous ? 7 : 8} className="px-6 py-12 text-center text-gray-500">
+                        <div className="flex flex-col items-center gap-3">
+                          <ClipboardList className="w-12 h-12 text-gray-300" />
+                          <p className="text-lg font-medium">No SCT responses found</p>
+                          <p className="text-sm">
+                            {searchQuery ? 'Try a different search term' : 'Participants will appear here after completing SCT questions'}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredParticipants.map((participant, pIdx) => (
+                      participant.questionScores.map((qs: any, qIdx: number) => (
+                        <tr key={`${participant.participantId}-${qs.questionId}`} className="hover:bg-purple-50 transition-colors">
+                          {qIdx === 0 && (
+                            <>
+                              <td rowSpan={participant.questionScores.length} className="px-6 py-4 border-r border-gray-200 bg-gray-50">
+                                <p className="text-sm font-semibold text-gray-900">{participant.participantName}</p>
+                              </td>
+                              {!isAnonymous && (
+                                <td rowSpan={participant.questionScores.length} className="px-6 py-4 border-r border-gray-200 bg-gray-50">
+                                  <p className="text-xs text-gray-600 break-all">{participant.participantEmail}</p>
+                                </td>
+                              )}
+                            </>
+                          )}
+                          <td className="px-6 py-4">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold">{qs.questionCode}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs font-medium text-gray-700">{qs.questionType}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-xs text-gray-900 max-w-xs truncate" title={qs.selectedOptions}>
+                              {qs.selectedOptions}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                              qs.questionScore > 0 ? 'bg-green-100 text-green-700' :
+                              qs.questionScore < 0 ? 'bg-red-100 text-red-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {qs.questionScore > 0 ? '+' : ''}{qs.questionScore}
+                            </span>
+                          </td>
+                          {qIdx === 0 && (
+                            <>
+                              <td rowSpan={participant.questionScores.length} className="px-6 py-4 text-center border-l border-gray-200 bg-purple-50">
+                                <p className="text-lg font-bold text-purple-700">
+                                  {participant.totalScore > 0 ? '+' : ''}{participant.totalScore}
+                                </p>
+                              </td>
+                              <td rowSpan={participant.questionScores.length} className="px-6 py-4 text-center border-l border-gray-200 bg-purple-50">
+                                <p className="text-sm font-semibold text-gray-700">{participant.averageScore}</p>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* Leaderboard Table */
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-amber-100 to-yellow-100 border-b-2 border-amber-200">
+                  <tr>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Rank
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Participant
+                    </th>
+                    {!isAnonymous && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Email
+                      </th>
+                    )}
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Total Score
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Questions Attempted
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Average Score
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {leaderboard.length === 0 ? (
+                    <tr>
+                      <td colSpan={isAnonymous ? 5 : 6} className="px-6 py-12 text-center text-gray-500">
+                        <div className="flex flex-col items-center gap-3">
+                          <Award className="w-12 h-12 text-gray-300" />
+                          <p className="text-lg font-medium">No participants yet</p>
+                          <p className="text-sm">Leaderboard will update as participants complete SCT questions</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    leaderboard.map((participant) => (
+                      <tr key={participant.participantId} className="hover:bg-amber-50 transition-colors">
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center">
+                            {participant.rank === 1 ? (
+                              <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full flex items-center justify-center shadow-lg">
+                                <span className="text-white font-bold text-sm">🏆</span>
+                              </div>
+                            ) : participant.rank === 2 ? (
+                              <div className="w-8 h-8 bg-gradient-to-br from-gray-300 to-gray-500 rounded-full flex items-center justify-center shadow-md">
+                                <span className="text-white font-bold text-sm">🥈</span>
+                              </div>
+                            ) : participant.rank === 3 ? (
+                              <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full flex items-center justify-center shadow-md">
+                                <span className="text-white font-bold text-sm">🥉</span>
+                              </div>
+                            ) : (
+                              <span className="text-lg font-bold text-gray-600">#{participant.rank}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-semibold text-gray-900">{participant.participantName}</p>
+                        </td>
+                        {!isAnonymous && (
+                          <td className="px-6 py-4">
+                            <p className="text-xs text-gray-600 break-all">{participant.participantEmail}</p>
+                          </td>
+                        )}
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-4 py-2 rounded-full text-base font-bold ${
+                            participant.totalScore > 0 ? 'bg-green-100 text-green-700' :
+                            participant.totalScore < 0 ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {participant.totalScore > 0 ? '+' : ''}{participant.totalScore}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-sm font-medium text-gray-700">{participant.questionsAttempted}</span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-sm font-semibold text-gray-900">{participant.averageScore}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 interface NotificationReport {
   id: string;
   activity_id: string;
@@ -428,6 +983,10 @@ export default function ActivityResultsPage() {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<any>(null);
   
+  // SCT Report state
+  const [sctReportData, setSctReportData] = useState<any>(null);
+  const [loadingSctReport, setLoadingSctReport] = useState(false);
+  
   // Pagination state for responses
   const [responsePage, setResponsePage] = useState(1);
   const [responsesPerPage, setResponsesPerPage] = useState(50);
@@ -437,6 +996,17 @@ export default function ActivityResultsPage() {
 
   // Search/filter for notification reports
   const [notificationSearch, setNotificationSearch] = useState('');
+
+  // Check if questionnaire has SCT questions
+  const hasSCTQuestions = useMemo(() => {
+    if (!questionnaire?.sections) return false;
+    
+    return questionnaire.sections.some((section: any) => 
+      section.questions?.some((q: any) => 
+        q.type === 'sct_likert' || q.type === 'likert_visual'
+      )
+    );
+  }, [questionnaire]);
 
   const filteredResponses = useMemo(() => {
     const q = responseSearch.trim().toLowerCase();
@@ -1910,6 +2480,17 @@ export default function ActivityResultsPage() {
               <Mail className="w-4 h-4 mr-2" />
               Notification Reports
             </TabsTrigger>
+            
+            {/* SCT Report Tab - Show only if SCT questions exist */}
+            {hasSCTQuestions && (
+              <TabsTrigger 
+                value="sct-report" 
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+              >
+                <ClipboardList className="w-4 h-4 mr-2" />
+                Script Concordance (SCT) Report
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Overview Tab */}
@@ -3157,6 +3738,18 @@ export default function ActivityResultsPage() {
               </Card>
             </div>
           </TabsContent>
+
+          {/* SCT Report Tab */}
+          {hasSCTQuestions && (
+            <TabsContent value="sct-report">
+              <SCTReportSection 
+                activityId={activityId}
+                questionnaire={questionnaire}
+                responses={responses}
+                activity={activity}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

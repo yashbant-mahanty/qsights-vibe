@@ -7,6 +7,7 @@ use App\Models\QuestionnaireVideo;
 use App\Models\VideoViewLog;
 use App\Models\Questionnaire;
 use App\Models\SystemSetting;
+use App\Models\VideoWatchTracking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -532,6 +533,297 @@ class VideoUploadController extends Controller
                 'status' => 'error',
                 'message' => 'Failed to get watch log'
             ], 500);
+        }
+    }
+
+    /**
+     * Track video question watch progress
+     */
+    public function trackVideoQuestionProgress(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'response_id' => 'required|uuid|exists:responses,id',
+                'participant_id' => 'nullable|uuid|exists:participants,id',
+                'activity_id' => 'required|uuid|exists:activities,id',
+                'question_id' => 'required|uuid|exists:questions,id',
+                'watch_time_seconds' => 'required|integer|min:0',
+                'completed_watch' => 'required|boolean',
+                'total_plays' => 'nullable|integer|min:0',
+                'total_pauses' => 'nullable|integer|min:0',
+                'total_seeks' => 'nullable|integer|min:0',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $data = $validator->validated();
+            
+            // Calculate formatted time and completion percentage
+            $watchTimeFormatted = VideoWatchTracking::formatSeconds($data['watch_time_seconds']);
+            
+            // Get video duration from question
+            $question = \App\Models\Question::find($data['question_id']);
+            $completionPercentage = 0;
+            if ($question && $question->video_duration_seconds > 0) {
+                $completionPercentage = min(100, ($data['watch_time_seconds'] / $question->video_duration_seconds) * 100);
+            }
+
+            // Update or create tracking record
+            $tracking = VideoWatchTracking::updateOrCreate(
+                [
+                    'response_id' => $data['response_id'],
+                    'question_id' => $data['question_id'],
+                ],
+                [
+                    'participant_id' => $data['participant_id'],
+                    'activity_id' => $data['activity_id'],
+                    'watch_time_seconds' => $data['watch_time_seconds'],
+                    'watch_time_formatted' => $watchTimeFormatted,
+                    'completed_watch' => $data['completed_watch'],
+                    'completion_percentage' => $completionPercentage,
+                    'total_plays' => $data['total_plays'] ?? 0,
+                    'total_pauses' => $data['total_pauses'] ?? 0,
+                    'total_seeks' => $data['total_seeks'] ?? 0,
+                    'first_played_at' => $tracking->first_played_at ?? now(),
+                    'last_updated_at' => now(),
+                ]
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Watch progress tracked successfully',
+                'data' => $tracking
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('Failed to track video watch progress', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to track watch progress: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get watch progress for a specific video question
+     */
+    public function getVideoQuestionProgress(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'response_id' => 'required|uuid|exists:responses,id',
+                'question_id' => 'required|uuid|exists:questions,id',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $tracking = VideoWatchTracking::where('response_id', $request->response_id)
+                ->where('question_id', $request->question_id)
+                ->first();
+
+            if (!$tracking) {
+                return response()->json([
+                    'status' => 'success',
+                    'data' => null
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $tracking
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('Failed to get video watch progress', [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to get watch progress'
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload video for a video question type
+     */
+    public function uploadVideoQuestion(Request $request)
+    {
+        try {
+            // Validate request
+            $validator = Validator::make($request->all(), [
+                'file' => 'required|file|mimes:mp4,mov,webm|max:102400', // 100MB max
+                'folder' => 'nullable|string|max:100',
+                'questionnaire_id' => 'nullable|integer',
+                'question_id' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Get S3 configuration
+            $config = $this->getS3Config();
+            
+            if (empty($config['s3_bucket']) || empty($config['s3_region']) || 
+                empty($config['s3_access_key']) || empty($config['s3_secret_key'])) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'S3 is not configured. Please configure AWS S3 in System Settings.'
+                ], 400);
+            }
+
+            // Get the uploaded file
+            $file = $request->file('file');
+            $originalName = $file->getClientOriginalName();
+            $extension = $file->getClientOriginalExtension();
+            $mimeType = $file->getMimeType();
+            $size = $file->getSize();
+
+            // Get video duration (using getID3 if available)
+            $duration = $this->getVideoDuration($file->getPathname());
+
+            // Generate unique filename
+            $folder = $request->input('folder', 'questionnaire-videos');
+            $questionnaireId = $request->input('questionnaire_id');
+            $questionId = $request->input('question_id');
+            
+            // Build the S3 key (path)
+            $baseFolder = !empty($config['s3_folder']) ? rtrim($config['s3_folder'], '/') : '';
+            $timestamp = now()->format('Ymd_His');
+            $uniqueId = Str::random(8);
+            $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
+            $filename = "{$timestamp}_{$uniqueId}_{$safeName}.{$extension}";
+            
+            // Construct the full S3 key with base folder
+            if ($baseFolder) {
+                if ($questionnaireId) {
+                    $s3Key = "{$baseFolder}/{$folder}/questionnaire_{$questionnaireId}/{$filename}";
+                } else {
+                    $s3Key = "{$baseFolder}/{$folder}/{$filename}";
+                }
+            } else {
+                if ($questionnaireId) {
+                    $s3Key = "{$folder}/questionnaire_{$questionnaireId}/{$filename}";
+                } else {
+                    $s3Key = "{$folder}/{$filename}";
+                }
+            }
+
+            // Create S3 client
+            $s3Client = new S3Client([
+                'region' => $config['s3_region'],
+                'version' => 'latest',
+                'credentials' => [
+                    'key' => $config['s3_access_key'],
+                    'secret' => $config['s3_secret_key'],
+                ],
+            ]);
+
+            // Upload video to S3
+            $result = $s3Client->putObject([
+                'Bucket' => $config['s3_bucket'],
+                'Key' => $s3Key,
+                'Body' => fopen($file->getPathname(), 'rb'),
+                'ContentType' => $mimeType,
+                'CacheControl' => 'max-age=31536000',
+            ]);
+
+            // Get the URL
+            $s3Url = $result['ObjectURL'] ?? "https://{$config['s3_bucket']}.s3.{$config['s3_region']}.amazonaws.com/{$s3Key}";
+            
+            // Use CloudFront URL if configured
+            $publicUrl = $s3Url;
+            if (!empty($config['s3_cloudfront_url'])) {
+                $cloudfrontUrl = rtrim($config['s3_cloudfront_url'], '/');
+                $publicUrl = "{$cloudfrontUrl}/{$s3Key}";
+            }
+
+            \Log::info('S3 video upload successful', [
+                'key' => $s3Key,
+                'url' => $publicUrl,
+                'duration' => $duration,
+                'size' => $size,
+                'mime' => $mimeType,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Video uploaded successfully',
+                'data' => [
+                    'url' => $publicUrl,
+                    's3_url' => $s3Url,
+                    'key' => $s3Key,
+                    'filename' => $filename,
+                    'original_name' => $originalName,
+                    'size' => $size,
+                    'mime_type' => $mimeType,
+                    'duration_seconds' => $duration,
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('Video upload failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to upload video: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get video duration using getID3 or fallback methods
+     */
+    private function getVideoDuration($filePath)
+    {
+        try {
+            // Try using getID3 if available
+            if (class_exists('\getID3')) {
+                $getID3 = new \getID3();
+                $fileInfo = $getID3->analyze($filePath);
+                if (isset($fileInfo['playtime_seconds'])) {
+                    return round($fileInfo['playtime_seconds']);
+                }
+            }
+            
+            // Fallback: Try using ffprobe if available
+            $command = "ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 " . escapeshellarg($filePath);
+            $output = shell_exec($command);
+            
+            if ($output !== null && is_numeric(trim($output))) {
+                return round(floatval(trim($output)));
+            }
+            
+            // Default fallback
+            return 0;
+        } catch (Exception $e) {
+            \Log::warning('Failed to get video duration', ['error' => $e->getMessage()]);
+            return 0;
         }
     }
 }

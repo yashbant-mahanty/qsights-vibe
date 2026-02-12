@@ -49,6 +49,7 @@ import {
   MoveVertical,
   Link2,
   ClipboardList,
+  Video,
 } from "lucide-react";
 import {
   SliderScale,
@@ -238,6 +239,7 @@ function QuestionnaireBuilderPageContent() {
     { id: "rating", label: "Rating", icon: Star, color: "text-yellow-600" },
     { id: "matrix", label: "Matrix", icon: LayoutGrid, color: "text-pink-600" },
     { id: "information", label: "Information Block", icon: FileText, color: "text-teal-600" },
+    { id: "video", label: "Video", icon: Video, color: "text-purple-600" },
     { id: "slider_scale", label: "Slider Scale", icon: TrendingUp, color: "text-qsights-cyan" },
     { id: "dial_gauge", label: "Dial Gauge", icon: Gauge, color: "text-red-600" },
     { id: "likert_visual", label: "Likert Visual", icon: Smile, color: "text-amber-600" },
