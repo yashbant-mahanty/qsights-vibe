@@ -12,11 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('video_view_logs', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->uuid('user_id')->nullable(); // Participant user ID
-            $table->uuid('participant_id')->nullable(); // Participant ID (from participants table)
-            $table->uuid('questionnaire_id');
-            $table->uuid('video_id');
+            $table->id(); // bigInteger primary key
+            $table->unsignedBigInteger('user_id')->nullable(); // Participant user ID
+            $table->unsignedBigInteger('participant_id')->nullable(); // Participant ID (from participants table)
+            $table->unsignedBigInteger('questionnaire_id');
+            $table->unsignedBigInteger('video_id');
             $table->uuid('activity_id')->nullable(); // Track which activity they viewed from
             $table->integer('watch_duration_seconds')->default(0);
             $table->boolean('completed')->default(false); // Watched to end

@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('questionnaire_videos', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->uuid('questionnaire_id');
+            $table->id(); // bigInteger primary key
+            $table->unsignedBigInteger('questionnaire_id');
             $table->text('video_url')->nullable(); // S3 video URL or external link
             $table->text('thumbnail_url')->nullable(); // S3 thumbnail URL
             $table->string('video_type')->default('intro'); // intro, section, etc
