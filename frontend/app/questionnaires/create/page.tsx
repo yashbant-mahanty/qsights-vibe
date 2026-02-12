@@ -50,6 +50,7 @@ import {
   Link2,
   ClipboardList,
   Video,
+  AlertCircle,
 } from "lucide-react";
 import {
   SliderScale,
@@ -4881,6 +4882,332 @@ function QuestionnaireBuilderPageContent() {
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
                 <p className="text-sm text-amber-800">
                   Please add at least one item and one bucket to configure this question.
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      case "video":
+        const videoSettings = question.settings || {
+          videoUrl: "",
+          videoThumbnailUrl: "",
+          videoDurationSeconds: 0,
+          isMandatoryWatch: false,
+          videoPlayMode: "inline" // inline or new_tab
+        };
+        return (
+          <div className="py-4 space-y-4">
+            {/* Settings Panel */}
+            {!showPreview && (
+              <div className="space-y-4">
+                {/* Video Upload Section */}
+                <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Video className="w-4 h-4 text-purple-600" />
+                    <span className="text-sm font-medium text-gray-700">Video Configuration</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Upload a video file (MP4, MOV, WEBM) up to 100MB. Video playback will be tracked automatically.
+                  </p>
+                  
+                  {/* Video URL Input (hidden, for S3 upload result) */}
+                  <Input
+                    type="hidden"
+                    value={videoSettings.videoUrl || ""}
+                  />
+                  
+                  {/* Video Upload Component */}
+                  <div className="space-y-3">
+                    <S3VideoUpload
+                      questionnaireId={undefined}
+                      onUploadComplete={(url: string, thumbnailUrl?: string, duration?: number) => {
+                        setSections(prevSections =>
+                          prevSections.map(section =>
+                            section.id === sectionId
+                              ? {
+                                  ...section,
+                                  questions: section.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? {
+                                          ...q,
+                                          settings: {
+                                            ...videoSettings,
+                                            videoUrl: url,
+                                            videoThumbnailUrl: thumbnailUrl || "",
+                                            videoDurationSeconds: duration || 0
+                                          }
+                                        }
+                                      : q
+                                  )
+                                }
+                              : section
+                          )
+                        );
+                      }}
+                      existingVideoUrl={videoSettings.videoUrl}
+                      accept="video/mp4,video/quicktime,video/webm"
+                      maxSizeInMB={100}
+                      label="Upload Video"
+                    />
+                    
+                    {/* OR Divider */}
+                    <div className="flex items-center gap-2 my-3">
+                      <div className="flex-1 border-t border-gray-300"></div>
+                      <span className="text-xs text-gray-500 px-2">OR</span>
+                      <div className="flex-1 border-t border-gray-300"></div>
+                    </div>
+                    
+                    {/* Video URL Input */}
+                    <div>
+                      <Label className="text-xs text-gray-600 block mb-2">Enter Video URL (YouTube, Vimeo, or direct link)</Label>
+                      <Input
+                        type="url"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        value={videoSettings.videoUrl || ""}
+                        onChange={(e) => {
+                          setSections(prevSections =>
+                            prevSections.map(section =>
+                              section.id === sectionId
+                                ? {
+                                    ...section,
+                                    questions: section.questions.map((q: any) =>
+                                      q.id === question.id
+                                        ? {
+                                            ...q,
+                                            settings: {
+                                              ...videoSettings,
+                                              videoUrl: e.target.value
+                                            }
+                                          }
+                                        : q
+                                    )
+                                  }
+                                : section
+                            )
+                          );
+                        }}
+                        className="text-sm"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Supports YouTube, Vimeo, or direct video links (.mp4, .webm)</p>
+                    </div>
+                    
+                    {/* Video Preview */}
+                    {videoSettings.videoUrl && (
+                      <div className="mt-3 p-3 bg-white rounded border border-purple-200">
+                        <div className="flex items-start gap-3">
+                          {videoSettings.videoThumbnailUrl && (
+                            <img 
+                              src={videoSettings.videoThumbnailUrl} 
+                              alt="Video thumbnail"
+                              className="w-24 h-16 object-cover rounded"
+                            />
+                          )}
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-gray-700">Video Uploaded</p>
+                            <p className="text-xs text-gray-500 mt-1 break-all">
+                              {videoSettings.videoUrl.split('/').pop()}
+                            </p>
+                            {videoSettings.videoDurationSeconds > 0 && (
+                              <p className="text-xs text-purple-600 mt-1">
+                                Duration: {Math.floor(videoSettings.videoDurationSeconds / 60)}:
+                                {String(videoSettings.videoDurationSeconds % 60).padStart(2, '0')}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                settings: {
+                                                  ...videoSettings,
+                                                  videoUrl: "",
+                                                  videoThumbnailUrl: "",
+                                                  videoDurationSeconds: 0
+                                                }
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Playback Settings */}
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Settings className="w-4 h-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Playback Settings</span>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {/* Mandatory Watch Toggle */}
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id={`video-mandatory-${question.id}`}
+                        checked={videoSettings.isMandatoryWatch || false}
+                        onChange={(e) => {
+                          setSections(prevSections =>
+                            prevSections.map(section =>
+                              section.id === sectionId
+                                ? {
+                                    ...section,
+                                    questions: section.questions.map((q: any) =>
+                                      q.id === question.id
+                                        ? {
+                                            ...q,
+                                            settings: {
+                                              ...videoSettings,
+                                              isMandatoryWatch: e.target.checked
+                                            }
+                                          }
+                                        : q
+                                    )
+                                  }
+                                : section
+                            )
+                          );
+                        }}
+                        className="w-4 h-4 text-red-600 rounded mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor={`video-mandatory-${question.id}`} className="text-xs font-medium text-gray-700 cursor-pointer">
+                          Mandatory Watch (95% completion required)
+                        </Label>
+                        <p className="text-xs text-gray-500 mt-1">
+                          When enabled, participants must watch at least 95% of the video before submitting.
+                          Progress is tracked automatically.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Play Mode Selection */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium text-gray-700">Playback Mode</Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            id={`video-inline-${question.id}`}
+                            name={`video-play-mode-${question.id}`}
+                            value="inline"
+                            checked={videoSettings.videoPlayMode === "inline"}
+                            onChange={(e) => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                settings: {
+                                                  ...videoSettings,
+                                                  videoPlayMode: e.target.value
+                                                }
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="w-4 h-4 text-indigo-600"
+                          />
+                          <Label htmlFor={`video-inline-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                            Inline Player (Embedded in page)
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            id={`video-newtab-${question.id}`}
+                            name={`video-play-mode-${question.id}`}
+                            value="new_tab"
+                            checked={videoSettings.videoPlayMode === "new_tab"}
+                            onChange={(e) => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                settings: {
+                                                  ...videoSettings,
+                                                  videoPlayMode: e.target.value
+                                                }
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            }}
+                            className="w-4 h-4 text-indigo-600"
+                          />
+                          <Label htmlFor={`video-newtab-${question.id}`} className="text-xs text-gray-600 cursor-pointer">
+                            New Tab/Window (Opens in separate window)
+                          </Label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Instructions Panel */}
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-blue-900">Video Question Behavior</p>
+                      <ul className="text-xs text-blue-700 mt-2 space-y-1 list-disc list-inside">
+                        <li>Video playback progress is tracked every 10 seconds</li>
+                        <li>Participants can pause, rewind, and replay the video</li>
+                        <li>If mandatory watch is enabled, 95% completion is enforced before submission</li>
+                        <li>Watch time and completion status are included in activity reports</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Preview Message */}
+            {videoSettings.videoUrl ? (
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <p className="text-sm text-purple-800">
+                  <strong>Preview:</strong> Participants will watch this video{videoSettings.isMandatoryWatch ? " (mandatory - 95% completion required)" : ""}.
+                  Playback will be {videoSettings.videoPlayMode === "inline" ? "embedded in the page" : "opened in a new tab"}.
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  Please upload a video file to configure this question.
                 </p>
               </div>
             )}

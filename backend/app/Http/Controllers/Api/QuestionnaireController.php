@@ -113,7 +113,7 @@ class QuestionnaireController extends Controller
             'sections.*.conditional_logic' => 'nullable|array',
             'sections.*.translations' => 'nullable|array',
             'sections.*.questions' => 'nullable|array',
-            'sections.*.questions.*.type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating,drag_and_drop,sct_likert',
+            'sections.*.questions.*.type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating,drag_and_drop,sct_likert,video',
             'sections.*.questions.*.title' => 'required|string|max:255',
             'sections.*.questions.*.description' => 'nullable|string',
             'sections.*.questions.*.parent_question_id' => 'nullable|uuid',
@@ -276,7 +276,7 @@ class QuestionnaireController extends Controller
             'sections.*.translations' => 'nullable|array',
             'sections.*.questions' => 'nullable|array',
             'sections.*.questions.*.id' => 'nullable',
-            'sections.*.questions.*.type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating,drag_and_drop,sct_likert',
+            'sections.*.questions.*.type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating,drag_and_drop,sct_likert,video',
             'sections.*.questions.*.title' => 'required|string|max:255',
             'sections.*.questions.*.description' => 'nullable|string',
             'sections.*.questions.*.parent_question_id' => 'nullable|uuid',
@@ -579,7 +579,7 @@ class QuestionnaireController extends Controller
             ->findOrFail($sectionId);
 
         $validated = $request->validate([
-            'type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating,drag_and_drop',
+            'type' => 'required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating,drag_and_drop,sct_likert,video',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'options' => 'nullable|array',
@@ -621,7 +621,7 @@ class QuestionnaireController extends Controller
         })->findOrFail($questionId);
 
         $validated = $request->validate([
-            'type' => 'sometimes|required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating,drag_and_drop',
+            'type' => 'sometimes|required|in:text,textarea,number,email,phone,url,radio,checkbox,select,multiselect,rating,scale,date,time,datetime,file,yesno,matrix,information,slider_scale,dial_gauge,likert_visual,nps,star_rating,drag_and_drop,sct_likert,video',
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
             'options' => 'nullable|array',

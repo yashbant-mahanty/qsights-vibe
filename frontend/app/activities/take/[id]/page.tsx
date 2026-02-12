@@ -3214,16 +3214,36 @@ export default function TakeActivityPage() {
         );
 
       case "video":
-        const videoSettings = question.settings || {
-          videoUrl: "",
-          videoThumbnailUrl: "",
-          videoDurationSeconds: 0,
-          isMandatoryWatch: false,
-          videoPlayMode: "inline"
-        };
+        // Parse settings if it's a string (from API)
+        let videoSettings;
+        if (typeof question.settings === 'string') {
+          try {
+            videoSettings = JSON.parse(question.settings);
+          } catch (e) {
+            console.error('[VIDEO] Failed to parse settings:', question.settings);
+            videoSettings = {
+              videoUrl: "",
+              videoThumbnailUrl: "",
+              videoDurationSeconds: 0,
+              isMandatoryWatch: false,
+              videoPlayMode: "inline"
+            };
+          }
+        } else {
+          videoSettings = question.settings || {
+            videoUrl: "",
+            videoThumbnailUrl: "",
+            videoDurationSeconds: 0,
+            isMandatoryWatch: false,
+            videoPlayMode: "inline"
+          };
+        }
+        
+        console.log('[VIDEO] Question ID:', questionId, 'Settings:', videoSettings);
         
         // If no video URL configured, show error message
         if (!videoSettings.videoUrl) {
+          console.error('[VIDEO] No videoUrl found in settings!');
           return (
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p className="text-sm text-yellow-800">
@@ -3232,6 +3252,8 @@ export default function TakeActivityPage() {
             </div>
           );
         }
+        
+        console.log('[VIDEO] Rendering VideoPlayerWithTracking with URL:', videoSettings.videoUrl);
         
         return (
           <div className="py-4">
@@ -5253,6 +5275,83 @@ export default function TakeActivityPage() {
                 </div>
               </div>
             )}
+
+            {/* Modern Progress Indicator - for all questions mode */}
+            {displayMode === 'all' && questionnaire?.settings?.show_progress_bar !== false && (() => {
+              // Calculate total questions across all sections (excluding information type)
+              const totalQuestions = allFilteredSections.reduce((total, section) => {
+                return total + (section.questions?.filter((q: any) => q.type !== 'information').length || 0);
+              }, 0);
+              
+              // Calculate answered questions
+              const answeredQuestions = Object.keys(responses).filter(questionId => {
+                const response = responses[questionId];
+                // Check if response exists and is not empty
+                if (response === null || response === undefined || response === '') return false;
+                // For arrays, check if not empty
+                if (Array.isArray(response) && response.length === 0) return false;
+                return true;
+              }).length;
+              
+              const progressPercentage = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
+              
+              return (
+                <div className="relative overflow-hidden rounded-2xl bg-white shadow-lg border border-gray-100 mb-4">
+                  {/* Progress Bar Background */}
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gray-100">
+                    <div 
+                      className="h-full bg-gradient-to-r from-qsights-cyan via-cyan-500 to-qsights-cyan transition-all duration-500 ease-out"
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between px-6 py-4 pt-5">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="text-2xl font-bold bg-gradient-to-r from-qsights-cyan to-qsights-navy bg-clip-text text-transparent">
+                          {progressPercentage}%
+                        </span>
+                        <span className="text-sm font-medium text-gray-500">
+                          {answeredQuestions} of {totalQuestions} questions answered
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">Complete the questionnaire to submit your responses</p>
+                    </div>
+                    
+                    {/* Progress Circle Indicator */}
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-12 h-12">
+                        <svg className="transform -rotate-90 w-12 h-12">
+                          <circle
+                            cx="24"
+                            cy="24"
+                            r="20"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            fill="none"
+                            className="text-gray-200"
+                          />
+                          <circle
+                            cx="24"
+                            cy="24"
+                            r="20"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            fill="none"
+                            strokeDasharray={`${2 * Math.PI * 20}`}
+                            strokeDashoffset={`${2 * Math.PI * 20 * (1 - progressPercentage / 100)}`}
+                            className="text-qsights-cyan transition-all duration-500"
+                          />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">
+                          {progressPercentage}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Questionnaire Header (Main Title) - respects show_header_in_participant_view */}
             {questionnaire?.settings?.show_header_in_participant_view !== false && (

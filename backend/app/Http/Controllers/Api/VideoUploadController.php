@@ -59,7 +59,7 @@ class VideoUploadController extends Controller
             // Validate request
             $validator = Validator::make($request->all(), [
                 'file' => 'required|file|mimes:mp4,webm|max:102400', // 100MB max
-                'questionnaire_id' => 'required|uuid|exists:questionnaires,id',
+                'questionnaire_id' => 'nullable|exists:questionnaires,id', // Accept both integer and UUID
                 'video_type' => 'nullable|string|in:intro,section',
                 'thumbnail' => 'nullable|file|mimes:jpeg,jpg,png,webp|max:5120', // 5MB thumbnail
             ]);
@@ -543,10 +543,10 @@ class VideoUploadController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'response_id' => 'required|uuid|exists:responses,id',
+                'response_id' => 'nullable|uuid|exists:responses,id',
                 'participant_id' => 'nullable|uuid|exists:participants,id',
                 'activity_id' => 'required|uuid|exists:activities,id',
-                'question_id' => 'required|uuid|exists:questions,id',
+                'question_id' => 'required|exists:questions,id',
                 'watch_time_seconds' => 'required|integer|min:0',
                 'completed_watch' => 'required|boolean',
                 'total_plays' => 'nullable|integer|min:0',
@@ -574,14 +574,25 @@ class VideoUploadController extends Controller
                 $completionPercentage = min(100, ($data['watch_time_seconds'] / $question->video_duration_seconds) * 100);
             }
 
+            // Build unique identifier for tracking record
+            // If response_id exists, use it + question_id
+            // Otherwise, use participant_id + activity_id + question_id
+            $uniqueIdentifier = [];
+            if (!empty($data['response_id'])) {
+                $uniqueIdentifier['response_id'] = $data['response_id'];
+                $uniqueIdentifier['question_id'] = $data['question_id'];
+            } else {
+                $uniqueIdentifier['participant_id'] = $data['participant_id'];
+                $uniqueIdentifier['activity_id'] = $data['activity_id'];
+                $uniqueIdentifier['question_id'] = $data['question_id'];
+            }
+
             // Update or create tracking record
             $tracking = VideoWatchTracking::updateOrCreate(
+                $uniqueIdentifier,
                 [
-                    'response_id' => $data['response_id'],
-                    'question_id' => $data['question_id'],
-                ],
-                [
-                    'participant_id' => $data['participant_id'],
+                    'response_id' => $data['response_id'] ?? null,
+                    'participant_id' => $data['participant_id'] ?? null,
                     'activity_id' => $data['activity_id'],
                     'watch_time_seconds' => $data['watch_time_seconds'],
                     'watch_time_formatted' => $watchTimeFormatted,
@@ -590,7 +601,7 @@ class VideoUploadController extends Controller
                     'total_plays' => $data['total_plays'] ?? 0,
                     'total_pauses' => $data['total_pauses'] ?? 0,
                     'total_seeks' => $data['total_seeks'] ?? 0,
-                    'first_played_at' => $tracking->first_played_at ?? now(),
+                    'first_played_at' => \DB::raw('COALESCE(first_played_at, NOW())'),
                     'last_updated_at' => now(),
                 ]
             );
@@ -621,8 +632,10 @@ class VideoUploadController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'response_id' => 'required|uuid|exists:responses,id',
-                'question_id' => 'required|uuid|exists:questions,id',
+                'response_id' => 'nullable|uuid|exists:responses,id',
+                'question_id' => 'required|exists:questions,id',
+                'participant_id' => 'nullable|uuid|exists:participants,id',
+                'activity_id' => 'nullable|uuid|exists:activities,id',
             ]);
 
             if ($validator->fails()) {
@@ -633,9 +646,18 @@ class VideoUploadController extends Controller
                 ], 422);
             }
 
-            $tracking = VideoWatchTracking::where('response_id', $request->response_id)
-                ->where('question_id', $request->question_id)
-                ->first();
+            // Build query with available identifiers
+            $query = VideoWatchTracking::where('question_id', $request->question_id);
+            
+            if ($request->response_id) {
+                $query->where('response_id', $request->response_id);
+            } elseif ($request->participant_id && $request->activity_id) {
+                // Fallback: find by participant + activity + question if no response_id
+                $query->where('participant_id', $request->participant_id)
+                      ->where('activity_id', $request->activity_id);
+            }
+            
+            $tracking = $query->first();
 
             if (!$tracking) {
                 return response()->json([

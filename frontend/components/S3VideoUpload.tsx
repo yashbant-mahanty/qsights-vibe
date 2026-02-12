@@ -6,7 +6,7 @@ import { fetchWithAuth } from "@/lib/api";
 
 interface S3VideoUploadProps {
   value?: string;
-  onChange: (url: string) => void;
+  onChange?: (url: string) => void;
   onRemove?: () => void;
   questionnaireId?: string | number;
   maxSize?: number; // in MB
@@ -14,6 +14,11 @@ interface S3VideoUploadProps {
   placeholder?: string;
   showPreview?: boolean;
   onMetadataChange?: (metadata: { duration: number }) => void;
+  onUploadComplete?: (url: string, thumbnailUrl?: string, duration?: number) => void;
+  existingVideoUrl?: string;
+  accept?: string;
+  maxSizeInMB?: number;
+  label?: string;
 }
 
 export default function S3VideoUpload({
@@ -26,34 +31,45 @@ export default function S3VideoUpload({
   placeholder = "Click to upload video or drag and drop",
   showPreview = true,
   onMetadataChange,
+  onUploadComplete,
+  existingVideoUrl,
+  accept,
+  maxSizeInMB,
+  label,
 }: S3VideoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Use existingVideoUrl if provided, otherwise use value
+  const videoUrl = existingVideoUrl || value;
+  // Use maxSizeInMB if provided, otherwise use maxSize
+  const maxSizeValue = maxSizeInMB || maxSize;
 
   const handleFile = async (file: File) => {
     setError(null);
     setUploadProgress(0);
 
     // Validate file type
-    const validTypes = ["video/mp4", "video/webm"];
+    const validTypes = ["video/mp4", "video/webm", "video/quicktime"];
     if (!validTypes.includes(file.type)) {
-      setError("Invalid video format. Only MP4 and WEBM are allowed.");
+      setError("Invalid video format. Only MP4, MOV, and WEBM are allowed.");
       return;
     }
 
     // Validate file size
-    const maxBytes = maxSize * 1024 * 1024;
+    const maxBytes = maxSizeValue * 1024 * 1024;
     if (file.size > maxBytes) {
-      setError(`File too large. Maximum size: ${maxSize}MB`);
+      setError(`File too large. Maximum size: ${maxSizeValue}MB`);
       return;
     }
 
-    // Get video duration
+    // Get video duration and upload
     const video = document.createElement("video");
     video.preload = "metadata";
+    
     video.onloadedmetadata = async () => {
       window.URL.revokeObjectURL(video.src);
       const duration = Math.floor(video.duration);
@@ -67,7 +83,9 @@ export default function S3VideoUpload({
       try {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("questionnaire_id", String(questionnaireId || ""));
+        if (questionnaireId) {
+          formData.append("questionnaire_id", String(questionnaireId));
+        }
 
         const result = await fetchWithAuth("/videos/upload", {
           method: "POST",
@@ -75,7 +93,19 @@ export default function S3VideoUpload({
         });
 
         if (result.status === "success" && result.data?.video_url) {
-          onChange(result.data.video_url);
+          const videoUrl = result.data.video_url;
+          const thumbnailUrl = result.data.thumbnail_url;
+          
+          // Call onUploadComplete if provided (new interface)
+          if (onUploadComplete) {
+            onUploadComplete(videoUrl, thumbnailUrl, duration);
+          }
+          
+          // Call onChange for backward compatibility
+          if (onChange) {
+            onChange(videoUrl);
+          }
+          
           setError(null);
         } else {
           setError(result.message || "Upload failed");
@@ -88,6 +118,12 @@ export default function S3VideoUpload({
         setUploadProgress(0);
       }
     };
+    
+    video.onerror = () => {
+      window.URL.revokeObjectURL(video.src);
+      setError("Failed to load video metadata");
+    };
+    
     video.src = URL.createObjectURL(file);
   };
 
@@ -124,7 +160,12 @@ export default function S3VideoUpload({
     if (onRemove) {
       onRemove();
     }
-    onChange("");
+    if (onChange) {
+      onChange("");
+    }
+    if (onUploadComplete) {
+      onUploadComplete("", "", 0);
+    }
     setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -133,8 +174,14 @@ export default function S3VideoUpload({
 
   return (
     <div className={`space-y-2 ${className}`}>
+      {label && (
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          {label}
+        </label>
+      )}
+      
       {/* Upload Area */}
-      {!value ? (
+      {!videoUrl ? (
         <>
           <div
             onClick={handleClick}
@@ -172,7 +219,7 @@ export default function S3VideoUpload({
                   {placeholder}
                 </p>
                 <p className="text-xs text-gray-500">
-                  MP4, WEBM up to {maxSize}MB
+                  MP4, MOV, WEBM up to {maxSizeValue}MB
                 </p>
               </>
             )}
@@ -180,7 +227,7 @@ export default function S3VideoUpload({
             <input
               ref={fileInputRef}
               type="file"
-              accept="video/mp4,video/webm"
+              accept={accept || "video/mp4,video/webm,video/quicktime"}
               onChange={handleInputChange}
               className="hidden"
               disabled={uploading}
@@ -199,7 +246,7 @@ export default function S3VideoUpload({
           {showPreview && (
             <div className="relative rounded-lg overflow-hidden border-2 border-gray-200 bg-black">
               <video
-                src={value}
+                src={videoUrl}
                 controls
                 className="w-full max-h-64 object-contain"
                 preload="metadata"
