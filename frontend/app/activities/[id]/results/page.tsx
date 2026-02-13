@@ -260,6 +260,18 @@ function ParticipantDetailsModal({ isOpen, onClose, participant, registrationFie
   );
 }
 
+// Helper function to format video duration seconds to HH:MM:SS format
+function formatVideoDuration(seconds: number): string {
+  if (seconds === null || seconds === undefined || isNaN(seconds)) return '0:00';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 // Helper function to format answer values for display
 // Handles JSON objects from dial_gauge and slider_scale (e.g., {"value_type":"range","raw_value":2,"display_value":"40-60%"})
 function formatAnswerForDisplay(answer: any): string {
@@ -3120,6 +3132,7 @@ export default function ActivityResultsPage() {
                         }
                         
                         return {
+                          participantId: r.participant_id || r.guest_identifier,
                           participantName: r.participant?.name || r.participant?.email || 'Anonymous',
                           participantEmail: r.participant?.email || 'N/A',
                           answer: answerValue,
@@ -3430,6 +3443,11 @@ export default function ActivityResultsPage() {
                                           Includes Scores
                                         </span>
                                       )}
+                                      {question.type === 'video' && (
+                                        <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full ml-2">
+                                          Video Watch Data
+                                        </span>
+                                      )}
                                     </h4>
                                     <div className="bg-white rounded-lg border-2 border-gray-200 overflow-hidden">
                                       <div className="overflow-x-auto">
@@ -3438,7 +3456,14 @@ export default function ActivityResultsPage() {
                                             <tr>
                                               <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">#</th>
                                               <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Participant</th>
-                                              <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Response</th>
+                                              {question.type === 'video' ? (
+                                                <>
+                                                  <th className="px-4 py-3 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Watch Duration</th>
+                                                  <th className="px-4 py-3 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Status</th>
+                                                </>
+                                              ) : (
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Response</th>
+                                              )}
                                               {question.type === 'sct_likert' && (
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-purple-700 uppercase tracking-wider">Score</th>
                                               )}
@@ -3446,7 +3471,14 @@ export default function ActivityResultsPage() {
                                             </tr>
                                           </thead>
                                           <tbody className="divide-y divide-gray-200">
-                                            {participantResponses.map((pr, idx) => (
+                                            {participantResponses.map((pr, idx) => {
+                                              // Get video view log for this participant if it's a video question
+                                              const videoLog = question.type === 'video' && pr.participantId ? videoViewLogs[pr.participantId] : null;
+                                              const isVideoCompleted = pr.answer?.watchedAtLeast95 || videoLog?.completed || false;
+                                              const watchDurationSeconds = videoLog?.watch_duration_seconds || 0;
+                                              const watchDurationFormatted = videoLog?.watch_duration || formatVideoDuration(watchDurationSeconds);
+                                              
+                                              return (
                                               <tr key={idx} className="hover:bg-blue-50 transition-colors">
                                                 <td className="px-4 py-3 text-sm font-bold text-gray-600">{idx + 1}</td>
                                                 <td className="px-4 py-3">
@@ -3455,6 +3487,29 @@ export default function ActivityResultsPage() {
                                                     <p className="text-xs text-gray-500">{pr.participantEmail}</p>
                                                   </div>
                                                 </td>
+                                                {question.type === 'video' ? (
+                                                  <>
+                                                    <td className="px-4 py-3">
+                                                      <div className="flex items-center gap-2 text-sm">
+                                                        <Clock className="w-4 h-4 text-blue-500" />
+                                                        <span className="font-mono font-semibold text-gray-900">{watchDurationFormatted}</span>
+                                                      </div>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                      {isVideoCompleted ? (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full font-semibold text-sm">
+                                                          <CheckCircle className="w-3.5 h-3.5" />
+                                                          Completed
+                                                        </span>
+                                                      ) : (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-semibold text-sm">
+                                                          <Clock className="w-3.5 h-3.5" />
+                                                          In Progress
+                                                        </span>
+                                                      )}
+                                                    </td>
+                                                  </>
+                                                ) : (
                                                 <td className="px-4 py-3">
                                                   <div className="text-sm text-gray-800 break-words max-w-md">
                                                     {Array.isArray(pr.answer) ? (
@@ -3482,6 +3537,7 @@ export default function ActivityResultsPage() {
                                                     )}
                                                   </div>
                                                 </td>
+                                                )}
                                                 {question.type === 'sct_likert' && (
                                                   <td className="px-4 py-3">
                                                     {pr.score !== null && pr.score !== undefined ? (
@@ -3498,7 +3554,8 @@ export default function ActivityResultsPage() {
                                                   {pr.submittedAt ? new Date(pr.submittedAt).toLocaleString() : 'N/A'}
                                                 </td>
                                               </tr>
-                                            ))}
+                                              );
+                                            })}
                                           </tbody>
                                         </table>
                                       </div>

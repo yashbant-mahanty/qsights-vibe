@@ -258,6 +258,8 @@ class ActivityController extends Controller
             'registration_form_fields.*.label' => 'sometimes|required|string',
             'registration_form_fields.*.type' => 'sometimes|required|string',
             'registration_form_fields.*.required' => 'sometimes|required|boolean',
+            'registration_form_fields.*.options' => 'nullable|array',
+            'registration_form_fields.*.options.*' => 'string',
             'registration_flow' => 'nullable|in:pre_submission,post_submission',
             // Additional details fields - all optional
             'sender_email' => 'nullable|email|max:255',
@@ -432,6 +434,8 @@ class ActivityController extends Controller
             'registration_form_fields.*.label' => 'required|string',
             'registration_form_fields.*.type' => 'required|string',
             'registration_form_fields.*.required' => 'required|boolean',
+            'registration_form_fields.*.options' => 'nullable|array',
+            'registration_form_fields.*.options.*' => 'string',
             'registration_flow' => 'nullable|in:pre_submission,post_submission',
             // Additional fields
             'sender_email' => 'nullable|email',

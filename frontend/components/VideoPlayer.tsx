@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, X } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, X, Loader2 } from "lucide-react";
+import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 
 interface VideoPlayerProps {
   videoUrl: string;
@@ -40,7 +41,41 @@ export default function VideoPlayer({
   const [hasCompleted, setHasCompleted] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [watchedSeconds, setWatchedSeconds] = useState(0);
+  const [presignedVideoUrl, setPresignedVideoUrl] = useState<string | null>(null);
+  const [loadingUrl, setLoadingUrl] = useState(true);
   const lastTimeRef = useRef(0);
+
+  // Get presigned URL for S3 videos
+  useEffect(() => {
+    async function fetchPresignedUrl() {
+      if (!videoUrl) {
+        setPresignedVideoUrl(null);
+        setLoadingUrl(false);
+        return;
+      }
+      
+      setLoadingUrl(true);
+      
+      // If it's already a presigned URL or not an S3 URL, use it directly
+      if (isPresignedUrl(videoUrl) || !isS3Url(videoUrl)) {
+        setPresignedVideoUrl(videoUrl);
+        setLoadingUrl(false);
+        return;
+      }
+      
+      try {
+        const presigned = await getPresignedUrl(videoUrl);
+        setPresignedVideoUrl(presigned || videoUrl);
+      } catch (err) {
+        console.error('[VideoPlayer] Failed to get presigned URL:', err);
+        setPresignedVideoUrl(videoUrl); // Fallback to original URL
+      } finally {
+        setLoadingUrl(false);
+      }
+    }
+    
+    fetchPresignedUrl();
+  }, [videoUrl]);
 
   useEffect(() => {
     if (autoplay && videoRef.current) {
@@ -219,11 +254,36 @@ export default function VideoPlayer({
     }
   };
 
+  // Show loading state while fetching presigned URL
+  if (loadingUrl) {
+    return (
+      <div className={`relative bg-black rounded-lg overflow-hidden ${className}`}>
+        <div className="w-full h-64 flex items-center justify-center">
+          <div className="text-center text-white">
+            <Loader2 className="w-12 h-12 animate-spin mx-auto mb-3" />
+            <p className="text-sm">Loading video...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error if no presigned URL available
+  if (!presignedVideoUrl) {
+    return (
+      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <p className="text-sm text-yellow-800">
+          Unable to load video. Please try refreshing the page.
+        </p>
+      </div>
+    );
+  }
+
   const VideoContent = () => (
     <div className={`relative bg-black rounded-lg overflow-hidden ${className}`}>
       <video
         ref={videoRef}
-        src={videoUrl}
+        src={presignedVideoUrl}
         poster={thumbnailUrl}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}

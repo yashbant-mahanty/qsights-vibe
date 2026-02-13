@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Upload, Video, X, Loader2 } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
+import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 
 interface S3VideoUploadProps {
   value?: string;
@@ -41,12 +42,39 @@ export default function S3VideoUpload({
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [presignedVideoUrl, setPresignedVideoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Use existingVideoUrl if provided, otherwise use value
   const videoUrl = existingVideoUrl || value;
   // Use maxSizeInMB if provided, otherwise use maxSize
   const maxSizeValue = maxSizeInMB || maxSize;
+
+  // Get presigned URL for S3 videos
+  useEffect(() => {
+    async function fetchPresignedUrl() {
+      if (!videoUrl) {
+        setPresignedVideoUrl(null);
+        return;
+      }
+      
+      // If it's already a presigned URL or not an S3 URL, use it directly
+      if (isPresignedUrl(videoUrl) || !isS3Url(videoUrl)) {
+        setPresignedVideoUrl(videoUrl);
+        return;
+      }
+      
+      try {
+        const presigned = await getPresignedUrl(videoUrl);
+        setPresignedVideoUrl(presigned || videoUrl);
+      } catch (err) {
+        console.error('[S3VideoUpload] Failed to get presigned URL:', err);
+        setPresignedVideoUrl(videoUrl); // Fallback to original URL
+      }
+    }
+    
+    fetchPresignedUrl();
+  }, [videoUrl]);
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -245,14 +273,20 @@ export default function S3VideoUpload({
           {/* Video Preview */}
           {showPreview && (
             <div className="relative rounded-lg overflow-hidden border-2 border-gray-200 bg-black">
-              <video
-                src={videoUrl}
-                controls
-                className="w-full max-h-64 object-contain"
-                preload="metadata"
-              >
-                Your browser does not support the video tag.
-              </video>
+              {presignedVideoUrl ? (
+                <video
+                  src={presignedVideoUrl}
+                  controls
+                  className="w-full max-h-64 object-contain"
+                  preload="metadata"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <div className="w-full h-48 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+                </div>
+              )}
               
               <button
                 onClick={handleRemove}

@@ -2377,6 +2377,7 @@ export default function TakeActivityPage() {
           );
 
         case "select":
+        case "country":
           return (
             <select
               id={fieldKey}
@@ -2392,6 +2393,27 @@ export default function TakeActivityPage() {
                 </option>
               ))}
             </select>
+          );
+
+        case "radio":
+        case "gender":
+          return (
+            <div className="space-y-2">
+              {field.options?.map((option, idx) => (
+                <label key={idx} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name={fieldKey}
+                    value={option}
+                    checked={value === option}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="w-4 h-4 text-qsights-blue focus:ring-qsights-blue border-gray-300"
+                    required={!isPreview && (field.required || field.isMandatory) && !value}
+                  />
+                  <span className="text-sm text-gray-700">{option}</span>
+                </label>
+              ))}
+            </div>
           );
 
         default:

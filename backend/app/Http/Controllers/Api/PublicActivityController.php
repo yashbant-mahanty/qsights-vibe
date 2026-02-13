@@ -1133,41 +1133,56 @@ class PublicActivityController extends Controller
      */
     public function loadProgress(Request $request, $activityId, $participantId)
     {
-        $activity = Activity::findOrFail($activityId);
-        
-        // Handle anonymous participants
-        $isAnonymous = $this->isAnonymousParticipantId($participantId);
-        
-        if ($isAnonymous) {
-            // For anonymous participants, try to find existing participant
-            $participant = Participant::whereJsonContains('additional_data->anonymous_session_id', $participantId)->first();
+        try {
+            $activity = Activity::find($activityId);
             
-            if (!$participant) {
-                // No progress saved yet for this anonymous session
+            if (!$activity) {
                 return response()->json([
                     'data' => null,
-                    'message' => 'No progress found for this session'
+                    'message' => 'Activity not found'
                 ], 404);
             }
-        } else {
-            $participant = Participant::findOrFail($participantId);
-        }
+            
+            // Handle anonymous participants
+            $isAnonymous = $this->isAnonymousParticipantId($participantId);
+            
+            if ($isAnonymous) {
+                // For anonymous participants, try to find existing participant
+                $participant = Participant::whereJsonContains('additional_data->anonymous_session_id', $participantId)->first();
+                
+                if (!$participant) {
+                    // No progress saved yet for this anonymous session
+                    return response()->json([
+                        'data' => null,
+                        'message' => 'No progress found for this session'
+                    ], 404);
+                }
+            } else {
+                $participant = Participant::find($participantId);
+                
+                if (!$participant) {
+                    return response()->json([
+                        'data' => null,
+                        'message' => 'Participant not found'
+                    ], 404);
+                }
+            }
 
-        // Verify participant is linked to this activity
-        if (!$participant->activities()->where('activities.id', $activityId)->exists()) {
-            return response()->json([
-                'message' => 'Participant not authorized for this activity'
-            ], 403);
-        }
+            // Verify participant is linked to this activity
+            if (!$participant->activities()->where('activities.id', $activityId)->exists()) {
+                return response()->json([
+                    'message' => 'Participant not authorized for this activity'
+                ], 403);
+            }
 
-        // Find in-progress response
-        $response = Response::with('answers')
-            ->where('activity_id', $activityId)
-            ->where('participant_id', $participant->id)
-            ->where('status', 'in_progress')
-            ->first();
+            // Find in-progress response
+            $response = Response::with('answers')
+                ->where('activity_id', $activityId)
+                ->where('participant_id', $participant->id)
+                ->where('status', 'in_progress')
+                ->first();
 
-        if (!$response) {
+            if (!$response) {
             return response()->json([
                 'data' => [
                     'has_progress' => false,
@@ -1199,6 +1214,18 @@ class PublicActivityController extends Controller
             ],
             'message' => 'Progress loaded successfully'
         ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to load progress', [
+                'activity_id' => $activityId,
+                'participant_id' => $participantId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'data' => null,
+                'message' => 'Failed to load progress: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

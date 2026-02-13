@@ -17,6 +17,8 @@ import {
   ChevronUp,
   AlertCircle,
   Globe,
+  Circle,
+  Users,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,11 +27,11 @@ import { Label } from "@/components/ui/label";
 export interface FormField {
   id: string;
   name?: string;
-  type: "text" | "email" | "phone" | "number" | "date" | "textarea" | "select" | "address" | "organization" | "country";
+  type: "text" | "email" | "phone" | "number" | "date" | "textarea" | "select" | "radio" | "address" | "organization" | "country" | "gender";
   label: string;
   placeholder?: string;
   required: boolean;
-  options?: string[]; // For select fields
+  options?: string[]; // For select and radio fields
   order: number;
   isMandatory?: boolean; // For Name and Email fields
 }
@@ -46,6 +48,8 @@ const FIELD_TYPES = [
   { type: "date" as const, label: "Date", icon: Calendar, color: "bg-orange-100 text-orange-600" },
   { type: "textarea" as const, label: "Long Text", icon: FileText, color: "bg-pink-100 text-pink-600" },
   { type: "select" as const, label: "Dropdown", icon: ChevronDown, color: "bg-cyan-50 text-qsights-cyan" },
+  { type: "radio" as const, label: "Radio Button", icon: Circle, color: "bg-purple-100 text-purple-600" },
+  { type: "gender" as const, label: "Gender", icon: Users, color: "bg-pink-100 text-pink-600" },
   { type: "country" as const, label: "Country", icon: Globe, color: "bg-indigo-100 text-indigo-600" },
   { type: "address" as const, label: "Address", icon: MapPin, color: "bg-yellow-100 text-yellow-600" },
   { type: "organization" as const, label: "Organization", icon: Building, color: "bg-teal-100 text-teal-600" },
@@ -93,7 +97,7 @@ export default function RegistrationFormBuilder({
       id: newId,
       name: newId,
       type,
-      label: type === "country" ? "Country" : `New ${type} field`,
+      label: type === "country" ? "Country" : type === "gender" ? "Gender" : `New ${type} field`,
       placeholder: type === "country" ? "Select your country" : "",
       required: false,
       order: fields.length,
@@ -102,6 +106,11 @@ export default function RegistrationFormBuilder({
 
     if (type === "select") {
       newField.options = ["Option 1", "Option 2", "Option 3"];
+    } else if (type === "radio") {
+      newField.options = ["Option 1", "Option 2", "Option 3"];
+    } else if (type === "gender") {
+      // Pre-populate with Male and Female options
+      newField.options = ["Male", "Female"];
     } else if (type === "country") {
       // Pre-populate with all countries
       newField.options = [...ALL_COUNTRIES];
@@ -378,11 +387,11 @@ export default function RegistrationFormBuilder({
                           />
                         </div>
 
-                        {/* Select Options */}
-                        {field.type === "select" && field.options && (
+                        {/* Select/Radio Options */}
+                        {(field.type === "select" || field.type === "radio") && field.options && (
                           <div>
                             <Label className="text-xs text-gray-700 mb-1.5">
-                              Dropdown Options
+                              {field.type === "radio" ? "Radio Button Options" : "Dropdown Options"}
                             </Label>
                             <div className="space-y-2">
                               {field.options.map((option, optIdx) => (
@@ -434,6 +443,61 @@ export default function RegistrationFormBuilder({
                               Pre-populated with {field.options.length} countries worldwide.
                               Participants will see a searchable dropdown to select their country.
                             </p>
+                          </div>
+                        )}
+
+                        {/* Gender Field Info */}
+                        {field.type === "gender" && field.options && (
+                          <div className="p-3 bg-pink-50 border border-pink-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Users className="w-4 h-4 text-pink-600" />
+                              <Label className="text-xs font-medium text-pink-700">
+                                Gender Radio Buttons
+                              </Label>
+                            </div>
+                            <p className="text-xs text-pink-600">
+                              Pre-populated with {field.options.length} options: {field.options.join(", ")}.
+                              Participants will see radio buttons to select their gender.
+                            </p>
+                            <div className="mt-2 space-y-2">
+                              <Label className="text-xs text-pink-700 mb-1.5">
+                                Gender Options
+                              </Label>
+                              <div className="space-y-2">
+                                {field.options.map((option, optIdx) => (
+                                  <div key={optIdx} className="flex items-center gap-2">
+                                    <Input
+                                      value={option}
+                                      onChange={(e) =>
+                                        updateSelectOption(
+                                          field.id,
+                                          optIdx,
+                                          e.target.value
+                                        )
+                                      }
+                                      placeholder={`Option ${optIdx + 1}`}
+                                      className="text-sm flex-1"
+                                    />
+                                    <button
+                                      onClick={() =>
+                                        removeSelectOption(field.id, optIdx)
+                                      }
+                                      disabled={field.options!.length <= 1}
+                                      className="p-2 hover:bg-red-100 text-red-600 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  onClick={() => addSelectOption(field.id)}
+                                  className="w-full px-3 py-2 bg-pink-100 hover:bg-pink-200 text-pink-700 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  Add Option
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>

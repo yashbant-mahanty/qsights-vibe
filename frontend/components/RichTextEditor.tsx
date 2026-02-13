@@ -252,7 +252,7 @@ export default function RichTextEditor({
         onInput={handleInput}
         onBlur={handleBlur}
         onFocus={handleFocus}
-        className="p-3 outline-none"
+        className="p-3 outline-none prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5"
         style={{ minHeight }}
         data-placeholder={placeholder}
         suppressContentEditableWarning

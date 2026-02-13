@@ -1060,21 +1060,87 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
     if (activity?.registration_form_fields && activity.registration_form_fields.length > 0) {
       activity.registration_form_fields.forEach(field => {
         if (field.name !== 'name' && field.name !== 'email') {
-          fields.push(
-            <div key={field.name}>
-              <Label htmlFor={field.name}>
-                {field.label} {field.required && '*'}
-              </Label>
-              <Input
-                id={field.name}
-                type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
-                value={participantForm[field.name] || ''}
-                onChange={(e) => setParticipantForm(prev => ({ ...prev, [field.name]: e.target.value }))}
-                placeholder={`Enter ${field.label.toLowerCase()}`}
-                required={field.required}
-              />
-            </div>
-          );
+          // Handle different field types
+          if (field.type === 'select' || field.type === 'country') {
+            fields.push(
+              <div key={field.name}>
+                <Label htmlFor={field.name}>
+                  {field.label} {field.required && '*'}
+                </Label>
+                <select
+                  id={field.name}
+                  value={participantForm[field.name] || ''}
+                  onChange={(e) => setParticipantForm(prev => ({ ...prev, [field.name]: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required={field.required}
+                >
+                  <option value="">Select an option...</option>
+                  {field.options?.map((option, idx) => (
+                    <option key={idx} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          } else if (field.type === 'radio' || field.type === 'gender') {
+            fields.push(
+              <div key={field.name}>
+                <Label htmlFor={field.name}>
+                  {field.label} {field.required && '*'}
+                </Label>
+                <div className="space-y-2 mt-2">
+                  {field.options?.map((option, idx) => (
+                    <label key={idx} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name={field.name}
+                        value={option}
+                        checked={participantForm[field.name] === option}
+                        onChange={(e) => setParticipantForm(prev => ({ ...prev, [field.name]: e.target.value }))}
+                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        required={field.required && !participantForm[field.name]}
+                      />
+                      <span className="text-sm text-gray-700">{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          } else if (field.type === 'textarea' || field.type === 'address') {
+            fields.push(
+              <div key={field.name}>
+                <Label htmlFor={field.name}>
+                  {field.label} {field.required && '*'}
+                </Label>
+                <textarea
+                  id={field.name}
+                  rows={field.type === 'address' ? 3 : 4}
+                  value={participantForm[field.name] || ''}
+                  onChange={(e) => setParticipantForm(prev => ({ ...prev, [field.name]: e.target.value }))}
+                  placeholder={`Enter ${field.label.toLowerCase()}`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required={field.required}
+                />
+              </div>
+            );
+          } else {
+            fields.push(
+              <div key={field.name}>
+                <Label htmlFor={field.name}>
+                  {field.label} {field.required && '*'}
+                </Label>
+                <Input
+                  id={field.name}
+                  type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : field.type === 'date' ? 'date' : field.type === 'phone' ? 'tel' : 'text'}
+                  value={participantForm[field.name] || ''}
+                  onChange={(e) => setParticipantForm(prev => ({ ...prev, [field.name]: e.target.value }))}
+                  placeholder={`Enter ${field.label.toLowerCase()}`}
+                  required={field.required}
+                />
+              </div>
+            );
+          }
         }
       });
     }

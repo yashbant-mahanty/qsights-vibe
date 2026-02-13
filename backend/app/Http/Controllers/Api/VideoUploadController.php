@@ -546,7 +546,7 @@ class VideoUploadController extends Controller
                 'response_id' => 'nullable|uuid|exists:responses,id',
                 'participant_id' => 'nullable|uuid|exists:participants,id',
                 'activity_id' => 'required|uuid|exists:activities,id',
-                'question_id' => 'required|exists:questions,id',
+                'question_id' => 'required|string|max:255', // Changed from exists:questions,id - question may be stored in questionnaire JSON
                 'watch_time_seconds' => 'required|integer|min:0',
                 'completed_watch' => 'required|boolean',
                 'total_plays' => 'nullable|integer|min:0',
@@ -587,23 +587,30 @@ class VideoUploadController extends Controller
                 $uniqueIdentifier['question_id'] = $data['question_id'];
             }
 
+            // Check if record exists to handle first_played_at properly
+            $existingTracking = VideoWatchTracking::where($uniqueIdentifier)->first();
+            
+            // Prepare data for update/create - using existing database schema
+            $trackingData = [
+                'participant_id' => $data['participant_id'] ?? null,
+                'activity_id' => $data['activity_id'],
+                'watch_time_seconds' => $data['watch_time_seconds'],
+                'max_watch_position' => $data['watch_time_seconds'], // Track max position
+                'completed' => $data['completed_watch'],
+                'play_count' => $data['total_plays'] ?? 0,
+                'pause_count' => $data['total_pauses'] ?? 0,
+                'seek_count' => $data['total_seeks'] ?? 0,
+            ];
+            
+            // Only include response_id if it's provided and not null
+            if (!empty($data['response_id'])) {
+                $trackingData['response_id'] = $data['response_id'];
+            }
+
             // Update or create tracking record
             $tracking = VideoWatchTracking::updateOrCreate(
                 $uniqueIdentifier,
-                [
-                    'response_id' => $data['response_id'] ?? null,
-                    'participant_id' => $data['participant_id'] ?? null,
-                    'activity_id' => $data['activity_id'],
-                    'watch_time_seconds' => $data['watch_time_seconds'],
-                    'watch_time_formatted' => $watchTimeFormatted,
-                    'completed_watch' => $data['completed_watch'],
-                    'completion_percentage' => $completionPercentage,
-                    'total_plays' => $data['total_plays'] ?? 0,
-                    'total_pauses' => $data['total_pauses'] ?? 0,
-                    'total_seeks' => $data['total_seeks'] ?? 0,
-                    'first_played_at' => \DB::raw('COALESCE(first_played_at, NOW())'),
-                    'last_updated_at' => now(),
-                ]
+                $trackingData
             );
 
             return response()->json([
@@ -633,7 +640,7 @@ class VideoUploadController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'response_id' => 'nullable|uuid|exists:responses,id',
-                'question_id' => 'required|exists:questions,id',
+                'question_id' => 'required|string|max:255', // Changed from exists:questions,id - question may be stored in questionnaire JSON
                 'participant_id' => 'nullable|uuid|exists:participants,id',
                 'activity_id' => 'nullable|uuid|exists:activities,id',
             ]);
@@ -666,9 +673,18 @@ class VideoUploadController extends Controller
                 ]);
             }
 
+            // Map database columns to expected frontend field names
+            $responseData = [
+                'watch_time_seconds' => $tracking->watch_time_seconds,
+                'completed_watch' => $tracking->completed,
+                'total_plays' => $tracking->play_count,
+                'total_pauses' => $tracking->pause_count, 
+                'total_seeks' => $tracking->seek_count,
+            ];
+
             return response()->json([
                 'status' => 'success',
-                'data' => $tracking
+                'data' => $responseData
             ]);
 
         } catch (Exception $e) {

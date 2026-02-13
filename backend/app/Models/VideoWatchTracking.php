@@ -17,25 +17,20 @@ class VideoWatchTracking extends Model
         'activity_id',
         'question_id',
         'watch_time_seconds',
-        'watch_time_formatted',
-        'completed_watch',
-        'completion_percentage',
-        'total_plays',
-        'total_pauses',
-        'total_seeks',
-        'first_played_at',
-        'last_updated_at',
+        'max_watch_position',
+        'completed',
+        'play_count',
+        'pause_count',
+        'seek_count',
     ];
 
     protected $casts = [
         'watch_time_seconds' => 'integer',
-        'completed_watch' => 'boolean',
-        'completion_percentage' => 'decimal:2',
-        'total_plays' => 'integer',
-        'total_pauses' => 'integer',
-        'total_seeks' => 'integer',
-        'first_played_at' => 'datetime',
-        'last_updated_at' => 'datetime',
+        'max_watch_position' => 'integer',
+        'completed' => 'boolean',
+        'play_count' => 'integer',
+        'pause_count' => 'integer',
+        'seek_count' => 'integer',
     ];
 
     /**

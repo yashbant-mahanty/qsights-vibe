@@ -508,13 +508,16 @@ export default function TakeActivityPage() {
       translationKeys: question.translations ? Object.keys(question.translations) : [],
       translationsRaw: question.translations,
       questionTitle: question.title,
+      formattedQuestion: question.formattedQuestion,
+      isRichText: question.isRichText,
       fullQuestion: question
     });
     
     // If English or no translation exists, return original
     if (lang === 'EN' || !question.translations || Object.keys(question.translations).length === 0 || !question.translations[lang]) {
       if (field === 'question') {
-        const result = question.title || question.question || question.text || '';
+        // Prioritize formattedQuestion for rich text content (contains HTML formatting)
+        const result = question.formattedQuestion || question.settings?.formattedQuestion || question.title || question.question || question.text || '';
         console.log('Returning original question (EN or no translation):', result);
         return result;
       }
@@ -530,7 +533,8 @@ export default function TakeActivityPage() {
     console.log('Found translation for', lang, ':', translation);
     
     if (field === 'question') {
-      const result = translation.question || translation.title || question.title || question.question || question.text || '';
+      // For translations, also prioritize formattedQuestion if available
+      const result = translation.formattedQuestion || translation.question || translation.title || question.formattedQuestion || question.settings?.formattedQuestion || question.title || question.question || question.text || '';
       console.log('Returning translated question:', result);
       return result;
     }
@@ -2891,51 +2895,60 @@ export default function TakeActivityPage() {
         }
         
         return (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="border border-gray-300 p-3 bg-gray-50"></th>
-                  {matrixColumns.map((col: any, index: number) => (
-                    <th key={index} className="border border-gray-300 p-3 bg-gray-50 text-sm font-medium text-gray-700">
-                      {typeof col === 'string' ? col : col.label || col.value}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {matrixRows.map((row: any, rowIndex: number) => {
-                  const rowKey = typeof row === 'string' ? row : row.value || row.label;
-                  const rowLabel = typeof row === 'string' ? row : row.label || row.value;
-                  return (
-                    <tr key={rowIndex}>
-                      <td className="border border-gray-300 p-3 font-medium text-sm text-gray-700">
-                        {rowLabel}
-                      </td>
-                      {matrixColumns.map((col: any, colIndex: number) => {
-                        const colKey = typeof col === 'string' ? col : col.value || col.label;
-                        return (
-                          <td key={colIndex} className="border border-gray-300 p-3 text-center">
-                            <input
-                              type="radio"
-                              name={`${questionId}_${rowKey}`}
-                              checked={matrixResponses[rowKey] === colKey}
-                              onChange={() => {
-                                handleResponseChange(questionId, {
-                                  ...matrixResponses,
-                                  [rowKey]: colKey
-                                });
-                              }}
-                              className="w-4 h-4 text-qsights-blue focus:ring-qsights-blue cursor-pointer"
-                            />
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="w-full max-w-full overflow-hidden">
+            <div 
+              className="overflow-x-auto pb-2" 
+              style={{ 
+                WebkitOverflowScrolling: 'touch',
+                maxWidth: '100%'
+              }}
+            >
+              <table className="border-collapse w-full" style={{ minWidth: '300px' }}>
+                <thead>
+                  <tr>
+                    <th className="border border-gray-300 p-2 bg-gray-50 text-left text-xs font-medium text-gray-700 w-1/4 min-w-[100px]"></th>
+                    {matrixColumns.map((col: any, index: number) => (
+                      <th key={index} className="border border-gray-300 p-2 bg-gray-50 text-xs font-medium text-gray-700 text-center whitespace-normal break-words">
+                        {typeof col === 'string' ? col : col.label || col.value}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrixRows.map((row: any, rowIndex: number) => {
+                    const rowKey = typeof row === 'string' ? row : row.value || row.label;
+                    const rowLabel = typeof row === 'string' ? row : row.label || row.value;
+                    return (
+                      <tr key={rowIndex}>
+                        <td className="border border-gray-300 p-2 font-medium text-xs text-gray-700 bg-white break-words">
+                          {rowLabel}
+                        </td>
+                        {matrixColumns.map((col: any, colIndex: number) => {
+                          const colKey = typeof col === 'string' ? col : col.value || col.label;
+                          return (
+                            <td key={colIndex} className="border border-gray-300 p-2 text-center">
+                              <input
+                                type="radio"
+                                name={`${questionId}_${rowKey}`}
+                                checked={matrixResponses[rowKey] === colKey}
+                                onChange={() => {
+                                  handleResponseChange(questionId, {
+                                    ...matrixResponses,
+                                    [rowKey]: colKey
+                                  });
+                                }}
+                                className="w-4 h-4 text-qsights-blue focus:ring-qsights-blue cursor-pointer"
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-400 mt-1 sm:hidden text-center">← Swipe to see all options →</p>
           </div>
         );
 
@@ -3171,7 +3184,7 @@ export default function TakeActivityPage() {
         const infoHyperlinks = question.hyperlinks || question.settings?.hyperlinks || [];
         const hyperlinksPosition = question.hyperlinksPosition || question.settings?.hyperlinksPosition || 'bottom';
         // Check for formatted content in question directly or in settings
-        const formattedContent = question.formattedQuestion || question.settings?.formattedContent || '';
+        const formattedContent = question.formattedQuestion || question.settings?.formattedContent || question.settings?.formattedQuestion || '';
         
         const hyperlinkButtons = infoHyperlinks.length > 0 && (
           <div className="flex flex-wrap gap-3">
@@ -3200,7 +3213,7 @@ export default function TakeActivityPage() {
               
               {formattedContent ? (
                 <div 
-                  className="text-sm text-gray-800 prose prose-sm max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a:hover]:text-blue-800"
+                  className="text-sm text-gray-800 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_a]:text-blue-600 [&_a]:underline [&_a:hover]:text-blue-800"
                   dangerouslySetInnerHTML={{ __html: formattedContent }}
                 />
               ) : question.description ? (
@@ -3983,6 +3996,31 @@ export default function TakeActivityPage() {
                 </option>
               ))}
             </select>
+          );
+
+        case "radio":
+        case "gender":
+          // For gender, ensure default options if none provided
+          const radioOptions = field.type === "gender" && (!field.options || field.options.length === 0)
+            ? ["Male", "Female"]
+            : (field.options || []);
+          return (
+            <div className={field.type === "gender" ? "flex flex-row gap-6" : "space-y-2"}>
+              {radioOptions.map((option, idx) => (
+                <label key={idx} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name={fieldKey}
+                    value={option}
+                    checked={value === option}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="w-4 h-4 text-qsights-blue focus:ring-qsights-blue border-gray-300"
+                    required={!isPreview && (field.required || field.isMandatory) && !value}
+                  />
+                  <span className="text-sm text-gray-700">{option}</span>
+                </label>
+              ))}
+            </div>
           );
 
         default:
@@ -5363,7 +5401,7 @@ export default function TakeActivityPage() {
             )}
 
             {/* Current Section */}
-            <Card>
+            <Card className="overflow-hidden">
               {/* Section Header - only show for single/section modes, not all mode */}
               {displayMode !== 'all' && questionnaire?.settings?.show_section_header !== false && (
                 <CardHeader className="border-b border-gray-200">
@@ -5378,7 +5416,7 @@ export default function TakeActivityPage() {
                   )}
                 </CardHeader>
               )}
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-6 space-y-6 overflow-x-auto">
                 {displayMode === 'single' ? (
                   // Single Question Mode - show one question at a time
                   currentSectionFiltered && currentSectionFiltered.length > 0 ? (
@@ -5402,22 +5440,22 @@ export default function TakeActivityPage() {
                           )}
                           {question.type === 'information' ? (
                             // Information block - render only the formatted content without number/title/description
-                            <div className="w-full">{renderQuestion(question)}</div>
+                            <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                           ) : (
                             <div className="flex items-start gap-3">
                               <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
                                 {currentQuestionIndex + 1}
                               </span>
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center">
-                                    <p 
-                                      className="text-base font-medium text-gray-900"
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <div 
+                                      className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
                                       dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
                                     />
-                                    {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                                    {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
                                   </div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-shrink-0">
                                     <span className="text-xs text-gray-400 hidden">{question.type}</span>
                                     <PerQuestionLanguageSwitcher
                                       availableLanguages={questionnaire?.languages || activity?.languages || []}
@@ -5438,7 +5476,7 @@ export default function TakeActivityPage() {
                                 )}
                                 {/* Question Image */}
                                 {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
-                                <div className="mt-4">{renderQuestion(question)}</div>
+                                <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                               </div>
                             </div>
                           )}
@@ -5464,22 +5502,22 @@ export default function TakeActivityPage() {
                         <div key={question.id || qIndex} className={`space-y-3 pb-6 border-b border-gray-200 last:border-b-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''}`}>
                           {question.type === 'information' ? (
                             // Information block - render only the formatted content without number/title/description
-                            <div className="w-full">{renderQuestion(question)}</div>
+                            <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                           ) : (
                             <div className="flex items-start gap-3">
                               <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
                                 {qIndex + 1}
                               </span>
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center">
-                                    <p 
-                                      className="text-base font-medium text-gray-900"
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <div 
+                                      className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
                                       dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
                                     />
-                                    {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                                    {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
                                   </div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-shrink-0">
                                     <span className="text-xs text-gray-400 hidden">{question.type}</span>
                                     <PerQuestionLanguageSwitcher
                                       availableLanguages={questionnaire?.languages || activity?.languages || []}
@@ -5500,7 +5538,7 @@ export default function TakeActivityPage() {
                                 )}
                                 {/* Question Image */}
                                 {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
-                                <div className="mt-4">{renderQuestion(question)}</div>
+                                <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                               </div>
                             </div>
                           )}
@@ -5540,22 +5578,22 @@ export default function TakeActivityPage() {
                               <div key={question.id || qIdx} className={`space-y-3 pb-6 border-b border-gray-200 last:border-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''}`}>
                                 {question.type === 'information' ? (
                                   // Information block - render only the formatted content without number/title/description
-                                  <div className="w-full">{renderQuestion(question)}</div>
+                                  <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                                 ) : (
                                   <div className="flex items-start gap-3">
                                     <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
                                       {qIdx + 1}
                                     </span>
-                                    <div className="flex-1">
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center">
-                                          <p 
-                                            className="text-base font-medium text-gray-900"
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1">
+                                          <div 
+                                            className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
                                             dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
                                           />
-                                          {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                                          {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 flex-shrink-0">
                                           <span className="text-xs text-gray-400 hidden">{question.type}</span>
                                           <PerQuestionLanguageSwitcher
                                             availableLanguages={questionnaire?.languages || activity?.languages || []}
@@ -5576,7 +5614,7 @@ export default function TakeActivityPage() {
                                       )}
                                       {/* Question Image */}
                                       {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
-                                      <div className="mt-4">{renderQuestion(question)}</div>
+                                      <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                                     </div>
                                   </div>
                                 )}

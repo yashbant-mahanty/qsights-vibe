@@ -304,6 +304,11 @@ export default function ViewQuestionnairePage() {
           description: section.description || '',
           questions: section.questions?.map((q: any) => {
             const isInformationBlock = q.type === 'information';
+            // Restore formattedQuestion from settings for ALL question types (contains rich text HTML)
+            // For information blocks, also check formattedContent
+            const savedFormattedQuestion = isInformationBlock 
+              ? (q.settings?.formattedContent || q.settings?.formattedQuestion || q.description || '')
+              : (q.settings?.formattedQuestion || q.title || '');
             return {
               id: q.id || Date.now(),
               type: mapBackendTypeToFrontend(q.type),
@@ -320,8 +325,8 @@ export default function ViewQuestionnairePage() {
               translations: q.translations || {},
               conditionalLogic: q.settings?.conditionalLogic || null,
               imageUrl: q.settings?.imageUrl || '', // Load question image
-              // For information blocks, restore formattedQuestion, hyperlinks, and hyperlinksPosition from settings
-              formattedQuestion: isInformationBlock ? (q.settings?.formattedContent || q.description || '') : undefined,
+              // Restore formattedQuestion (rich text HTML) for all question types
+              formattedQuestion: savedFormattedQuestion,
               description: isInformationBlock ? (q.settings?.formattedContent || q.description || '') : undefined,
               hyperlinks: isInformationBlock ? (q.settings?.hyperlinks || []) : undefined,
               hyperlinksPosition: isInformationBlock ? (q.settings?.hyperlinksPosition || 'bottom') : undefined,
@@ -582,6 +587,12 @@ export default function ViewQuestionnairePage() {
               settings.imageUrl = question.imageUrl;
             }
             
+            // Store formattedQuestion (rich text HTML) in settings for ALL question types
+            // This preserves bullet points, bold, italic, and other formatting
+            if (question.formattedQuestion) {
+              settings.formattedQuestion = question.formattedQuestion;
+            }
+            
             // For information blocks, store the full HTML content and hyperlinks in settings
             const isInformationBlock = question.type === 'information';
             if (isInformationBlock) {
@@ -591,9 +602,11 @@ export default function ViewQuestionnairePage() {
             }
             
             // For information blocks, use a short title; otherwise truncate to 255 chars
+            // Strip HTML tags for the title field
+            const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
             const questionTitle = isInformationBlock 
               ? 'Information Block' 
-              : (question.formattedQuestion || question.question || '').substring(0, 255);
+              : stripHtml(question.formattedQuestion || question.question || '').substring(0, 255);
             
             const questionData: any = {
               type: mapFrontendTypeToBackend(question.type),

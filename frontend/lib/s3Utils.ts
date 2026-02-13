@@ -6,6 +6,9 @@ import { fetchWithAuth } from '@/lib/api';
 // Cache for presigned URLs to avoid repeated API calls
 const presignedUrlCache: Map<string, { url: string; expiresAt: number }> = new Map();
 
+// API base URL for public endpoints
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prod.qsights.com/api';
+
 // Cache duration buffer (generate new URL if expires within this time)
 const CACHE_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -60,7 +63,7 @@ export function isPresignedUrl(url: string): boolean {
 }
 
 /**
- * Get a presigned URL for a single S3 key
+ * Get a presigned URL for a single S3 key (tries authenticated first, then public)
  */
 export async function getPresignedUrl(keyOrUrl: string, expiresIn: number = 3600): Promise<string | null> {
   if (!keyOrUrl) return null;
@@ -81,6 +84,7 @@ export async function getPresignedUrl(keyOrUrl: string, expiresIn: number = 3600
   }
   
   try {
+    // Try authenticated endpoint first
     const response = await fetchWithAuth('/uploads/s3/view-url', {
       method: 'POST',
       body: JSON.stringify({ key, expires: expiresIn }),
@@ -95,9 +99,61 @@ export async function getPresignedUrl(keyOrUrl: string, expiresIn: number = 3600
       return response.data.url;
     }
     
+    // If authenticated failed, try public endpoint
+    return await getPresignedUrlPublic(keyOrUrl, expiresIn);
+  } catch (error) {
+    console.error('Failed to get presigned URL with auth, trying public:', error);
+    // Fallback to public endpoint
+    return await getPresignedUrlPublic(keyOrUrl, expiresIn);
+  }
+}
+
+/**
+ * Get a presigned URL using the public endpoint (no auth required)
+ * Use this for public pages like take activity
+ */
+export async function getPresignedUrlPublic(keyOrUrl: string, expiresIn: number = 3600): Promise<string | null> {
+  if (!keyOrUrl) return null;
+  
+  // If it's already a presigned URL, return it
+  if (isPresignedUrl(keyOrUrl)) {
+    return keyOrUrl;
+  }
+  
+  // Extract key from URL if needed
+  const key = isS3Url(keyOrUrl) ? extractS3KeyFromUrl(keyOrUrl) : keyOrUrl;
+  if (!key) return keyOrUrl; // Return original if we can't extract key
+  
+  // Check cache
+  const cached = presignedUrlCache.get(key);
+  if (cached && cached.expiresAt > Date.now() + CACHE_BUFFER_MS) {
+    return cached.url;
+  }
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/public/s3/view-url`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ key, expires: expiresIn }),
+    });
+    
+    const data = await response.json();
+    
+    if (data.status === 'success' && data.data?.url) {
+      // Cache the URL
+      presignedUrlCache.set(key, {
+        url: data.data.url,
+        expiresAt: Date.now() + (expiresIn * 1000),
+      });
+      return data.data.url;
+    }
+    
     return keyOrUrl; // Fallback to original
   } catch (error) {
-    console.error('Failed to get presigned URL:', error);
+    console.error('Failed to get public presigned URL:', error);
     return keyOrUrl; // Fallback to original
   }
 }

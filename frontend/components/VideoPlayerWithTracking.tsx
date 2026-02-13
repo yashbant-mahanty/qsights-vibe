@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Loader2 } from 'lucide-react';
+import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 
 interface VideoPlayerWithTrackingProps {
   videoUrl: string;
@@ -38,8 +39,42 @@ export default function VideoPlayerWithTracking({
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [showControls, setShowControls] = useState(true);
+  const [presignedVideoUrl, setPresignedVideoUrl] = useState<string | null>(null);
+  const [loadingUrl, setLoadingUrl] = useState(true);
   const lastTrackedTime = useRef(0);
   const trackingInterval = useRef<NodeJS.Timeout | null>(null);
+
+  // Get presigned URL for S3 videos
+  useEffect(() => {
+    async function fetchPresignedUrl() {
+      if (!videoUrl) {
+        setPresignedVideoUrl(null);
+        setLoadingUrl(false);
+        return;
+      }
+      
+      setLoadingUrl(true);
+      
+      // If it's already a presigned URL or not an S3 URL, use it directly
+      if (isPresignedUrl(videoUrl) || !isS3Url(videoUrl)) {
+        setPresignedVideoUrl(videoUrl);
+        setLoadingUrl(false);
+        return;
+      }
+      
+      try {
+        const presigned = await getPresignedUrl(videoUrl);
+        setPresignedVideoUrl(presigned || videoUrl);
+      } catch (err) {
+        console.error('[VideoPlayerWithTracking] Failed to get presigned URL:', err);
+        setPresignedVideoUrl(videoUrl); // Fallback to original URL
+      } finally {
+        setLoadingUrl(false);
+      }
+    }
+    
+    fetchPresignedUrl();
+  }, [videoUrl]);
 
   // Load existing progress on mount
   useEffect(() => {
@@ -78,7 +113,7 @@ export default function VideoPlayerWithTracking({
   async function loadProgress() {
     try {
       const payload: any = {
-        question_id: questionId,
+        question_id: String(questionId), // Ensure it's a string for backend validation
       };
 
       // Add response_id if available, otherwise use participant_id + activity_id
@@ -136,7 +171,7 @@ export default function VideoPlayerWithTracking({
         response_id: responseId || null,
         participant_id: participantId || null,
         activity_id: activityId,
-        question_id: questionId,
+        question_id: String(questionId), // Ensure it's a string for backend validation
         watch_time_seconds: currentWatchTime,
         completed_watch: isComplete,
         total_plays: plays,
@@ -234,10 +269,11 @@ export default function VideoPlayerWithTracking({
             This video will open in a new tab
           </p>
           <button
-            onClick={() => window.open(videoUrl, '_blank')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={() => window.open(presignedVideoUrl || videoUrl, '_blank')}
+            disabled={loadingUrl}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
-            Open Video in New Tab
+            {loadingUrl ? 'Loading...' : 'Open Video in New Tab'}
           </button>
           {isMandatory && !completed && (
             <p className="mt-3 text-xs text-yellow-700 bg-yellow-50 p-2 rounded">
@@ -245,6 +281,31 @@ export default function VideoPlayerWithTracking({
             </p>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // Show loading state while fetching presigned URL
+  if (loadingUrl) {
+    return (
+      <div className="space-y-3">
+        <div className="relative rounded-lg overflow-hidden bg-black flex items-center justify-center" style={{ minHeight: '300px' }}>
+          <div className="text-center text-white">
+            <Loader2 className="w-12 h-12 animate-spin mx-auto mb-3" />
+            <p className="text-sm">Loading video...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error if no presigned URL available
+  if (!presignedVideoUrl) {
+    return (
+      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <p className="text-sm text-yellow-800">
+          Unable to load video. Please try refreshing the page.
+        </p>
       </div>
     );
   }
@@ -258,7 +319,7 @@ export default function VideoPlayerWithTracking({
       >
         <video
           ref={videoRef}
-          src={videoUrl}
+          src={presignedVideoUrl}
           poster={thumbnailUrl}
           className="w-full"
           onPlay={() => setIsPlaying(true)}

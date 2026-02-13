@@ -904,9 +904,11 @@ function QuestionnaireBuilderPageContent() {
           questions: section.questions.map((question: any) => {
             // For information blocks, use a short title and store full content in settings
             const isInformationBlock = question.type === 'information';
+            // Strip HTML tags for the title field
+            const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
             const questionTitle = isInformationBlock 
               ? 'Information Block' 
-              : (question.formattedQuestion || question.question || '').substring(0, 255);
+              : stripHtml(question.formattedQuestion || question.question || '').substring(0, 255);
             
             const questionData: any = {
               type: typeMapping[question.type] || question.type,
@@ -929,6 +931,8 @@ function QuestionnaireBuilderPageContent() {
                 ...(question.conditionalLogic ? { conditionalLogic: question.conditionalLogic } : {}),
                 // Save question image URL
                 ...(question.imageUrl ? { imageUrl: question.imageUrl } : {}),
+                // Store formattedQuestion (rich text HTML) for ALL question types
+                ...(question.formattedQuestion ? { formattedQuestion: question.formattedQuestion } : {}),
                 // For information blocks, store the full HTML content and hyperlinks in settings
                 ...(isInformationBlock ? { 
                   formattedContent: question.formattedQuestion || question.description || '',
