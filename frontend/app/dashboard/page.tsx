@@ -1006,22 +1006,24 @@ export default function DashboardPage() {
           <div ref={resultsRef}>
           <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden">
             <CardHeader className="border-b border-gray-200 bg-gradient-to-r from-indigo-50 via-blue-50 to-cyan-50">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl shadow-lg">
-                    <FileText className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                      Event Breakdown
-                      <span className={`text-xs font-normal px-2 py-1 rounded-full ${searchQuery ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-500'}`}>
-                        {filteredActivityDetails.length} items
-                      </span>
-                    </CardTitle>
-                    <p className="text-sm text-gray-600 mt-0.5">Comprehensive pricing and configuration details</p>
-                  </div>
+              {/* Title Section */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl shadow-lg">
+                  <FileText className="w-5 h-5 text-white" />
                 </div>
-                <div className="flex items-center gap-2">
+                <div>
+                  <CardTitle className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    Event Breakdown
+                    <span className={`text-xs font-normal px-2 py-1 rounded-full ${searchQuery ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-500'}`}>
+                      {filteredActivityDetails.length} items
+                    </span>
+                  </CardTitle>
+                  <p className="text-sm text-gray-600 mt-0.5">Comprehensive pricing and configuration details</p>
+                </div>
+              </div>
+              
+              {/* Filters Section */}
+              <div className="flex flex-wrap items-center gap-2">
                   {/* Activity Type Filter */}
                   <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg shadow-sm border border-gray-200">
                     <Activity className="w-3.5 h-3.5 text-gray-400" />
@@ -1125,7 +1127,6 @@ export default function DashboardPage() {
                     </button>
                   )}
                 </div>
-              </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
