@@ -463,8 +463,10 @@ export default function ActivitiesPage() {
       const matchesTab =
         selectedTab === "all" ||
         activity.type.toLowerCase() === selectedTab;
+      // Fix: Map "active" filter to "live" status
+      const statusToMatch = selectedStatus === "active" ? "live" : selectedStatus;
       const matchesStatus =
-        selectedStatus === "all" || activity.status === selectedStatus;
+        selectedStatus === "all" || activity.status === statusToMatch;
       const matchesSearch =
         searchQuery === "" ||
         activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

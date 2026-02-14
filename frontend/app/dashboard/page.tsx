@@ -84,6 +84,8 @@ export default function DashboardPage() {
   const [activityStartDate, setActivityStartDate] = useState<string>("");
   const [activityEndDate, setActivityEndDate] = useState<string>("");
   const [activityTypeFilter, setActivityTypeFilter] = useState<string>("all");
+  const [activityGroupHeadFilter, setActivityGroupHeadFilter] = useState<string>("all");
+  const [activityStatusFilter, setActivityStatusFilter] = useState<string>("all");
   const [filteredActivityDetails, setFilteredActivityDetails] = useState<any[]>([]);
 
   // Send Reminder states
@@ -159,8 +161,8 @@ export default function DashboardPage() {
     }
   }
 
-  // Filter activities by date range, type, and search query
-  const filterActivitiesByDate = (startDate: string, endDate: string, typeFilter?: string) => {
+  // Filter activities by date range, type, group head, status, and search query
+  const filterActivitiesByDate = (startDate: string, endDate: string, typeFilter?: string, groupHeadFilter?: string, statusFilter?: string) => {
     if (!subscriptionMetrics?.activity_details) return;
 
     let filtered = subscriptionMetrics.activity_details;
@@ -200,6 +202,21 @@ export default function DashboardPage() {
     const currentTypeFilter = typeFilter !== undefined ? typeFilter : activityTypeFilter;
     if (currentTypeFilter !== "all") {
       filtered = filtered.filter((activity: any) => activity.type === currentTypeFilter);
+    }
+
+    // Apply group head filter
+    const currentGroupHeadFilter = groupHeadFilter !== undefined ? groupHeadFilter : activityGroupHeadFilter;
+    if (currentGroupHeadFilter !== "all") {
+      filtered = filtered.filter((activity: any) => {
+        const groupHead = activity.group_head || '';
+        return groupHead !== 'N/A' && groupHead === currentGroupHeadFilter;
+      });
+    }
+
+    // Apply status filter
+    const currentStatusFilter = statusFilter !== undefined ? statusFilter : activityStatusFilter;
+    if (currentStatusFilter !== "all") {
+      filtered = filtered.filter((activity: any) => activity.status === currentStatusFilter);
     }
 
     if (startDate || endDate) {
@@ -1013,7 +1030,7 @@ export default function DashboardPage() {
                       value={activityTypeFilter}
                       onChange={(e) => {
                         setActivityTypeFilter(e.target.value);
-                        filterActivitiesByDate(activityStartDate, activityEndDate, e.target.value);
+                        filterActivitiesByDate(activityStartDate, activityEndDate, e.target.value, activityGroupHeadFilter, activityStatusFilter);
                       }}
                       className="px-1.5 py-0.5 border-0 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded bg-transparent"
                     >
@@ -1021,6 +1038,48 @@ export default function DashboardPage() {
                       <option value="survey">Survey</option>
                       <option value="poll">Poll</option>
                       <option value="assessment">Assessment</option>
+                    </select>
+                  </div>
+                  
+                  {/* Group Head Filter */}
+                  <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg shadow-sm border border-gray-200">
+                    <Users className="w-3.5 h-3.5 text-gray-400" />
+                    <label className="text-xs text-gray-600">GROUP HEAD:</label>
+                    <select
+                      value={activityGroupHeadFilter}
+                      onChange={(e) => {
+                        setActivityGroupHeadFilter(e.target.value);
+                        filterActivitiesByDate(activityStartDate, activityEndDate, activityTypeFilter, e.target.value, activityStatusFilter);
+                      }}
+                      className="px-1.5 py-0.5 border-0 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded bg-transparent"
+                    >
+                      <option value="all">All Group Heads</option>
+                      {Array.from(new Set(
+                        (subscriptionMetrics?.activity_details || [])
+                          .map((a: any) => a.group_head)
+                          .filter((gh: string) => gh && gh !== 'N/A')
+                      )).sort().map((gh: any) => (
+                        <option key={gh} value={gh}>{gh}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* Status Filter */}
+                  <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg shadow-sm border border-gray-200">
+                    <CheckCircle className="w-3.5 h-3.5 text-gray-400" />
+                    <label className="text-xs text-gray-600">STATUS:</label>
+                    <select
+                      value={activityStatusFilter}
+                      onChange={(e) => {
+                        setActivityStatusFilter(e.target.value);
+                        filterActivitiesByDate(activityStartDate, activityEndDate, activityTypeFilter, activityGroupHeadFilter, e.target.value);
+                      }}
+                      className="px-1.5 py-0.5 border-0 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded bg-transparent"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="live">Live</option>
+                      <option value="draft">Draft</option>
+                      <option value="closed">Completed</option>
                     </select>
                   </div>
                   
@@ -1032,7 +1091,7 @@ export default function DashboardPage() {
                       value={activityStartDate}
                       onChange={(e) => {
                         setActivityStartDate(e.target.value);
-                        filterActivitiesByDate(e.target.value, activityEndDate);
+                        filterActivitiesByDate(e.target.value, activityEndDate, activityTypeFilter, activityGroupHeadFilter, activityStatusFilter);
                       }}
                       className="px-1.5 py-0.5 border-0 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
                     />
@@ -1045,17 +1104,19 @@ export default function DashboardPage() {
                       value={activityEndDate}
                       onChange={(e) => {
                         setActivityEndDate(e.target.value);
-                        filterActivitiesByDate(activityStartDate, e.target.value);
+                        filterActivitiesByDate(activityStartDate, e.target.value, activityTypeFilter, activityGroupHeadFilter, activityStatusFilter);
                       }}
                       className="px-1.5 py-0.5 border-0 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
                     />
                   </div>
-                  {(activityStartDate || activityEndDate || activityTypeFilter !== "all") && (
+                  {(activityStartDate || activityEndDate || activityTypeFilter !== "all" || activityGroupHeadFilter !== "all" || activityStatusFilter !== "all") && (
                     <button
                       onClick={() => {
                         setActivityStartDate("");
                         setActivityEndDate("");
                         setActivityTypeFilter("all");
+                        setActivityGroupHeadFilter("all");
+                        setActivityStatusFilter("all");
                         setFilteredActivityDetails(subscriptionMetrics.activity_details);
                       }}
                       className="px-2.5 py-1.5 bg-red-50 text-red-600 text-xs rounded-lg hover:bg-red-100 transition-colors border border-red-200"
