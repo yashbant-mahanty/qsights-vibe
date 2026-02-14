@@ -34,7 +34,7 @@ export default function RequestDemoPage() {
     message: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<any>({});
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
@@ -85,7 +85,35 @@ export default function RequestDemoPage() {
 
     try {
       await demoRequestsApi.submit(formData);
-      setIsSubmitted(true);
+      
+      // Show success message without redirect
+      setShowSuccess(true);
+      
+      // Clear form data
+      setFormData({
+        name: "",
+        email: "",
+        phone: "",
+        country: "",
+        city: "",
+        message: "",
+      });
+      
+      // Clear errors
+      setErrors({});
+      
+      // Also show toast
+      toast({
+        title: "Request Received!",
+        description: "Thank you for your interest. Our team will contact you within 24 hours.",
+        variant: "success",
+      });
+
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => {
+        setShowSuccess(false);
+      }, 5000);
+
     } catch (error) {
       console.error('Error submitting demo request:', error);
       toast({
@@ -106,33 +134,6 @@ export default function RequestDemoPage() {
       [e.target.name]: e.target.value,
     });
   };
-
-  if (isSubmitted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full shadow-2xl border-2 border-green-200">
-          <CardContent className="p-8 text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-              <CheckCircle2 className="w-10 h-10 text-white" />
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-3">
-              Request Received!
-            </h2>
-            <p className="text-gray-600 mb-6 leading-relaxed">
-              Thank you for your interest in QSights. Our team will contact you within 24 hours to schedule your personalized demo.
-            </p>
-            <div className="space-y-3">
-              <Link href="/">
-                <Button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold h-12 rounded-xl">
-                  Back to Home
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
@@ -170,6 +171,23 @@ export default function RequestDemoPage() {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-12 lg:py-16">
+        {/* Success Message */}
+        {showSuccess && (
+          <div className="mb-8 max-w-6xl mx-auto bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-8 shadow-lg animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                <CheckCircle2 className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-3">
+                Request Received!
+              </h2>
+              <p className="text-lg text-gray-600 max-w-md">
+                Thank you for your interest in QSights. Our team will contact you within 24 hours to schedule your personalized demo.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
           {/* Left Column - Info */}
           <div className="space-y-8">

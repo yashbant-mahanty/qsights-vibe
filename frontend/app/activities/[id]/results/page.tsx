@@ -21,6 +21,7 @@ import {
   FileSpreadsheet,
   FileText,
   ChevronDown,
+  ChevronUp,
   ChevronLeft,
   ChevronRight,
   Send,
@@ -415,6 +416,8 @@ interface SCTReportSectionProps {
 function SCTReportSection({ activityId, questionnaire, responses, activity }: SCTReportSectionProps) {
   const [activeSubTab, setActiveSubTab] = useState('breakdown');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortColumn, setSortColumn] = useState<'totalScore' | 'averageScore' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   
   // Check if activity allows anonymous responses
   const isAnonymous = activity?.allow_anonymous || false;
@@ -591,8 +594,22 @@ function SCTReportSection({ activityId, questionnaire, responses, activity }: SC
       );
     }
     
+    // Apply sorting if a column is selected
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        const aValue = a[sortColumn];
+        const bValue = b[sortColumn];
+        
+        if (sortDirection === 'asc') {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      });
+    }
+    
     return filtered;
-  }, [participantScores, searchQuery]);
+  }, [participantScores, searchQuery, sortColumn, sortDirection]);
   
   // Leaderboard (sorted by total score)
   const leaderboard = useMemo(() => {
@@ -783,11 +800,45 @@ function SCTReportSection({ activityId, questionnaire, responses, activity }: SC
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Question Score
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Total Score
+                    <th 
+                      className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-purple-200 transition-colors"
+                      onClick={() => {
+                        if (sortColumn === 'totalScore') {
+                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('totalScore');
+                          setSortDirection('desc');
+                        }
+                      }}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Total Score</span>
+                        {sortColumn === 'totalScore' && (
+                          sortDirection === 'asc' ? 
+                            <ChevronUp className="w-4 h-4" /> : 
+                            <ChevronDown className="w-4 h-4" />
+                        )}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Average
+                    <th 
+                      className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-purple-200 transition-colors"
+                      onClick={() => {
+                        if (sortColumn === 'averageScore') {
+                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('averageScore');
+                          setSortDirection('desc');
+                        }
+                      }}
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Average</span>
+                        {sortColumn === 'averageScore' && (
+                          sortDirection === 'asc' ? 
+                            <ChevronUp className="w-4 h-4" /> : 
+                            <ChevronDown className="w-4 h-4" />
+                        )}
+                      </div>
                     </th>
                   </tr>
                 </thead>
@@ -1153,6 +1204,11 @@ export default function ActivityResultsPage() {
         const notifData = await notificationsApi.getLogsForActivity(activityId);
         console.log('✅ Notification logs loaded:', notifData);
         console.log('Logs count:', notifData.data?.length || 0);
+        if (notifData.data && notifData.data.length >  0) {
+          console.log('Sample log data:', notifData.data[0]);
+          console.log('Sample log delivered_at:', notifData.data[0]?.delivered_at);
+          console.log('Sample log opened_at:', notifData.data[0]?.opened_at);
+        }
         setNotificationReports(notifData.data || []);
       } catch (err) {
         console.error('❌ Failed to load notification logs:', err);
@@ -1240,13 +1296,26 @@ export default function ActivityResultsPage() {
                         
                         // Add each participant's video log to the map
                         // Use participant_id as key, store array of video logs by question
+                        // Handle both registered and anonymous users
                         viewLogsData.data?.forEach((log: any) => {
-                          if (log.participant_id) {
-                            // Store the log with the video question ID as additional context
-                            if (!videoLogsMap[log.participant_id]) {
-                              videoLogsMap[log.participant_id] = {};
-                            }
-                            videoLogsMap[log.participant_id][vq.id] = log;
+                          // Get participant ID - handle various formats
+                          const participantKey = log.participant_id || log.response_id || log.id;
+                          if (participantKey) {
+                            // Store with ALL possible key variations to ensure export matching
+                            const keysToStore = [
+                              participantKey,
+                              String(participantKey), // String version for type safety
+                              log.response_id,
+                              String(log.response_id),
+                              log.guest_identifier // For anonymous users
+                            ].filter(Boolean); // Remove nulls/undefined
+                            
+                            keysToStore.forEach((key: any) => {
+                              if (!videoLogsMap[key]) {
+                                videoLogsMap[key] = {};
+                              }
+                              videoLogsMap[key][vq.id] = log;
+                            });
                           }
                         });
                       } else {
@@ -1361,8 +1430,17 @@ export default function ActivityResultsPage() {
           row['Is Orphaned'] = orphanedResponses.includes(response.id) ? 'YES' : 'NO';
 
           // Add video watch data for all video questions
-          if (videoViewLogs && response.participant_id && videoViewLogs[response.participant_id]) {
-            const participantVideoLogs = videoViewLogs[response.participant_id];
+          // Try multiple keys to match video logs (handles both registered and anonymous users)
+          // Try both string and numeric versions of IDs
+          const participantKey = response.participant_id || response.id;
+          const participantVideoLogs = videoViewLogs?.[participantKey] || 
+                                       videoViewLogs?.[response.id] || 
+                                       videoViewLogs?.[String(participantKey)] || 
+                                       videoViewLogs?.[String(response.id)] ||
+                                       videoViewLogs?.[response.guest_identifier] || 
+                                       null;
+          
+          if (participantVideoLogs && Object.keys(participantVideoLogs).length > 0) {
             // Loop through all video questions for this participant
             Object.entries(participantVideoLogs).forEach(([questionId, videoLog]: [string, any]) => {
               const prefix = Object.keys(participantVideoLogs).length > 1 ? `Q${questionId} - ` : '';
@@ -1441,8 +1519,17 @@ export default function ActivityResultsPage() {
             : 'N/A';
 
         // Add video watch data for all video questions
-        if (videoViewLogs && response.participant_id && videoViewLogs[response.participant_id]) {
-          const participantVideoLogs = videoViewLogs[response.participant_id];
+        // Try multiple keys to match video logs (handles both registered and anonymous users)
+        // Try both string and numeric versions of IDs
+        const participantKey = response.participant_id || response.id;
+        const participantVideoLogs = videoViewLogs?.[participantKey] || 
+                                     videoViewLogs?.[response.id] || 
+                                     videoViewLogs?.[String(participantKey)] || 
+                                     videoViewLogs?.[String(response.id)] ||
+                                     videoViewLogs?.[response.guest_identifier] || 
+                                     null;
+        
+        if (participantVideoLogs && Object.keys(participantVideoLogs).length > 0) {
           // Loop through all video questions for this participant
           Object.entries(participantVideoLogs).forEach(([questionId, videoLog]: [string, any]) => {
             const prefix = Object.keys(participantVideoLogs).length > 1 ? `Q${questionId} - ` : '';
@@ -2123,19 +2210,26 @@ export default function ActivityResultsPage() {
               }> = [];
 
               // Loop through all participants with video logs
-              Object.entries(videoViewLogs).forEach(([participantId, logs]: [string, any]) => {
+              // Handle both registered and anonymous users
+              Object.entries(videoViewLogs).forEach(([participantKey, logs]: [string, any]) => {
                 if (logs && logs[question.id]) {
                   const log = logs[question.id];
-                  const participant = responses.find(r => r.participant_id === parseInt(participantId));
+                  // Try multiple ways to find the participant
+                  const participant = responses.find(r => 
+                    String(r.participant_id) === String(participantKey) || 
+                    String(r.id) === String(participantKey)
+                  );
                   const participantName = participant?.participant?.name || 
                                          participant?.participant?.email || 
-                                         `Participant ${participantId}`;
+                                         (participant?.guest_identifier || participant?.participant?.additional_data?.participant_type === 'anonymous' 
+                                           ? 'Anonymous User' 
+                                           : `Participant ${participantKey}`);
                   
                   videoLogs.push({
                     participant: participantName,
                     duration: log.watch_duration || '00:00:00',
                     completed: log.completed ? 'Yes' : 'No',
-                    completionPercentage: log.completion_percentage ? `${log.completion_percentage}%` : '0%',
+                    completionPercentage: log.completion_percentage ? `${Math.round(log.completion_percentage)}%` : '0%',
                     playCount: log.play_count || 0,
                     pauseCount: log.pause_count || 0
                   });
@@ -3979,12 +4073,30 @@ export default function ActivityResultsPage() {
                               </td>
                               <td className="px-6 py-4">
                                 <p className="text-xs text-gray-600">
-                                  {log.delivered_at ? new Date(log.delivered_at).toLocaleString() : '-'}
+                                  {(() => {
+                                    const deliveredAt = log.delivered_at || log.deliveredAt;
+                                    if (!deliveredAt || deliveredAt === 'null' || deliveredAt === null) return '-';
+                                    try {
+                                      const date = new Date(deliveredAt);
+                                      return isNaN(date.getTime()) ? '-' : date.toLocaleString();
+                                    } catch {
+                                      return '-';
+                                    }
+                                  })()}
                                 </p>
                               </td>
                               <td className="px-6 py-4">
                                 <p className="text-xs text-gray-600">
-                                  {log.opened_at ? new Date(log.opened_at).toLocaleString() : '-'}
+                                  {(() => {
+                                    const openedAt = log.opened_at || log.openedAt;
+                                    if (!openedAt || openedAt === 'null' || openedAt === null) return '-';
+                                    try {
+                                      const date = new Date(openedAt);
+                                      return isNaN(date.getTime()) ? '-' : date.toLocaleString();
+                                    } catch {
+                                      return '-';
+                                    }
+                                  })()}
                                 </p>
                               </td>
                             </tr>
