@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import RoleBasedLayout from "@/components/role-based-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   BarChart3,
   TrendingUp,
@@ -16,13 +17,20 @@ import {
   FileText,
   Clock,
   Minus,
+  ChevronLeft,
+  ChevronRight,
+  Bell,
+  LayoutGrid,
+  ListOrdered,
+  UserCircle,
 } from "lucide-react";
 import { 
   organizationsApi, 
   programsApi, 
   activitiesApi, 
   participantsApi,
-  evaluationEventsApi
+  evaluationEventsApi,
+  notificationsApi
 } from "@/lib/api";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
 
@@ -43,6 +51,17 @@ export default function ReportsPage() {
   const [programs, setPrograms] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [participants, setParticipants] = useState<any[]>([]);
+  const [notificationLogs, setNotificationLogs] = useState<any[]>([]);
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState("overview");
+  
+  // Pagination states for each tab
+  const [overviewPage, setOverviewPage] = useState(1);
+  const [eventPage, setEventPage] = useState(1);
+  const [participantPage, setParticipantPage] = useState(1);
+  const [notificationPage, setNotificationPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   useEffect(() => {
     loadData();
@@ -108,33 +127,85 @@ export default function ReportsPage() {
             authenticated_responses_count: 0,
             guest_responses_count: 0,
           }));
+          
+          // Check if data is paginated
+          const programsArray = Array.isArray(progsData) ? progsData : progsData?.data || [];
+          const participantsArray = Array.isArray(partsData) ? partsData : partsData?.data || [];
+          const orgsArray = Array.isArray(orgsData) ? orgsData : orgsData?.data || [];
+          
           setActivities(evaluationActivities);
-          setParticipants(partsData);
+          setPrograms(programsArray);
+          setParticipants(participantsArray);
+          setOrganizations(orgsArray);
         } else {
           // For other program-scoped roles, load regular activities
           const [orgsData, progsData, actsData, partsData] = await Promise.all([
-            organizationsApi.getAll().catch(() => []),
-            programsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
-            activitiesApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
-            participantsApi.getAll({ program_id: fetchedUser.programId }).catch(() => []),
+            organizationsApi.getAll().catch((err) => { console.error('Orgs error:', err); return []; }),
+            programsApi.getAll({ program_id: fetchedUser.programId }).catch((err) => { console.error('Programs error:', err); return []; }),
+            activitiesApi.getAll({ program_id: fetchedUser.programId }).catch((err) => { console.error('Activities error:', err); return []; }),
+            participantsApi.getAll({ program_id: fetchedUser.programId }).catch((err) => { console.error('Participants error:', err); return []; }),
           ]);
-          setOrganizations(orgsData);
-          setPrograms(progsData);
-          setActivities(actsData);
-          setParticipants(partsData);
+          
+          console.log('🔍 Reports Data Loaded (Program-scoped):', {
+            user: fetchedUser,
+            programId: fetchedUser.programId,
+            organizations: orgsData?.length || 0,
+            programs: progsData?.length || 0,
+            activities: actsData?.length || 0,
+            activitiesSample: actsData?.[0],
+            participants: partsData?.length || 0
+          });
+          
+          // Check if activities is an object with data property
+          const activitiesArray = Array.isArray(actsData) ? actsData : actsData?.data || [];
+          const programsArray = Array.isArray(progsData) ? progsData : progsData?.data || [];
+          const participantsArray = Array.isArray(partsData) ? partsData : partsData?.data || [];
+          const orgsArray = Array.isArray(orgsData) ? orgsData : orgsData?.data || [];
+          
+          setOrganizations(orgsArray);
+          setPrograms(programsArray);
+          setActivities(activitiesArray);
+          setParticipants(participantsArray);
         }
       } else {
         // Super-admin, admin, or other roles see all data
-        const [orgsData, progsData, actsData, partsData] = await Promise.all([
-          organizationsApi.getAll().catch(() => []),
-          programsApi.getAll().catch(() => []),
-          activitiesApi.getAll().catch(() => []),
-          participantsApi.getAll().catch(() => []),
+        const [orgsData, progsData, actsData, partsData, logsData] = await Promise.all([
+          organizationsApi.getAll().catch((err) => { console.error('Orgs error:', err); return []; }),
+          programsApi.getAll().catch((err) => { console.error('Programs error:', err); return []; }),
+          activitiesApi.getAll().catch((err) => { console.error('Activities error:', err); return []; }),
+          participantsApi.getAll().catch((err) => { console.error('Participants error:', err); return []; }),
+          notificationsApi.getAllLogs().catch((err) => { console.error('Notifications error:', err); return { data: [] }; }),
         ]);
-        setOrganizations(orgsData);
-        setPrograms(progsData);
-        setActivities(actsData);
-        setParticipants(partsData);
+        
+        console.log('🔍 Reports Data Loaded:', {
+          user: fetchedUser,
+          organizations: orgsData?.length || 0,
+          programs: progsData?.length || 0,
+          activities: actsData?.length || 0,
+          activitiesSample: actsData?.[0],
+          participants: partsData?.length || 0,
+          notifications: logsData?.data?.length || 0
+        });
+        
+        // Check if activities is an object with data property (paginated response)
+        const activitiesArray = Array.isArray(actsData) ? actsData : actsData?.data || [];
+        const programsArray = Array.isArray(progsData) ? progsData : progsData?.data || [];
+        const participantsArray = Array.isArray(partsData) ? partsData : partsData?.data || [];
+        const orgsArray = Array.isArray(orgsData) ? orgsData : orgsData?.data || [];
+        
+        console.log('📊 After Array Conversion:', {
+          activitiesCount: activitiesArray.length,
+          programsCount: programsArray.length,
+          participantsCount: participantsArray.length,
+          orgsCount: orgsArray.length,
+          firstActivity: activitiesArray[0]
+        });
+        
+        setOrganizations(orgsArray);
+        setPrograms(programsArray);
+        setActivities(activitiesArray);
+        setParticipants(participantsArray);
+        setNotificationLogs(logsData?.data || []);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -209,6 +280,77 @@ export default function ReportsPage() {
 
   const filteredActivities = getFilteredActivities();
   
+  // Pagination calculations for Overview tab
+  const overviewTotalPages = Math.ceil(filteredActivities.length / itemsPerPage);
+  const paginatedOverviewData = useMemo(() => {
+    const startIndex = (overviewPage - 1) * itemsPerPage;
+    return filteredActivities.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredActivities, overviewPage, itemsPerPage]);
+
+  // Event-wise grouping and pagination
+  const eventGroupedData = useMemo(() => {
+    const grouped: { [key: string]: typeof filteredActivities } = {};
+    filteredActivities.forEach(activity => {
+      const eventType = activity.type || 'unknown';
+      if (!grouped[eventType]) grouped[eventType] = [];
+      grouped[eventType].push(activity);
+    });
+    return Object.entries(grouped).map(([type, activities]) => ({
+      type,
+      count: activities.length,
+      totalResponses: activities.reduce((sum, a) => sum + (a.responses_count || 0), 0),
+      totalParticipants: activities.reduce((sum, a) => sum + ((a.active_participants_count || 0) + (a.anonymous_participants_count || 0)), 0),
+      activities
+    }));
+  }, [filteredActivities]);
+  const eventTotalPages = Math.ceil(eventGroupedData.length / itemsPerPage);
+  const paginatedEventData = useMemo(() => {
+    const startIndex = (eventPage - 1) * itemsPerPage;
+    return eventGroupedData.slice(startIndex, startIndex + itemsPerPage);
+  }, [eventGroupedData, eventPage, itemsPerPage]);
+
+  // Participant-wise data (aggregate by program)
+  const participantData = useMemo(() => {
+    const grouped: { [key: string]: { programId: string | number, programName: string, totalParticipants: number, responded: number, responses: number } } = {};
+    filteredActivities.forEach(activity => {
+      const programId = activity.program_id || 'unassigned';
+      const key = String(programId);
+      if (!grouped[key]) {
+        grouped[key] = {
+          programId,
+          programName: `Program ${programId}`,
+          totalParticipants: 0,
+          responded: 0,
+          responses: 0
+        };
+      }
+      grouped[key].totalParticipants += (activity.active_participants_count || 0) + (activity.anonymous_participants_count || 0);
+      grouped[key].responded += activity.participants_responded_count || 0;
+      grouped[key].responses += activity.responses_count || 0;
+    });
+    return Object.values(grouped);
+  }, [filteredActivities]);
+  const participantTotalPages = Math.ceil(participantData.length / itemsPerPage);
+  const paginatedParticipantData = useMemo(() => {
+    const startIndex = (participantPage - 1) * itemsPerPage;
+    return participantData.slice(startIndex, startIndex + itemsPerPage);
+  }, [participantData, participantPage, itemsPerPage]);
+
+  // Notifications pagination
+  const notificationTotalPages = Math.ceil(notificationLogs.length / itemsPerPage);
+  const paginatedNotifications = useMemo(() => {
+    const startIndex = (notificationPage - 1) * itemsPerPage;
+    return notificationLogs.slice(startIndex, startIndex + itemsPerPage);
+  }, [notificationLogs, notificationPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setOverviewPage(1);
+    setEventPage(1);
+    setParticipantPage(1);
+    setNotificationPage(1);
+  }, [JSON.stringify(filters), searchQuery, itemsPerPage]);
+
   // Calculate statistics from real data (Active + Anonymous, excluding Preview)
   const totalResponses = filteredActivities.reduce((sum, a) => sum + (a.responses_count || 0), 0);
   const authenticatedResponses = filteredActivities.reduce((sum, a) => sum + (a.authenticated_responses_count || 0), 0);
@@ -611,125 +753,529 @@ export default function ReportsPage() {
 
           </div>
         ) : (
-          /* Activity Breakdown Table */
+          /* Activity Breakdown with Tabs */
           <Card>
             <CardHeader className="border-b border-gray-200">
               <CardTitle className="text-lg font-bold flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-qsights-blue" />
-                Activity Breakdown
+                Reports & Analytics
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Activity
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Program
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Participants
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Responded
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Responses
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Completion
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredActivities.map((activity) => {
-                      const activeParticipants = activity.active_participants_count || 0;
-                      const anonymousParticipants = activity.anonymous_participants_count || 0;
-                      const totalParticipants = activeParticipants + anonymousParticipants;
-                      const responded = activity.participants_responded_count || 0;
-                      const responses = activity.responses_count || 0;
-                      const completion = totalParticipants > 0 ? Math.round((responded / totalParticipants) * 100) : 0;
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-4 border-b bg-gray-50">
+                  <TabsTrigger value="overview" className="flex items-center gap-2 data-[state=active]:bg-white">
+                    <LayoutGrid className="w-4 h-4" />
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger value="event-wise" className="flex items-center gap-2 data-[state=active]:bg-white">
+                    <ListOrdered className="w-4 h-4" />
+                    Event-wise
+                  </TabsTrigger>
+                  <TabsTrigger value="participant-wise" className="flex items-center gap-2 data-[state=active]:bg-white">
+                    <UserCircle className="w-4 h-4" />
+                    Participant-wise
+                  </TabsTrigger>
+                  <TabsTrigger value="notifications" className="flex items-center gap-2 data-[state=active]:bg-white">
+                    <Bell className="w-4 h-4" />
+                    Notifications
+                  </TabsTrigger>
+                </TabsList>
 
-                      return (
-                        <tr key={activity.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <p className="text-sm font-semibold text-gray-900">{activity.name}</p>
-                            <p className="text-xs text-gray-500 font-mono mt-0.5">
-                              {String(activity.id).padStart(8, '0')}
-                            </p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              activity.type === 'survey' ? 'bg-blue-100 text-blue-700' :
-                              activity.type === 'poll' ? 'bg-green-100 text-green-700' :
-                              'bg-cyan-50 text-purple-700'
-                            }`}>
-                              {activity.type}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm text-gray-900">
-                              {activity.program_id ? String(activity.program_id).padStart(8, '0') : 'N/A'}
-                            </p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm text-gray-600">
-                              ({activeParticipants} / {anonymousParticipants})
-                            </p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm font-medium text-gray-900">{responded}</p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm font-medium text-gray-900">{responses}</p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 min-w-[60px]">
-                                <div className="text-xs font-medium text-gray-900 mb-1">
-                                  {completion}%
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                  <div
-                                    className={`h-1.5 rounded-full ${
-                                      completion >= 80 ? 'bg-green-500' :
-                                      completion >= 50 ? 'bg-blue-500' :
-                                      completion >= 25 ? 'bg-yellow-500' :
-                                      'bg-red-500'
-                                    }`}
-                                    style={{ width: `${Math.min(completion, 100)}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              activity.status === 'live' ? 'bg-green-100 text-green-700' :
-                              activity.status === 'upcoming' ? 'bg-yellow-100 text-yellow-700' :
-                              activity.status === 'draft' ? 'bg-gray-100 text-gray-700' :
-                              activity.status === 'closed' ? 'bg-blue-100 text-blue-700' :
-                              activity.status === 'expired' ? 'bg-red-100 text-red-700' :
-                              'bg-cyan-50 text-purple-700'
-                            }`}>
-                              {activity.status}
-                            </span>
-                          </td>
+                {/* Overview Tab */}
+                <TabsContent value="overview" className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activity</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participants</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responded</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responses</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completion</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {paginatedOverviewData.map((activity) => {
+                          const activeParticipants = activity.active_participants_count || 0;
+                          const anonymousParticipants = activity.anonymous_participants_count || 0;
+                          const totalParticipants = activeParticipants + anonymousParticipants;
+                          const responded = activity.participants_responded_count || 0;
+                          const responses = activity.responses_count || 0;
+                          const completion = totalParticipants > 0 ? Math.round((responded / totalParticipants) * 100) : 0;
+
+                          return (
+                            <tr key={activity.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4">
+                                <p className="text-sm font-semibold text-gray-900">{activity.name}</p>
+                                <p className="text-xs text-gray-500 font-mono mt-0.5">{String(activity.id).padStart(8, '0')}</p>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  activity.type === 'survey' ? 'bg-blue-100 text-blue-700' :
+                                  activity.type === 'poll' ? 'bg-green-100 text-green-700' :
+                                  'bg-cyan-50 text-purple-700'
+                                }`}>{activity.type}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <p className="text-sm text-gray-900">{activity.program_id ? String(activity.program_id).padStart(8, '0') : 'N/A'}</p>
+                              </td>
+                              <td className="px-6 py-4">
+                                <p className="text-sm text-gray-600">({activeParticipants} / {anonymousParticipants})</p>
+                              </td>
+                              <td className="px-6 py-4">
+                                <p className="text-sm font-medium text-gray-900">{responded}</p>
+                              </td>
+                              <td className="px-6 py-4">
+                                <p className="text-sm font-medium text-gray-900">{responses}</p>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 min-w-[60px]">
+                                    <div className="text-xs font-medium text-gray-900 mb-1">{completion}%</div>
+                                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                      <div className={`h-1.5 rounded-full ${
+                                        completion >= 80 ? 'bg-green-500' :
+                                        completion >= 50 ? 'bg-blue-500' :
+                                        completion >= 25 ? 'bg-yellow-500' :
+                                        'bg-red-500'
+                                      }`} style={{ width: `${Math.min(completion, 100)}%` }}></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  activity.status === 'live' ? 'bg-green-100 text-green-700' :
+                                  activity.status === 'upcoming' ? 'bg-yellow-100 text-yellow-700' :
+                                  activity.status === 'draft' ? 'bg-gray-100 text-gray-700' :
+                                  activity.status === 'closed' ? 'bg-blue-100 text-blue-700' :
+                                  activity.status === 'expired' ? 'bg-red-100 text-red-700' :
+                                  'bg-cyan-50 text-purple-700'
+                                }`}>{activity.status}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Overview Pagination */}
+                  <div className="px-6 py-4 border-t border-gray-200">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="text-sm text-gray-600">
+                            Showing {filteredActivities.length > 0 ? (overviewPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                            {Math.min(overviewPage * itemsPerPage, filteredActivities.length)} of{" "}
+                            {filteredActivities.length} activities
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-500">Per page:</span>
+                            <select
+                              value={itemsPerPage}
+                              onChange={(e) => {
+                                setItemsPerPage(Number(e.target.value));
+                                setOverviewPage(1);
+                              }}
+                              className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value={25}>25</option>
+                              <option value={50}>50</option>
+                              <option value={100}>100</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setOverviewPage(1)}
+                            disabled={overviewPage === 1}
+                            className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                            title="First page"
+                          >
+                            «
+                          </button>
+                          <button
+                            onClick={() => setOverviewPage(Math.max(1, overviewPage - 1))}
+                            disabled={overviewPage === 1}
+                            className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft className="w-4 h-4 text-gray-600" />
+                          </button>
+                          {(() => {
+                            const pages: (number | string)[] = [];
+                            const maxVisible = 5;
+                            if (overviewTotalPages <= maxVisible + 2) {
+                              for (let i = 1; i <= overviewTotalPages; i++) pages.push(i);
+                            } else {
+                              pages.push(1);
+                              let start = Math.max(2, overviewPage - Math.floor(maxVisible / 2));
+                              let end = Math.min(overviewTotalPages - 1, start + maxVisible - 1);
+                              if (end === overviewTotalPages - 1) start = Math.max(2, end - maxVisible + 1);
+                              if (start > 2) pages.push('...');
+                              for (let i = start; i <= end; i++) pages.push(i);
+                              if (end < overviewTotalPages - 1) pages.push('...');
+                              if (overviewTotalPages > 1) pages.push(overviewTotalPages);
+                            }
+                            return pages.map((page, idx) => (
+                              page === '...' ? (
+                                <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                              ) : (
+                                <button
+                                  key={page}
+                                  onClick={() => setOverviewPage(page as number)}
+                                  className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                    overviewPage === page
+                                      ? "bg-qsights-dark text-white shadow-sm"
+                                      : "text-gray-700 hover:bg-gray-100 border border-gray-300"
+                                  }`}
+                                >
+                                  {page}
+                                </button>
+                              )
+                            ));
+                          })()}
+                          <button
+                            onClick={() => setOverviewPage(Math.min(overviewTotalPages, overviewPage + 1))}
+                            disabled={overviewPage === overviewTotalPages || overviewTotalPages === 0}
+                            className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <ChevronRight className="w-4 h-4 text-gray-600" />
+                          </button>
+                          <button
+                            onClick={() => setOverviewPage(overviewTotalPages)}
+                            disabled={overviewPage === overviewTotalPages || overviewTotalPages === 0}
+                            className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                            title="Last page"
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                </TabsContent>
+
+                {/* Event-wise Tab */}
+                <TabsContent value="event-wise" className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Event Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Responses</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Participants</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Response Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {paginatedEventData.map((event) => {
+                          const avgRate = event.totalParticipants > 0 ? Math.round((event.totalResponses / event.totalParticipants) * 100) : 0;
+                          return (
+                            <tr key={event.type} className="hover:bg-gray-50">
+                              <td className="px-6 py-4">
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  event.type === 'survey' ? 'bg-blue-100 text-blue-700' :
+                                  event.type === 'poll' ? 'bg-green-100 text-green-700' :
+                                  'bg-cyan-50 text-purple-700'
+                                }`}>{event.type}</span>
+                              </td>
+                              <td className="px-6 py-4"><p className="text-sm font-medium text-gray-900">{event.count}</p></td>
+                              <td className="px-6 py-4"><p className="text-sm font-medium text-gray-900">{event.totalResponses}</p></td>
+                              <td className="px-6 py-4"><p className="text-sm text-gray-600">{event.totalParticipants}</p></td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 min-w-[60px]">
+                                    <div className="text-xs font-medium text-gray-900 mb-1">{avgRate}%</div>
+                                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                      <div className={`h-1.5 rounded-full ${avgRate >= 80 ? 'bg-green-500' : avgRate >= 50 ? 'bg-blue-500' : avgRate >= 25 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${Math.min(avgRate, 100)}%` }}></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Event-wise Pagination */}
+                  <div className="px-6 py-4 border-t border-gray-200">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="text-sm text-gray-600">
+                            Showing {eventGroupedData.length > 0 ? (eventPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                            {Math.min(eventPage * itemsPerPage, eventGroupedData.length)} of{" "}
+                            {eventGroupedData.length} event types
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-500">Per page:</span>
+                            <select
+                              value={itemsPerPage}
+                              onChange={(e) => {
+                                setItemsPerPage(Number(e.target.value));
+                                setEventPage(1);
+                              }}
+                              className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value={25}>25</option>
+                              <option value={50}>50</option>
+                              <option value={100}>100</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setEventPage(1)} disabled={eventPage === 1} className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm" title="First page">«</button>
+                          <button onClick={() => setEventPage(Math.max(1, eventPage - 1))} disabled={eventPage === 1} className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4 text-gray-600" /></button>
+                          {(() => {
+                            const pages: (number | string)[] = [];
+                            const maxVisible = 5;
+                            if (eventTotalPages <= maxVisible + 2) {
+                              for (let i = 1; i <= eventTotalPages; i++) pages.push(i);
+                            } else {
+                              pages.push(1);
+                              let start = Math.max(2, eventPage - Math.floor(maxVisible / 2));
+                              let end = Math.min(eventTotalPages - 1, start + maxVisible - 1);
+                              if (end === eventTotalPages - 1) start = Math.max(2, end - maxVisible + 1);
+                              if (start > 2) pages.push('...');
+                              for (let i = start; i <= end; i++) pages.push(i);
+                              if (end < eventTotalPages - 1) pages.push('...');
+                              if (eventTotalPages > 1) pages.push(eventTotalPages);
+                            }
+                            return pages.map((page, idx) => (
+                              page === '...' ? (
+                                <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                              ) : (
+                                <button key={page} onClick={() => setEventPage(page as number)} className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${eventPage === page ? "bg-qsights-dark text-white shadow-sm" : "text-gray-700 hover:bg-gray-100 border border-gray-300"}`}>{page}</button>
+                              )
+                            ));
+                          })()}
+                          <button onClick={() => setEventPage(Math.min(eventTotalPages, eventPage + 1))} disabled={eventPage === eventTotalPages || eventTotalPages === 0} className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4 text-gray-600" /></button>
+                          <button onClick={() => setEventPage(eventTotalPages)} disabled={eventPage === eventTotalPages || eventTotalPages === 0} className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm" title="Last page">»</button>
+                        </div>
+                      </div>
+                    </div>
+                </TabsContent>
+
+                {/* Participant-wise Tab */}
+                <TabsContent value="participant-wise" className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program ID</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Participants</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responded</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Responses</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Response Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {paginatedParticipantData.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                              <UserCircle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                              <p className="text-lg font-medium">No participant data yet</p>
+                              <p className="text-sm">Participant analytics will appear here when participants respond to activities.</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedParticipantData.map((item) => {
+                            const rate = item.totalParticipants > 0 ? Math.round((item.responded / item.totalParticipants) * 100) : 0;
+                            return (
+                              <tr key={String(item.programId)} className="hover:bg-gray-50">
+                                <td className="px-6 py-4">
+                                  <p className="text-sm font-semibold text-gray-900">{item.programId === 'unassigned' ? 'Unassigned' : String(item.programId).padStart(8, '0')}</p>
+                                </td>
+                                <td className="px-6 py-4"><p className="text-sm text-gray-600">{item.totalParticipants}</p></td>
+                                <td className="px-6 py-4"><p className="text-sm font-medium text-gray-900">{item.responded}</p></td>
+                                <td className="px-6 py-4"><p className="text-sm font-medium text-gray-900">{item.responses}</p></td>
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 min-w-[60px]">
+                                      <div className="text-xs font-medium text-gray-900 mb-1">{rate}%</div>
+                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                        <div className={`h-1.5 rounded-full ${rate >= 80 ? 'bg-green-500' : rate >= 50 ? 'bg-blue-500' : rate >= 25 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${Math.min(rate, 100)}%` }}></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {/* Participant-wise Pagination */}
+                  {participantData.length > 0 && (
+                  <div className="px-6 py-4 border-t border-gray-200">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="text-sm text-gray-600">
+                            Showing {participantData.length > 0 ? (participantPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                            {Math.min(participantPage * itemsPerPage, participantData.length)} of{" "}
+                            {participantData.length} programs
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-500">Per page:</span>
+                            <select
+                              value={itemsPerPage}
+                              onChange={(e) => {
+                                setItemsPerPage(Number(e.target.value));
+                                setParticipantPage(1);
+                              }}
+                              className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value={25}>25</option>
+                              <option value={50}>50</option>
+                              <option value={100}>100</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setParticipantPage(1)} disabled={participantPage === 1} className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm" title="First page">«</button>
+                          <button onClick={() => setParticipantPage(Math.max(1, participantPage - 1))} disabled={participantPage === 1} className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4 text-gray-600" /></button>
+                          {(() => {
+                            const pages: (number | string)[] = [];
+                            const maxVisible = 5;
+                            if (participantTotalPages <= maxVisible + 2) {
+                              for (let i = 1; i <= participantTotalPages; i++) pages.push(i);
+                            } else {
+                              pages.push(1);
+                              let start = Math.max(2, participantPage - Math.floor(maxVisible / 2));
+                              let end = Math.min(participantTotalPages - 1, start + maxVisible - 1);
+                              if (end === participantTotalPages - 1) start = Math.max(2, end - maxVisible + 1);
+                              if (start > 2) pages.push('...');
+                              for (let i = start; i <= end; i++) pages.push(i);
+                              if (end < participantTotalPages - 1) pages.push('...');
+                              if (participantTotalPages > 1) pages.push(participantTotalPages);
+                            }
+                            return pages.map((page, idx) => (
+                              page === '...' ? (
+                                <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                              ) : (
+                                <button key={page} onClick={() => setParticipantPage(page as number)} className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${participantPage === page ? "bg-qsights-dark text-white shadow-sm" : "text-gray-700 hover:bg-gray-100 border border-gray-300"}`}>{page}</button>
+                              )
+                            ));
+                          })()}
+                          <button onClick={() => setParticipantPage(Math.min(participantTotalPages, participantPage + 1))} disabled={participantPage === participantTotalPages || participantTotalPages === 0} className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4 text-gray-600" /></button>
+                          <button onClick={() => setParticipantPage(participantTotalPages)} disabled={participantPage === participantTotalPages || participantTotalPages === 0} className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm" title="Last page">»</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Notifications Tab */}
+                <TabsContent value="notifications" className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {paginatedNotifications.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                              <Bell className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                              <p className="text-lg font-medium">No notifications yet</p>
+                              <p className="text-sm">Notification logs will appear here when activities generate notifications.</p>
+                            </td>
+                          </tr>
+                        ) : paginatedNotifications.map((notification: any) => (
+                          <tr key={notification.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4">
+                              <p className="text-sm text-gray-600">{new Date(notification.created_at).toLocaleDateString()}</p>
+                              <p className="text-xs text-gray-400">{new Date(notification.created_at).toLocaleTimeString()}</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                notification.type === 'activity_created' ? 'bg-blue-100 text-blue-700' :
+                                notification.type === 'reminder' ? 'bg-yellow-100 text-yellow-700' :
+                                notification.type === 'evaluation' ? 'bg-purple-100 text-purple-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{notification.type || 'general'}</span>
+                            </td>
+                            <td className="px-6 py-4"><p className="text-sm font-medium text-gray-900">{notification.title || 'Notification'}</p></td>
+                            <td className="px-6 py-4"><p className="text-sm text-gray-600 max-w-xs truncate">{notification.message || notification.body || '-'}</p></td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${notification.read_at ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                {notification.read_at ? 'Read' : 'Unread'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Notifications Pagination */}
+                  <div className="px-6 py-4 border-t border-gray-200">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="text-sm text-gray-600">
+                            Showing {notificationLogs.length > 0 ? (notificationPage - 1) * itemsPerPage + 1 : 0} to{" "}
+                            {Math.min(notificationPage * itemsPerPage, notificationLogs.length)} of{" "}
+                            {notificationLogs.length} notifications
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-500">Per page:</span>
+                            <select
+                              value={itemsPerPage}
+                              onChange={(e) => {
+                                setItemsPerPage(Number(e.target.value));
+                                setNotificationPage(1);
+                              }}
+                              className="px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value={25}>25</option>
+                              <option value={50}>50</option>
+                              <option value={100}>100</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setNotificationPage(1)} disabled={notificationPage === 1} className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm" title="First page">«</button>
+                          <button onClick={() => setNotificationPage(Math.max(1, notificationPage - 1))} disabled={notificationPage === 1} className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4 text-gray-600" /></button>
+                          {(() => {
+                            const pages: (number | string)[] = [];
+                            const maxVisible = 5;
+                            if (notificationTotalPages <= maxVisible + 2) {
+                              for (let i = 1; i <= notificationTotalPages; i++) pages.push(i);
+                            } else {
+                              pages.push(1);
+                              let start = Math.max(2, notificationPage - Math.floor(maxVisible / 2));
+                              let end = Math.min(notificationTotalPages - 1, start + maxVisible - 1);
+                              if (end === notificationTotalPages - 1) start = Math.max(2, end - maxVisible + 1);
+                              if (start > 2) pages.push('...');
+                              for (let i = start; i <= end; i++) pages.push(i);
+                              if (end < notificationTotalPages - 1) pages.push('...');
+                              if (notificationTotalPages > 1) pages.push(notificationTotalPages);
+                            }
+                            return pages.map((page, idx) => (
+                              page === '...' ? (
+                                <span key={`ellipsis-${idx}`} className="px-2 py-1 text-gray-400 text-sm">...</span>
+                              ) : (
+                                <button key={page} onClick={() => setNotificationPage(page as number)} className={`min-w-[36px] px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${notificationPage === page ? "bg-qsights-dark text-white shadow-sm" : "text-gray-700 hover:bg-gray-100 border border-gray-300"}`}>{page}</button>
+                              )
+                            ));
+                          })()}
+                          <button onClick={() => setNotificationPage(Math.min(notificationTotalPages, notificationPage + 1))} disabled={notificationPage === notificationTotalPages || notificationTotalPages === 0} className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4 text-gray-600" /></button>
+                          <button onClick={() => setNotificationPage(notificationTotalPages)} disabled={notificationPage === notificationTotalPages || notificationTotalPages === 0} className="px-2 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm" title="Last page">»</button>
+                        </div>
+                      </div>
+                    </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         )}

@@ -7,6 +7,7 @@ use App\Models\EvaluationNotificationLog;
 use App\Models\EvaluationBellNotification;
 use App\Models\EvaluationReminderSchedule;
 use App\Models\User;
+use App\Models\UserNotification;
 use App\Services\EmailService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -407,6 +408,7 @@ class EvaluationNotificationService
             'missed_deadline' => "{$evaluationTriggered['evaluator_name']} did not complete the evaluation '{$evaluationTriggered['template_name']}' before the deadline.",
         ];
 
+        // Create evaluation-specific notification (for analytics/history)
         EvaluationBellNotification::create([
             'user_id' => $userId,
             'evaluation_triggered_id' => $evaluationTriggered['id'] ?? null,
@@ -421,6 +423,18 @@ class EvaluationNotificationService
                 'end_date' => $evaluationTriggered['end_date'] ?? null,
             ],
             'priority' => $priority,
+            'action_url' => '/evaluation-new?tab=history',
+        ]);
+
+        // ALSO create UserNotification so it shows in the bell icon
+        UserNotification::create([
+            'user_id' => $userId,
+            'type' => 'evaluation_' . $type,
+            'title' => $titles[$type] ?? 'Evaluation Notification',
+            'message' => $messages[$type] ?? 'An evaluation event occurred.',
+            'entity_type' => 'evaluation',
+            'entity_id' => $evaluationTriggered['id'] ?? null,
+            'entity_name' => $evaluationTriggered['template_name'] ?? 'Evaluation',
             'action_url' => '/evaluation-new?tab=history',
         ]);
     }

@@ -27,6 +27,7 @@ class Question extends Model
         'settings',
         'translations',
         'is_required',
+        'is_comment_enabled',
         'order',
         // Video-specific fields
         'video_url',
@@ -43,6 +44,7 @@ class Question extends Model
         'settings' => 'array',
         'translations' => 'array',
         'is_required' => 'boolean',
+        'is_comment_enabled' => 'boolean',
         'is_rich_text' => 'boolean',
         'order' => 'integer',
         'nesting_level' => 'integer',

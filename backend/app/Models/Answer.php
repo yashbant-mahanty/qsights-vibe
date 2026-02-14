@@ -18,6 +18,8 @@ class Answer extends Model
         'other_text',
         'file_path',
         'value_translations',
+        'comment_text',
+        'commented_at',
         'time_spent',
         'revision_count',
     ];
@@ -27,6 +29,7 @@ class Answer extends Model
         'value_translations' => 'array',
         'time_spent' => 'integer',
         'revision_count' => 'integer',
+        'commented_at' => 'datetime',
     ];
 
     /**

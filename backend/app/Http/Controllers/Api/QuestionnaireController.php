@@ -128,6 +128,7 @@ class QuestionnaireController extends Controller
             'sections.*.questions.*.settings' => 'nullable|array',
             'sections.*.questions.*.translations' => 'nullable|array',
             'sections.*.questions.*.is_required' => 'nullable|boolean',
+            'sections.*.questions.*.is_comment_enabled' => 'nullable|boolean',
             'sections.*.questions.*.order' => 'nullable|integer',
         ]);
 
@@ -193,6 +194,7 @@ class QuestionnaireController extends Controller
                                 'settings' => $questionData['settings'] ?? null,
                                 'translations' => $questionData['translations'] ?? null,
                                 'is_required' => $questionData['is_required'] ?? false,
+                                'is_comment_enabled' => $questionData['is_comment_enabled'] ?? false,
                                 'order' => $questionData['order'] ?? 0,
                             ]);
                         }
@@ -291,6 +293,7 @@ class QuestionnaireController extends Controller
             'sections.*.questions.*.settings' => 'nullable|array',
             'sections.*.questions.*.translations' => 'nullable|array',
             'sections.*.questions.*.is_required' => 'nullable|boolean',
+            'sections.*.questions.*.is_comment_enabled' => 'nullable|boolean',
             'sections.*.questions.*.order' => 'nullable|integer',
         ]);
         } catch (\Illuminate\Validation\ValidationException $ve) {
@@ -368,6 +371,7 @@ class QuestionnaireController extends Controller
                                 'settings' => $questionData['settings'] ?? null,
                                 'translations' => $questionData['translations'] ?? null,
                                 'is_required' => $questionData['is_required'] ?? false,
+                                'is_comment_enabled' => $questionData['is_comment_enabled'] ?? false,
                                 'order' => $questionData['order'] ?? 0,
                             ]);
                         }
@@ -588,6 +592,7 @@ class QuestionnaireController extends Controller
             'settings' => 'nullable|array',
             'translations' => 'nullable|array',
             'is_required' => 'nullable|boolean',
+            'is_comment_enabled' => 'nullable|boolean',
             'order' => 'nullable|integer',
         ]);
 
@@ -601,6 +606,7 @@ class QuestionnaireController extends Controller
             'settings' => $validated['settings'] ?? null,
             'translations' => $validated['translations'] ?? null,
             'is_required' => $validated['is_required'] ?? false,
+            'is_comment_enabled' => $validated['is_comment_enabled'] ?? false,
             'order' => $validated['order'] ?? 0,
         ]);
 
@@ -630,6 +636,7 @@ class QuestionnaireController extends Controller
             'settings' => 'nullable|array',
             'translations' => 'nullable|array',
             'is_required' => 'nullable|boolean',
+            'is_comment_enabled' => 'nullable|boolean',
             'order' => 'nullable|integer',
         ]);
 

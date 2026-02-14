@@ -567,7 +567,7 @@ function SCTReportSection({ activityId, questionnaire, responses, activity }: SC
           questionScores,
           totalScore: parseFloat(totalScore.toFixed(2)),
           questionsAttempted,
-          averageScore: questionsAttempted > 0 ? parseFloat((totalScore / questionsAttempted).toFixed(2)) : 0,
+          averageScore: questionsAttempted > 0 ? parseFloat((totalScore / questionsAttempted).toFixed(1)) : 0,
         });
       }
     });
@@ -1210,6 +1210,64 @@ export default function ActivityResultsPage() {
             });
             setQuestionnaire(qData.data);
             
+            // Load video question statistics and view logs
+            if (qData.data?.sections) {
+              try {
+                console.log('🔍 Checking for video questions...');
+                const videoQuestions: any[] = [];
+                qData.data.sections.forEach((section: any) => {
+                  section.questions?.forEach((q: any) => {
+                    if (q.type === 'video') {
+                      videoQuestions.push(q);
+                    }
+                  });
+                });
+                
+                if (videoQuestions.length > 0) {
+                  console.log(`📹 Found ${videoQuestions.length} video question(s):`, videoQuestions.map(q => `ID ${q.id}`));
+                  const videoLogsMap = { ...videoViewLogs };
+                  
+                  // Load statistics and logs for each video question
+                  for (const vq of videoQuestions) {
+                    try {
+                      console.log(`📡 Loading data for video question ${vq.id}...`);
+                      
+                      // Fetch view logs for this video question
+                      const viewLogsResponse = await fetch(`/api/videos/question/${vq.id}/view-logs`);
+                      if (viewLogsResponse.ok) {
+                        const viewLogsData = await viewLogsResponse.json();
+                        console.log(`📹 Video question ${vq.id} view logs:`, viewLogsData.data?.length || 0, 'participants');
+                        
+                        // Add each participant's video log to the map
+                        // Use participant_id as key, store array of video logs by question
+                        viewLogsData.data?.forEach((log: any) => {
+                          if (log.participant_id) {
+                            // Store the log with the video question ID as additional context
+                            if (!videoLogsMap[log.participant_id]) {
+                              videoLogsMap[log.participant_id] = {};
+                            }
+                            videoLogsMap[log.participant_id][vq.id] = log;
+                          }
+                        });
+                      } else {
+                        console.log(`No view logs for video question ${vq.id}`);
+                      }
+                    } catch (vqErr) {
+                      console.error(`Failed to load video question ${vq.id} data:`, vqErr);
+                    }
+                  }
+                  
+                  // Update state with all video logs (intro + questions)
+                  setVideoViewLogs(videoLogsMap);
+                  console.log('📹 Total video logs loaded:', Object.keys(videoLogsMap).length, 'participants');
+                } else {
+                  console.log('No video questions found in questionnaire');
+                }
+              } catch (videoQuestionsErr) {
+                console.error('Failed to load video question data:', videoQuestionsErr);
+              }
+            }
+            
             // Identify orphaned responses (responses with question IDs that don't exist in current questionnaire)
             if (qData.data?.sections && responsesData.length > 0) {
               const currentQuestionIds = new Set<number>();
@@ -1302,12 +1360,18 @@ export default function ActivityResultsPage() {
             : 'N/A';
           row['Is Orphaned'] = orphanedResponses.includes(response.id) ? 'YES' : 'NO';
 
-          // Add video watch data if available
+          // Add video watch data for all video questions
           if (videoViewLogs && response.participant_id && videoViewLogs[response.participant_id]) {
-            const videoLog = videoViewLogs[response.participant_id];
-            row['Video Watch Duration'] = videoLog.watch_duration || '0:00';
-            row['Completed Video?'] = videoLog.completed ? 'Yes' : 'No';
-            row['Video Completion %'] = videoLog.completion_percentage ? `${Math.round(videoLog.completion_percentage)}%` : '0%';
+            const participantVideoLogs = videoViewLogs[response.participant_id];
+            // Loop through all video questions for this participant
+            Object.entries(participantVideoLogs).forEach(([questionId, videoLog]: [string, any]) => {
+              const prefix = Object.keys(participantVideoLogs).length > 1 ? `Q${questionId} - ` : '';
+              row[`${prefix}Video Watch Duration`] = videoLog.watch_duration || '0:00';
+              row[`${prefix}Completed Video?`] = videoLog.completed ? 'Yes' : 'No';
+              row[`${prefix}Video Completion %`] = videoLog.completion_percentage ? `${Math.round(videoLog.completion_percentage)}%` : '0%';
+              row[`${prefix}Video Play Count`] = videoLog.play_count || 0;
+              row[`${prefix}Video Pause Count`] = videoLog.pause_count || 0;
+            });
           } else if (videoStatistics && videoStatistics.total_views > 0) {
             row['Video Watch Duration'] = 'Not watched';
             row['Completed Video?'] = 'No';
@@ -1319,6 +1383,10 @@ export default function ActivityResultsPage() {
             response.answers.forEach((answer: any, idx: number) => {
               const questionLabel = `Q${answer.question_id}`;
               row[questionLabel] = formatAnswerObjectForExport(answer);
+              // Add comment if present
+              if (answer.comment_text) {
+                row[`${questionLabel} - Comment`] = answer.comment_text;
+              }
             });
           }
 
@@ -1372,12 +1440,18 @@ export default function ActivityResultsPage() {
             ? new Date(response.submitted_at).toLocaleString()
             : 'N/A';
 
-        // Add video watch data if available
+        // Add video watch data for all video questions
         if (videoViewLogs && response.participant_id && videoViewLogs[response.participant_id]) {
-          const videoLog = videoViewLogs[response.participant_id];
-          row['Video Watch Duration'] = videoLog.watch_duration || '0:00';
-          row['Completed Video?'] = videoLog.completed ? 'Yes' : 'No';
-          row['Video Completion %'] = videoLog.completion_percentage ? `${Math.round(videoLog.completion_percentage)}%` : '0%';
+          const participantVideoLogs = videoViewLogs[response.participant_id];
+          // Loop through all video questions for this participant
+          Object.entries(participantVideoLogs).forEach(([questionId, videoLog]: [string, any]) => {
+            const prefix = Object.keys(participantVideoLogs).length > 1 ? `Q${questionId} - ` : '';
+            row[`${prefix}Video Watch Duration`] = videoLog.watch_duration || '0:00';
+            row[`${prefix}Completed Video?`] = videoLog.completed ? 'Yes' : 'No';
+            row[`${prefix}Video Completion %`] = videoLog.completion_percentage ? `${Math.round(videoLog.completion_percentage)}%` : '0%';
+            row[`${prefix}Video Play Count`] = videoLog.play_count || 0;
+            row[`${prefix}Video Pause Count`] = videoLog.pause_count || 0;
+          });
         } else if (videoStatistics && videoStatistics.total_views > 0) {
           // Video exists but this participant didn't watch it
           row['Video Watch Duration'] = 'Not watched';
@@ -1396,6 +1470,11 @@ export default function ActivityResultsPage() {
               const answerObj = response.answers.find((a: any) => a.question_id === question.id);
               if (answerObj) {
                 row[questionLabel] = formatAnswerObjectForExport(answerObj);
+                
+                // Add comment column if comment exists
+                if (answerObj.comment_text) {
+                  row[`${questionLabel} - Comment`] = answerObj.comment_text;
+                }
                 
                 // Add score column for SCT Likert questions
                 if (question.type === 'sct_likert') {
@@ -2024,6 +2103,89 @@ export default function ActivityResultsPage() {
                   doc.text(`... and ${questionResponses.length - 5} more responses`, 20, currentY);
                   currentY += 5;
                 }
+              }
+
+              currentY += 5;
+            }
+            // Video question responses
+            else if (question.type === 'video') {
+              doc.setFontSize(9);
+              doc.setTextColor(40, 40, 40);
+              
+              // Get video logs for this question
+              const videoLogs: Array<{
+                participant: string;
+                duration: string;
+                completed: string;
+                completionPercentage: string;
+                playCount: number;
+                pauseCount: number;
+              }> = [];
+
+              // Loop through all participants with video logs
+              Object.entries(videoViewLogs).forEach(([participantId, logs]: [string, any]) => {
+                if (logs && logs[question.id]) {
+                  const log = logs[question.id];
+                  const participant = responses.find(r => r.participant_id === parseInt(participantId));
+                  const participantName = participant?.participant?.name || 
+                                         participant?.participant?.email || 
+                                         `Participant ${participantId}`;
+                  
+                  videoLogs.push({
+                    participant: participantName,
+                    duration: log.watch_duration || '00:00:00',
+                    completed: log.completed ? 'Yes' : 'No',
+                    completionPercentage: log.completion_percentage ? `${log.completion_percentage}%` : '0%',
+                    playCount: log.play_count || 0,
+                    pauseCount: log.pause_count || 0
+                  });
+                }
+              });
+
+              if (videoLogs.length > 0) {
+                doc.text(`${videoLogs.length} video ${videoLogs.length === 1 ? 'response' : 'responses'}`, 20, currentY);
+                currentY += 6;
+
+                // Create video statistics table
+                const videoTableData = videoLogs.map(log => [
+                  log.participant,
+                  log.duration,
+                  log.completed,
+                  log.completionPercentage,
+                  log.playCount.toString(),
+                  log.pauseCount.toString()
+                ]);
+
+                autoTable(doc, {
+                  head: [['Participant', 'Watch Duration', 'Completed', 'Completion %', 'Plays', 'Pauses']],
+                  body: videoTableData,
+                  startY: currentY,
+                  theme: 'striped',
+                  headStyles: {
+                    fillColor: [229, 231, 235],
+                    textColor: [40, 40, 40],
+                    fontStyle: 'bold',
+                    fontSize: 8,
+                  },
+                  styles: {
+                    fontSize: 8,
+                    cellPadding: 2,
+                  },
+                  margin: { left: 20, right: 20 },
+                  columnStyles: {
+                    0: { cellWidth: 60 },  // Participant
+                    1: { cellWidth: 35 },  // Watch Duration
+                    2: { cellWidth: 30 },  // Completed
+                    3: { cellWidth: 35 },  // Completion %
+                    4: { cellWidth: 20 },  // Plays
+                    5: { cellWidth: 20 },  // Pauses
+                  },
+                });
+
+                currentY = (doc as any).lastAutoTable.finalY + 5;
+              } else {
+                doc.text('No video responses', 20, currentY);
+                currentY += 8;
               }
 
               currentY += 5;
@@ -3079,7 +3241,7 @@ export default function ActivityResultsPage() {
                           scoreDistribution[answerKey].count++;
                         });
                         
-                        const avgScore = responseCount > 0 ? totalScore / responseCount : 0;
+                        const avgScore = responseCount > 0 ? parseFloat((totalScore / responseCount).toFixed(1)) : 0;
                         const minScore = individualScores.length > 0 ? Math.min(...individualScores) : 0;
                         const maxIndividualScore = individualScores.length > 0 ? Math.max(...individualScores) : 0;
                         
@@ -3103,44 +3265,81 @@ export default function ActivityResultsPage() {
                         ? calculateChoiceStats()
                         : null;
 
-                      const totalResponses = questionResponses.length;
+                      // For video questions, count video views instead of answer records
+                      const totalResponses = question.type === 'video' && Object.keys(videoViewLogs).length > 0
+                        ? Object.keys(videoViewLogs).length
+                        : questionResponses.length;
+
+                      // Debug logging for video questions
+                      if (question.type === 'video') {
+                        console.log('📹 [Video Question Debug]', {
+                          questionId: question.id,
+                          questionTitle: question.title || question.text,
+                          videoViewLogsCount: Object.keys(videoViewLogs).length,
+                          totalResponses,
+                          videoViewLogsKeys: Object.keys(videoViewLogs),
+                          sampleVideoLog: Object.values(videoViewLogs)[0]
+                        });
+                      }
 
                       // Get participants who responded to this question
-                      const participantResponses = responses.map((r) => {
-                        const answer = Array.isArray(r.answers) ? r.answers.find((a: any) => a.question_id === question.id) : null;
-                        const answerValue = answer ? (answer.value_array || answer.value) : null;
-                        
-                        // Calculate score for sct_likert questions
-                        let participantScore: number | null = null;
-                        if (question.type === 'sct_likert' && answerValue && sctScoreData) {
-                          const responseType = question.settings?.responseType || question.settings?.choiceType || 'single';
-                          
-                          if (responseType === 'likert') {
-                            // Likert Scale: answerValue is a numeric point selection
-                            const selectedPoint = parseInt(String(answerValue));
-                            if (!isNaN(selectedPoint) && selectedPoint >= 1 && sctScoreData.scores && selectedPoint <= sctScoreData.scores.length) {
-                              participantScore = Number(sctScoreData.scores[selectedPoint - 1]);
+                      // For video questions, use video view logs instead of answer records
+                      const participantResponses = question.type === 'video' && Object.keys(videoViewLogs).length > 0
+                        ? Object.entries(videoViewLogs).map(([participantId, participantLogs]: [string, any]) => {
+                            // Access the specific question's video log from nested structure
+                            const videoLog = participantLogs[question.id];
+                            if (!videoLog) return null; // Skip if no log for this question
+                            
+                            // Find the matching response to get participant details
+                            const matchingResponse = responses.find((r: any) => 
+                              String(r.participant_id) === String(participantId)
+                            );
+                            
+                            return {
+                              participantId: participantId,
+                              participantName: matchingResponse?.participant?.name || videoLog.participant_name || 'Anonymous',
+                              participantEmail: matchingResponse?.participant?.email || videoLog.participant_email || 'N/A',
+                              answer: videoLog, // Pass the specific question's video log as the answer
+                              otherText: null,
+                              submittedAt: videoLog.last_watched_at || videoLog.created_at,
+                              score: null,
+                            };
+                          }).filter(Boolean as any)
+                        : responses.map((r) => {
+                            const answer = Array.isArray(r.answers) ? r.answers.find((a: any) => a.question_id === question.id) : null;
+                            const answerValue = answer ? (answer.value_array || answer.value) : null;
+                            
+                            // Calculate score for sct_likert questions
+                            let participantScore: number | null = null;
+                            if (question.type === 'sct_likert' && answerValue && sctScoreData) {
+                              const responseType = question.settings?.responseType || question.settings?.choiceType || 'single';
+                              
+                              if (responseType === 'likert') {
+                                // Likert Scale: answerValue is a numeric point selection
+                                const selectedPoint = parseInt(String(answerValue));
+                                if (!isNaN(selectedPoint) && selectedPoint >= 1 && sctScoreData.scores && selectedPoint <= sctScoreData.scores.length) {
+                                  participantScore = Number(sctScoreData.scores[selectedPoint - 1]);
+                                }
+                              } else {
+                                // Single/Multiple choice: answerValue is option text
+                                const selectedOption = String(answerValue);
+                                const optionIndex = sctScoreData.options?.findIndex((opt: string) => String(opt) === selectedOption);
+                                if (optionIndex !== undefined && optionIndex !== -1 && sctScoreData.scores && sctScoreData.scores[optionIndex] !== undefined) {
+                                  participantScore = Number(sctScoreData.scores[optionIndex]);
+                                }
+                              }
                             }
-                          } else {
-                            // Single/Multiple choice: answerValue is option text
-                            const selectedOption = String(answerValue);
-                            const optionIndex = sctScoreData.options?.findIndex((opt: string) => String(opt) === selectedOption);
-                            if (optionIndex !== undefined && optionIndex !== -1 && sctScoreData.scores && sctScoreData.scores[optionIndex] !== undefined) {
-                              participantScore = Number(sctScoreData.scores[optionIndex]);
-                            }
-                          }
-                        }
-                        
-                        return {
-                          participantId: r.participant_id || r.guest_identifier,
-                          participantName: r.participant?.name || r.participant?.email || 'Anonymous',
-                          participantEmail: r.participant?.email || 'N/A',
-                          answer: answerValue,
-                          otherText: answer?.other_text,
-                          submittedAt: r.submitted_at || r.updated_at,
-                          score: participantScore,
-                        };
-                      }).filter(pr => pr.answer !== null && pr.answer !== undefined && pr.answer !== '');
+                            
+                            return {
+                              participantId: r.participant_id || r.guest_identifier,
+                              participantName: r.participant?.name || r.participant?.email || 'Anonymous',
+                              participantEmail: r.participant?.email || 'N/A',
+                              answer: answerValue,
+                              otherText: answer?.other_text,
+                              submittedAt: r.submitted_at || r.updated_at,
+                              score: participantScore,
+                            };
+                          }).filter(pr => pr.answer !== null && pr.answer !== undefined && pr.answer !== '');
 
                       return (
                         <Card key={question.id || qIndex} className="overflow-hidden border-2 border-gray-200 hover:border-green-300 transition-all">
@@ -3473,8 +3672,11 @@ export default function ActivityResultsPage() {
                                           <tbody className="divide-y divide-gray-200">
                                             {participantResponses.map((pr, idx) => {
                                               // Get video view log for this participant if it's a video question
-                                              const videoLog = question.type === 'video' && pr.participantId ? videoViewLogs[pr.participantId] : null;
-                                              const isVideoCompleted = pr.answer?.watchedAtLeast95 || videoLog?.completed || false;
+                                              // For video questions, pr.answer IS the videoLog object
+                                              const videoLog = question.type === 'video' 
+                                                ? (typeof pr.answer === 'object' && pr.answer !== null ? pr.answer : videoViewLogs[pr.participantId]?.[question.id])
+                                                : null;
+                                              const isVideoCompleted = videoLog?.completed || pr.answer?.watchedAtLeast95 || false;
                                               const watchDurationSeconds = videoLog?.watch_duration_seconds || 0;
                                               const watchDurationFormatted = videoLog?.watch_duration || formatVideoDuration(watchDurationSeconds);
                                               

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { questionnairesApi, type Questionnaire } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
+import DuplicateConfirmationModal from "@/components/duplicate-confirmation-modal";
 import { toast } from "@/components/ui/toast";
 import { canCreateResource, canEditResource, canDeleteResource, UserRole } from "@/lib/permissions";
 
@@ -45,6 +46,7 @@ function QuestionnairesPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; questionnaireId: string | null; questionnaireName: string | null }>({ isOpen: false, questionnaireId: null, questionnaireName: null });
+  const [duplicateModal, setDuplicateModal] = useState<{ isOpen: boolean; questionnaireId: string | null; questionnaireName: string | null }>({ isOpen: false, questionnaireId: null, questionnaireName: null });
   const [currentUser, setCurrentUser] = useState<{ role: UserRole } | null>(null);
 
   // Handle selecting a questionnaire for evaluation
@@ -130,13 +132,17 @@ function QuestionnairesPageContent() {
     window.location.href = `/questionnaires/${questionnaireId}?mode=edit${returnParam}`;
   };
 
-  const handleDuplicate = async (questionnaireId: string) => {
-    if (!confirm('Are you sure you want to duplicate this questionnaire?')) {
-      return;
-    }
+  const handleDuplicate = (questionnaireId: string, questionnaireName: string) => {
+    setDuplicateModal({ isOpen: true, questionnaireId, questionnaireName });
+  };
+
+  const confirmDuplicate = async () => {
+    if (!duplicateModal.questionnaireId) return;
+    
     try {
-      await questionnairesApi.duplicate(questionnaireId);
+      await questionnairesApi.duplicate(duplicateModal.questionnaireId);
       await loadQuestionnaires();
+      setDuplicateModal({ isOpen: false, questionnaireId: null, questionnaireName: null });
       toast({ title: "Success!", description: "Questionnaire duplicated successfully!", variant: "success" });
     } catch (err) {
       console.error('Failed to duplicate questionnaire:', err);
@@ -708,7 +714,7 @@ function QuestionnairesPageContent() {
                               )}
                               {currentUser && canCreateResource(currentUser.role, 'questionnaires') && (
                                 <button
-                                  onClick={() => handleDuplicate(questionnaire.id.toString())}
+                                  onClick={() => handleDuplicate(questionnaire.id.toString(), questionnaire.title)}
                                   className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
                                   title="Duplicate"
                                 >
@@ -837,6 +843,14 @@ function QuestionnairesPageContent() {
         onConfirm={confirmDelete}
         title="Delete Questionnaire?"
         itemName={deleteModal.questionnaireName || undefined}
+        itemType="questionnaire"
+      />
+
+      <DuplicateConfirmationModal
+        isOpen={duplicateModal.isOpen}
+        onClose={() => setDuplicateModal({ isOpen: false, questionnaireId: null, questionnaireName: null })}
+        onConfirm={confirmDuplicate}
+        itemName={duplicateModal.questionnaireName || undefined}
         itemType="questionnaire"
       />
     </RoleBasedLayout>

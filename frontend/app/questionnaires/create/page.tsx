@@ -915,6 +915,7 @@ function QuestionnaireBuilderPageContent() {
               title: questionTitle,
               description: isInformationBlock ? (question.description || '').substring(0, 500) : null,
               is_required: question.required || false,
+              is_comment_enabled: question.is_comment_enabled || false,
               options: question.options || null,
               settings: {
                 // Spread the full settings object first (includes customImages, sequenceImages, etc.)
@@ -1272,6 +1273,20 @@ function QuestionnaireBuilderPageContent() {
                 >
                   Required
                 </button>
+                {/* Comment toggle - only for supported question types */}
+                {['mcq', 'multi', 'likert', 'sct_likert', 'likert_visual'].includes(question.type) && (
+                  <button
+                    onClick={() => {
+                      updateQuestionProperty(sectionId, question.id, 'is_comment_enabled', !question.is_comment_enabled);
+                    }}
+                    className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                      question.is_comment_enabled ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
+                    }`}
+                    title="Allow participants to add comments after answering"
+                  >
+                    💬 Comment
+                  </button>
+                )}
                 <button
                   onClick={() => duplicateQuestion(sectionId, question.id)}
                   className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"

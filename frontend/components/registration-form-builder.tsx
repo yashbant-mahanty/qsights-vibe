@@ -387,11 +387,11 @@ export default function RegistrationFormBuilder({
                           />
                         </div>
 
-                        {/* Select/Radio Options */}
-                        {(field.type === "select" || field.type === "radio") && field.options && (
+                        {/* Select/Radio/Gender Options */}
+                        {(field.type === "select" || field.type === "radio" || field.type === "gender") && field.options && (
                           <div>
                             <Label className="text-xs text-gray-700 mb-1.5">
-                              {field.type === "radio" ? "Radio Button Options" : "Dropdown Options"}
+                              {field.type === "radio" ? "Radio Button Options" : field.type === "gender" ? "Gender Options" : "Dropdown Options"}
                             </Label>
                             <div className="space-y-2">
                               {field.options.map((option, optIdx) => (

@@ -911,7 +911,8 @@ export const questionnairesApi = {
 export const activitiesApi = {
   async getAll(filters?: { program_id?: string; organization_id?: string }): Promise<Activity[]> {
     const query = buildQueryString({ 
-      withCount: 'participants,responses,authenticated_responses_count,guest_responses_count', 
+      withCount: 'participants,responses,authenticated_responses_count,guest_responses_count',
+      per_page: 100, // Fetch up to 100 activities to avoid pagination issues
       ...filters 
     });
     const response = await fetchWithAuth(`/activities${query}`);

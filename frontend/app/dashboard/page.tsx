@@ -95,6 +95,15 @@ export default function DashboardPage() {
   const [sendingReminder, setSendingReminder] = useState(false);
 
   useEffect(() => {
+    // CRITICAL: Wait for auth to finish loading before doing anything
+    if (authLoading) return;
+    
+    // Only redirect if auth is done and user is not logged in
+    if (!currentUser) {
+      router.push('/');
+      return;
+    }
+    
     loadData();
 
     // Listen for global search events
@@ -115,7 +124,7 @@ export default function DashboardPage() {
       window.removeEventListener('global-search' as any, handleGlobalSearch);
       window.removeEventListener('global-search-clear' as any, handleGlobalSearchClear);
     };
-  }, []);
+  }, [authLoading, currentUser]);
 
   // Re-filter activities when search query changes
   useEffect(() => {
@@ -127,12 +136,6 @@ export default function DashboardPage() {
   async function loadData() {
     try {
       setLoading(true);
-      
-      // Check if user is authenticated using AuthContext
-      if (!currentUser) {
-        router.push('/');
-        return;
-      }
       
       // Only load essential dashboard data - remove unnecessary API calls
       const [dashStats, orgPerf, subMetrics] = await Promise.all([

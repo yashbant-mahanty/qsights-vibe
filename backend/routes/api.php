@@ -264,6 +264,10 @@ Route::post('/public/videos/watch-log', [App\Http\Controllers\Api\VideoUploadCon
 Route::post('/public/videos/question/track-progress', [App\Http\Controllers\Api\VideoUploadController::class, 'trackVideoQuestionProgress']);
 Route::post('/public/videos/question/get-progress', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoQuestionProgress']);
 
+// Video Question Analytics (for reports)
+Route::get('/videos/question/{questionId}/view-logs', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoQuestionViewLogs']);
+Route::get('/videos/question/statistics/{questionId}', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoQuestionStatistics']);
+
 // Questionnaire Routes
 Route::middleware(['auth:sanctum'])->group(function () {
 

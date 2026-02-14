@@ -314,6 +314,7 @@ export default function ViewQuestionnairePage() {
               type: mapBackendTypeToFrontend(q.type),
               question: q.title,
               required: q.is_required || false,
+              is_comment_enabled: q.is_comment_enabled || false,
               options: q.options || [],
               correctAnswers: q.settings?.correctAnswers || [],
               scale: q.settings?.scale || 5,
@@ -613,6 +614,7 @@ export default function ViewQuestionnairePage() {
               title: questionTitle,
               description: isInformationBlock ? (question.description || '').substring(0, 500) : null,
               is_required: question.required === true,
+              is_comment_enabled: question.is_comment_enabled === true,
               options: (question.type === 'mcq' || question.type === 'multi') && question.options ? question.options : null,
               settings: settings,
               order: qIdx + 1,
@@ -913,6 +915,31 @@ export default function ViewQuestionnairePage() {
                 >
                   Required
                 </button>
+                {/* Comment toggle - only for supported question types */}
+                {['mcq', 'multi', 'likert', 'sct_likert', 'likert_visual'].includes(question.type) && (
+                  <button
+                    onClick={() => {
+                      setSections((prevSections: any) =>
+                        prevSections.map((section: any, idx: number) =>
+                          idx === sectionIdx
+                            ? {
+                                ...section,
+                                questions: section.questions.map((q: any, qIdx: number) =>
+                                  qIdx === questionIdx ? { ...q, is_comment_enabled: !q.is_comment_enabled } : q
+                                )
+                              }
+                            : section
+                        )
+                      );
+                    }}
+                    className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                      question.is_comment_enabled ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
+                    }`}
+                    title="Allow participants to add comments after answering"
+                  >
+                    💬 Comment
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     const duplicated = { ...question, id: Date.now() };
@@ -2476,9 +2503,6 @@ export default function ViewQuestionnairePage() {
                             );
                           }}
                           key={`dial-needle-url-${question.id}-${dialSettings.customImages?.needleUrl}`}
-                          className="text-xs h-7"
-                        />
-                          }}
                           className="text-xs h-7"
                         />
                       </div>

@@ -544,7 +544,7 @@ class VideoUploadController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'response_id' => 'nullable|uuid|exists:responses,id',
-                'participant_id' => 'nullable|uuid|exists:participants,id',
+                'participant_id' => 'nullable|integer|exists:participants,id',
                 'activity_id' => 'required|uuid|exists:activities,id',
                 'question_id' => 'required|string|max:255', // Changed from exists:questions,id - question may be stored in questionnaire JSON
                 'watch_time_seconds' => 'required|integer|min:0',
@@ -641,7 +641,7 @@ class VideoUploadController extends Controller
             $validator = Validator::make($request->all(), [
                 'response_id' => 'nullable|uuid|exists:responses,id',
                 'question_id' => 'required|string|max:255', // Changed from exists:questions,id - question may be stored in questionnaire JSON
-                'participant_id' => 'nullable|uuid|exists:participants,id',
+                'participant_id' => 'nullable|integer|exists:participants,id',
                 'activity_id' => 'nullable|uuid|exists:activities,id',
             ]);
 
@@ -862,6 +862,116 @@ class VideoUploadController extends Controller
         } catch (Exception $e) {
             \Log::warning('Failed to get video duration', ['error' => $e->getMessage()]);
             return 0;
+        }
+    }
+
+    /**
+     * Get all view logs for a specific video question
+     * Used for reporting and analytics
+     */
+    public function getVideoQuestionViewLogs(string $questionId)
+    {
+        try {
+            // Get all view logs for this question
+            $viewLogs = VideoWatchTracking::where('question_id', $questionId)
+                ->with(['participant:id,name,email', 'activity:id,name'])
+                ->get()
+                ->map(function ($log) {
+                    // Format watch duration
+                    $hours = floor($log->watch_time_seconds / 3600);
+                    $minutes = floor(($log->watch_time_seconds % 3600) / 60);
+                    $seconds = $log->watch_time_seconds % 60;
+                    $watchDuration = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+
+                    return [
+                        'participant_id' => $log->participant_id,
+                        'participant_name' => $log->participant->name ?? 'Unknown',
+                        'participant_email' => $log->participant->email ?? 'Unknown',
+                        'watch_time_seconds' => $log->watch_time_seconds,
+                        'watch_duration' => $watchDuration,
+                        'completed' => $log->completed,
+                        'play_count' => $log->play_count,
+                        'pause_count' => $log->pause_count,
+                        'seek_count' => $log->seek_count,
+                        'created_at' => $log->created_at,
+                        'updated_at' => $log->updated_at,
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $viewLogs
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('Failed to get video question view logs', [
+                'question_id' => $questionId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to get view logs'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get statistics for a specific video question
+     * Returns aggregated stats: total views, completion rate, avg watch time
+     */
+    public function getVideoQuestionStatistics(string $questionId)
+    {
+        try {
+            $stats = VideoWatchTracking::where('question_id', $questionId)
+                ->selectRaw('
+                    COUNT(DISTINCT participant_id) as total_viewers,
+                    COUNT(CASE WHEN completed = true THEN 1 END) as completed_count,
+                    AVG(watch_time_seconds) as avg_watch_time,
+                    MAX(watch_time_seconds) as max_watch_time,
+                    SUM(play_count) as total_plays,
+                    SUM(pause_count) as total_pauses,
+                    SUM(seek_count) as total_seeks
+                ')
+                ->first();
+
+            $totalViewers = $stats->total_viewers ?? 0;
+            $completedCount = $stats->completed_count ?? 0;
+            $completionRate = $totalViewers > 0 ? round(($completedCount / $totalViewers) * 100, 2) : 0;
+            
+            // Format average watch time
+            $avgSeconds = round($stats->avg_watch_time ?? 0);
+            $hours = floor($avgSeconds / 3600);
+            $minutes = floor(($avgSeconds % 3600) / 60);
+            $seconds = $avgSeconds % 60;
+            $avgWatchDuration = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'question_id' => $questionId,
+                    'total_viewers' => $totalViewers,
+                    'completed_count' => $completedCount,
+                    'completion_rate' => $completionRate,
+                    'avg_watch_time_seconds' => $avgSeconds,
+                    'avg_watch_duration' => $avgWatchDuration,
+                    'max_watch_time_seconds' => $stats->max_watch_time ?? 0,
+                    'total_plays' => $stats->total_plays ?? 0,
+                    'total_pauses' => $stats->total_pauses ?? 0,
+                    'total_seeks' => $stats->total_seeks ?? 0,
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('Failed to get video question statistics', [
+                'question_id' => $questionId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to get statistics'
+            ], 500);
         }
     }
 }

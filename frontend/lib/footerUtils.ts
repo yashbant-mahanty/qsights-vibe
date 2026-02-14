@@ -9,6 +9,57 @@ export interface FooterHyperlink {
 }
 
 /**
+ * Landing config interface for footer settings
+ */
+export interface FooterLandingConfig {
+  footerText?: string;
+  footerTextUrl?: string;
+  footerLinkText?: string;
+  footerLinkUrl?: string;
+  footerLinkTarget?: string;
+  footerHyperlinks?: FooterHyperlink[];
+  [key: string]: any;
+}
+
+/**
+ * Build hyperlinks array from landing config
+ * Handles both:
+ * 1. footerHyperlinks array (direct array format)
+ * 2. Individual fields: footerLinkText, footerLinkUrl, footerLinkTarget
+ * 
+ * @param landingConfig The landing page configuration object
+ * @returns Array of hyperlinks to render
+ */
+export function getFooterHyperlinksFromConfig(landingConfig?: FooterLandingConfig): FooterHyperlink[] {
+  if (!landingConfig) return [];
+  
+  const hyperlinks: FooterHyperlink[] = [];
+  
+  // First, check for the array format (footerHyperlinks)
+  if (landingConfig.footerHyperlinks && Array.isArray(landingConfig.footerHyperlinks)) {
+    hyperlinks.push(...landingConfig.footerHyperlinks);
+  }
+  
+  // Then, check for individual fields (footerLinkText, footerLinkUrl)
+  // This is the format used by the landing config editor
+  if (landingConfig.footerLinkText && landingConfig.footerLinkUrl) {
+    // Only add if not already in the array (avoid duplicates)
+    const alreadyExists = hyperlinks.some(
+      h => h.text === landingConfig.footerLinkText && h.url === landingConfig.footerLinkUrl
+    );
+    if (!alreadyExists) {
+      hyperlinks.push({
+        text: landingConfig.footerLinkText,
+        url: landingConfig.footerLinkUrl,
+        target: (landingConfig.footerLinkTarget as '_blank' | '_self') || '_blank'
+      });
+    }
+  }
+  
+  return hyperlinks;
+}
+
+/**
  * Renders footer text with hyperlinks
  * @param footerText The base footer text
  * @param hyperlinks Array of hyperlink configurations

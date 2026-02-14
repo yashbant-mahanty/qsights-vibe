@@ -317,6 +317,7 @@ class PublicActivityController extends Controller
             $request->validate([
                 'participant_id' => 'required|string',
                 'answers' => 'required',
+                'comments' => 'sometimes|array', // Optional comments for questions
                 'is_preview' => 'sometimes|boolean',
                 'token' => 'sometimes|nullable|string', // Generated link token
             ]);
@@ -324,6 +325,7 @@ class PublicActivityController extends Controller
             $request->validate([
                 'participant_id' => 'required|exists:participants,id',
                 'answers' => 'required',
+                'comments' => 'sometimes|array', // Optional comments for questions
                 'is_preview' => 'sometimes|boolean',
                 'token' => 'sometimes|nullable|string', // Generated link token
             ]);
@@ -331,6 +333,9 @@ class PublicActivityController extends Controller
         
         // Store the token for later use after successful submission
         $generatedLinkToken = $request->input('token');
+        
+        // Get comments from request (keyed by question_id)
+        $questionComments = $request->input('comments', []);
 
         $activity = Activity::with('questionnaire.sections.questions')->findOrFail($activityId);
         
@@ -460,6 +465,14 @@ class PublicActivityController extends Controller
                             // Check if answer has enhanced value display mode structure
                             $isEnhancedPayload = is_array($answerValue) && isset($answerValue['value_type']);
                             
+                            // Get comment for this question (if comment is enabled and provided)
+                            $commentText = null;
+                            $commentedAt = null;
+                            if ($question->is_comment_enabled && isset($questionComments[$questionId]) && !empty($questionComments[$questionId])) {
+                                $commentText = substr($questionComments[$questionId], 0, 1000); // Max 1000 chars
+                                $commentedAt = now();
+                            }
+                            
                             if ($isEnhancedPayload) {
                                 // Store enhanced payload as JSON in value column
                                 \App\Models\Answer::create([
@@ -468,6 +481,8 @@ class PublicActivityController extends Controller
                                     'value' => json_encode($answerValue),
                                     'value_array' => null,
                                     'other_text' => null,
+                                    'comment_text' => $commentText,
+                                    'commented_at' => $commentedAt,
                                 ]);
                             } else {
                                 // Legacy behavior for standard answers
@@ -477,6 +492,8 @@ class PublicActivityController extends Controller
                                     'value' => is_array($answerValue) ? null : $answerValue,
                                     'value_array' => is_array($answerValue) ? $answerValue : null,
                                     'other_text' => $otherText,
+                                    'comment_text' => $commentText,
+                                    'commented_at' => $commentedAt,
                                 ]);
                             }
                         }
@@ -803,6 +820,14 @@ class PublicActivityController extends Controller
                         // Check if answer has enhanced value display mode structure
                         $isEnhancedPayload = is_array($answerValue) && isset($answerValue['value_type']);
                         
+                        // Get comment for this question (if comment is enabled and provided)
+                        $commentText = null;
+                        $commentedAt = null;
+                        if ($question->is_comment_enabled && isset($questionComments[$questionId]) && !empty($questionComments[$questionId])) {
+                            $commentText = substr($questionComments[$questionId], 0, 1000); // Max 1000 chars
+                            $commentedAt = now();
+                        }
+                        
                         if ($isEnhancedPayload) {
                             // Store enhanced payload as JSON in value column
                             // updateOrCreate = UPDATE if exists, INSERT if not
@@ -815,6 +840,8 @@ class PublicActivityController extends Controller
                                     'value' => json_encode($answerValue),
                                     'value_array' => null,
                                     'other_text' => null,
+                                    'comment_text' => $commentText,
+                                    'commented_at' => $commentedAt,
                                 ]
                             );
                         } else {
@@ -830,6 +857,8 @@ class PublicActivityController extends Controller
                                     'value' => is_array($answerValue) ? null : $answerValue,
                                     'value_array' => is_array($answerValue) ? $answerValue : null,
                                     'other_text' => $otherText,
+                                    'comment_text' => $commentText,
+                                    'commented_at' => $commentedAt,
                                 ]
                             );
                         }

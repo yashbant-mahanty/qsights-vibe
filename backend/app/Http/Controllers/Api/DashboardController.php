@@ -250,7 +250,7 @@ class DashboardController extends Controller
                 'program.groupHead:id,user_id,organization_id',
                 'program.groupHead.user:id,name'
             ])
-            ->select('id', 'name', 'type', 'code', 'description', 'status', 'program_id', 'start_date', 'end_date', 
+            ->select('id', 'name', 'type', 'project_code', 'description', 'status', 'program_id', 'start_date', 'end_date', 
                      'configuration_date', 'configuration_price', 'subscription_price', 'subscription_frequency', 
                      'tax_percentage', 'number_of_participants', 'deleted_at')
             ->whereNull('deleted_at')

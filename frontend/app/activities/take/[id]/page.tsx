@@ -28,7 +28,7 @@ import {
 import { toast } from "@/components/ui/toast";
 import { filterQuestionsByLogic } from "@/utils/conditionalLogicEvaluator";
 import EventContactModal from "@/components/EventContactModal";
-import { getFooterHtml } from "@/lib/footerUtils";
+import { getFooterHtml, getFooterHyperlinksFromConfig } from "@/lib/footerUtils";
 import { generatedLinksApi } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -383,6 +383,7 @@ export default function TakeActivityPage() {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, any>>({});
+  const [questionComments, setQuestionComments] = useState<Record<string, string>>({});
 
   // Compute filtered sections with conditional logic applied
   const allFilteredSections = useMemo(() => {
@@ -1984,6 +1985,7 @@ export default function TakeActivityPage() {
       const payload = {
         participant_id: currentParticipantId,
         answers: responses,
+        comments: questionComments, // Optional comments per question
         started_at,
         time_expired_at,
         auto_submitted: autoSubmit,
@@ -2538,6 +2540,51 @@ export default function TakeActivityPage() {
     }));
     
     return normalizedResults.sort((a: any, b: any) => b.percentage - a.percentage); // Sort by percentage descending
+  };
+
+  // Render comment box for questions with is_comment_enabled
+  const renderCommentBox = (question: any) => {
+    const questionId = question.id;
+    const hasResponse = responses[questionId] !== undefined && responses[questionId] !== null && responses[questionId] !== '';
+    const isSubmitted = submittedQuestions.has(questionId);
+    
+    // Only show comment box if:
+    // 1. Comment is enabled for this question
+    // 2. Question type is supported (mcq, multi, likert, sct_likert, likert_visual)
+    // 3. User has answered the question
+    const supportedTypes = ['mcq', 'multi', 'single_choice', 'radio', 'multiple_choice', 'multiple_choice_single', 'multiple_choice_multiple', 'checkbox', 'likert', 'sct_likert', 'likert_visual'];
+    const isSupported = supportedTypes.includes(question.type);
+    
+    if (!question.is_comment_enabled || !isSupported || !hasResponse) {
+      return null;
+    }
+    
+    return (
+      <div className="mt-4 animate-in slide-in-from-top-2 duration-300">
+        <div className="flex items-center gap-2 mb-2">
+          <MessageSquare className="w-4 h-4 text-gray-400" />
+          <span className="text-sm text-gray-600">Add a comment (optional)</span>
+        </div>
+        <textarea
+          value={questionComments[questionId] || ''}
+          onChange={(e) => {
+            const value = e.target.value.slice(0, 1000); // Max 1000 chars
+            setQuestionComments(prev => ({
+              ...prev,
+              [questionId]: value
+            }));
+          }}
+          placeholder="Add your comment (optional)"
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+          rows={2}
+          maxLength={1000}
+          disabled={isSubmitted}
+        />
+        <div className="flex justify-end mt-1">
+          <span className="text-xs text-gray-400">{(questionComments[questionId] || '').length}/1000</span>
+        </div>
+      </div>
+    );
   };
 
   const renderQuestion = (question: any) => {
@@ -3278,8 +3325,8 @@ export default function TakeActivityPage() {
               playMode={videoSettings.videoPlayMode || "inline"}
               questionId={questionId}
               activityId={activity?.id || ""}
-              responseId={participantId || ""}  // Use participantId as temporary response identifier
-              participantId={participantId || undefined}
+              responseId={undefined}  // Don't pass responseId - let component use participant_id + activity_id
+              participantId={participantId ? String(participantId) : undefined}
               onCompletionChange={(completed: boolean) => {
                 // Store completion status for validation
                 handleResponseChange(questionId, {
@@ -3368,6 +3415,7 @@ export default function TakeActivityPage() {
       // Reset all state to initial values
       setSubmitted(false);
       setResponses({});
+      setQuestionComments({}); // Reset optional question comments
       setParticipantData({});
       setParticipantId(null);
       setTokenData(null);
@@ -3782,7 +3830,7 @@ export default function TakeActivityPage() {
                       style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                       dangerouslySetInnerHTML={getFooterHtml(
                         activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
+                        getFooterHyperlinksFromConfig(activity.landing_config)
                       )}
                     />
                   )}
@@ -3807,7 +3855,7 @@ export default function TakeActivityPage() {
                       style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                       dangerouslySetInnerHTML={getFooterHtml(
                         activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
+                        getFooterHyperlinksFromConfig(activity.landing_config)
                       )}
                     />
                   )}
@@ -3832,7 +3880,7 @@ export default function TakeActivityPage() {
                       style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                       dangerouslySetInnerHTML={getFooterHtml(
                         activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
+                        getFooterHyperlinksFromConfig(activity.landing_config)
                       )}
                     />
                   )}
@@ -4681,7 +4729,7 @@ export default function TakeActivityPage() {
                       style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                       dangerouslySetInnerHTML={getFooterHtml(
                         activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
+                        getFooterHyperlinksFromConfig(activity.landing_config)
                       )}
                     />
                   )}
@@ -4706,7 +4754,7 @@ export default function TakeActivityPage() {
                       style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                       dangerouslySetInnerHTML={getFooterHtml(
                         activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
+                        getFooterHyperlinksFromConfig(activity.landing_config)
                       )}
                     />
                   )}
@@ -4731,7 +4779,7 @@ export default function TakeActivityPage() {
                       style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                       dangerouslySetInnerHTML={getFooterHtml(
                         activity.landing_config.footerText, 
-                        activity.landing_config.footerHyperlinks
+                        getFooterHyperlinksFromConfig(activity.landing_config)
                       )}
                     />
                   )}
@@ -5477,6 +5525,8 @@ export default function TakeActivityPage() {
                                 {/* Question Image */}
                                 {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                 <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                                {/* Comment Box - shows after answering if enabled */}
+                                {renderCommentBox(question)}
                               </div>
                             </div>
                           )}
@@ -5539,6 +5589,8 @@ export default function TakeActivityPage() {
                                 {/* Question Image */}
                                 {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                 <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                                {/* Comment Box - shows after answering if enabled */}
+                                {renderCommentBox(question)}
                               </div>
                             </div>
                           )}
@@ -5615,6 +5667,8 @@ export default function TakeActivityPage() {
                                       {/* Question Image */}
                                       {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                       <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                                      {/* Comment Box - shows after answering if enabled */}
+                                      {renderCommentBox(question)}
                                     </div>
                                   </div>
                                 )}
@@ -5957,7 +6011,7 @@ export default function TakeActivityPage() {
                     style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                     dangerouslySetInnerHTML={getFooterHtml(
                       activity.landing_config.footerText, 
-                      activity.landing_config.footerHyperlinks
+                      getFooterHyperlinksFromConfig(activity.landing_config)
                     )}
                   />
                 )}
@@ -5982,7 +6036,7 @@ export default function TakeActivityPage() {
                     style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                     dangerouslySetInnerHTML={getFooterHtml(
                       activity.landing_config.footerText, 
-                      activity.landing_config.footerHyperlinks
+                      getFooterHyperlinksFromConfig(activity.landing_config)
                     )}
                   />
                 )}
@@ -6007,7 +6061,7 @@ export default function TakeActivityPage() {
                     style={{ color: activity.landing_config.footerTextColor || "#6B7280" }}
                     dangerouslySetInnerHTML={getFooterHtml(
                       activity.landing_config.footerText, 
-                      activity.landing_config.footerHyperlinks
+                      getFooterHyperlinksFromConfig(activity.landing_config)
                     )}
                   />
                 )}

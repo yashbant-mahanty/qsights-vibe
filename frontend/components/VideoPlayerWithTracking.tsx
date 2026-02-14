@@ -41,6 +41,7 @@ export default function VideoPlayerWithTracking({
   const [showControls, setShowControls] = useState(true);
   const [presignedVideoUrl, setPresignedVideoUrl] = useState<string | null>(null);
   const [loadingUrl, setLoadingUrl] = useState(true);
+  const [resumeFromTime, setResumeFromTime] = useState<number>(0);
   const lastTrackedTime = useRef(0);
   const trackingInterval = useRef<NodeJS.Timeout | null>(null);
 
@@ -108,7 +109,7 @@ export default function VideoPlayerWithTracking({
         clearInterval(trackingInterval.current);
       }
     };
-  }, [isPlaying, watchTime]);
+  }, [isPlaying]);
 
   async function loadProgress() {
     try {
@@ -120,7 +121,8 @@ export default function VideoPlayerWithTracking({
       if (responseId) {
         payload.response_id = responseId;
       } else {
-        payload.participant_id = participantId || null;
+        // Convert participantId to number for backend integer validation
+        payload.participant_id = participantId ? parseInt(participantId, 10) : null;
         payload.activity_id = activityId;
       }
 
@@ -139,9 +141,10 @@ export default function VideoPlayerWithTracking({
         setPauses(data.data.total_pauses || 0);
         setSeeks(data.data.total_seeks || 0);
         
-        // Resume from saved position
-        if (videoRef.current && savedWatchTime > 0) {
-          videoRef.current.currentTime = Math.min(savedWatchTime, duration);
+        // Store resume position - will be applied in onLoadedMetadata
+        if (savedWatchTime > 0) {
+          setResumeFromTime(Math.min(savedWatchTime, duration));
+          console.log('[VIDEO] Saved progress loaded: Resume from', savedWatchTime, 'seconds');
         }
 
         if (data.data.completed_watch && onCompletionChange) {
@@ -166,10 +169,13 @@ export default function VideoPlayerWithTracking({
 
     lastTrackedTime.current = currentWatchTime;
 
+    console.log('[VIDEO] Tracking progress:', currentWatchTime, 'seconds');
+
     try {
       const payload: any = {
         response_id: responseId || null,
-        participant_id: participantId || null,
+        // Convert participantId to number for backend integer validation
+        participant_id: participantId ? parseInt(participantId, 10) : null,
         activity_id: activityId,
         question_id: String(questionId), // Ensure it's a string for backend validation
         watch_time_seconds: currentWatchTime,
@@ -234,6 +240,14 @@ export default function VideoPlayerWithTracking({
     trackProgress(); // Final tracking
     if (onCompletionChange) {
       onCompletionChange(true);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    // Resume from saved position when video metadata is loaded
+    if (videoRef.current && resumeFromTime > 0) {
+      console.log('[VIDEO] Metadata loaded, resuming from', resumeFromTime, 'seconds');
+      videoRef.current.currentTime = resumeFromTime;
     }
   };
 
@@ -327,6 +341,7 @@ export default function VideoPlayerWithTracking({
           onTimeUpdate={handleTimeUpdate}
           onSeeked={handleSeeked}
           onEnded={handleEnded}
+          onLoadedMetadata={handleLoadedMetadata}
           playsInline
         />
 

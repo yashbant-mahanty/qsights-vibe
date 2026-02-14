@@ -8,6 +8,7 @@ interface DuplicateConfirmationModalProps {
   onClose: () => void;
   onConfirm: () => void;
   itemName?: string;
+  itemType?: 'event' | 'questionnaire';
 }
 
 export default function DuplicateConfirmationModal({
@@ -15,8 +16,13 @@ export default function DuplicateConfirmationModal({
   onClose,
   onConfirm,
   itemName,
+  itemType = 'event',
 }: DuplicateConfirmationModalProps) {
   if (!isOpen) return null;
+
+  const isQuestionnaire = itemType === 'questionnaire';
+  const itemLabel = isQuestionnaire ? 'Questionnaire' : 'Event';
+  const itemLabelLower = isQuestionnaire ? 'questionnaire' : 'event';
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
@@ -29,7 +35,7 @@ export default function DuplicateConfirmationModal({
                 <Copy className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Duplicate Event?</h3>
+                <h3 className="text-lg font-bold text-gray-900">Duplicate {itemLabel}?</h3>
                 {itemName && (
                   <p className="text-sm text-gray-600 mt-1">
                     <span className="font-semibold text-gray-900">{itemName}</span>
@@ -49,19 +55,29 @@ export default function DuplicateConfirmationModal({
         {/* Content */}
         <div className="p-6">
           <p className="text-sm text-gray-700 leading-relaxed">
-            This will create a copy of the event with all its settings. The duplicated event will be created as a <strong>draft</strong>.
+            This will create a copy of the {itemLabelLower} with all its settings. The duplicated {itemLabelLower} will be created as a <strong>draft</strong>.
           </p>
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800 font-medium">
               ℹ️ What will be copied:
             </p>
-            <ul className="text-xs text-blue-700 mt-2 ml-4 space-y-1 list-disc">
-              <li>Event name (with "(Copy)" suffix)</li>
-              <li>Description and type</li>
-              <li>Questionnaire assignment</li>
-              <li>Start and end dates</li>
-              <li>All event settings</li>
-            </ul>
+            {isQuestionnaire ? (
+              <ul className="text-xs text-blue-700 mt-2 ml-4 space-y-1 list-disc">
+                <li>Questionnaire name (with "(Copy)" suffix)</li>
+                <li>All sections and questions</li>
+                <li>Question types and settings</li>
+                <li>Conditional logic and branching</li>
+                <li>All questionnaire configurations</li>
+              </ul>
+            ) : (
+              <ul className="text-xs text-blue-700 mt-2 ml-4 space-y-1 list-disc">
+                <li>Event name (with "(Copy)" suffix)</li>
+                <li>Description and type</li>
+                <li>Questionnaire assignment</li>
+                <li>Start and end dates</li>
+                <li>All event settings</li>
+              </ul>
+            )}
           </div>
         </div>
 
@@ -82,7 +98,7 @@ export default function DuplicateConfirmationModal({
               className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
               <Copy className="w-4 h-4" />
-              Duplicate Event
+              Duplicate {itemLabel}
             </button>
           </div>
         </div>

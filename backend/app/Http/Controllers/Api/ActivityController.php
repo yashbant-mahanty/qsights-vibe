@@ -5,12 +5,21 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\Participant;
+use App\Models\User;
+use App\Models\UserNotification;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class ActivityController extends Controller
 {
+    protected $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
     /**
      * Display a listing of activities with filtering
      */
@@ -351,6 +360,12 @@ class ActivityController extends Controller
             'questions_to_randomize',
             'enable_generated_links',
         ]);
+
+        // Send notification to Super Admins when Program Admin/Manager creates an activity
+        $user = $request->user();
+        if ($user && in_array($user->role, ['program-admin', 'program-manager', 'admin'])) {
+            $this->notifyActivityCreated($activity, $user);
+        }
 
         return response()->json([
             'message' => 'Activity created successfully',
@@ -1725,5 +1740,33 @@ class ActivityController extends Controller
         });
 
         return response()->json(['data' => $counts]);
+    }
+
+    /**
+     * Notify Super Admins when an Activity/Event is created by Program Admin
+     */
+    protected function notifyActivityCreated(Activity $activity, User $creator)
+    {
+        // Get all super admins
+        $superAdmins = User::where('role', 'super-admin')->get();
+
+        foreach ($superAdmins as $admin) {
+            UserNotification::create([
+                'user_id' => $admin->id,
+                'type' => 'activity_created',
+                'title' => 'New Activity Created',
+                'message' => "{$creator->name} has created a new event \"{$activity->name}\" in program {$activity->program->name}.",
+                'entity_type' => 'activity',
+                'entity_id' => $activity->id,
+                'entity_name' => $activity->name,
+                'action_url' => "/activities/{$activity->id}",
+            ]);
+        }
+
+        \Log::info('Activity creation notifications sent', [
+            'activity_id' => $activity->id,
+            'creator' => $creator->id,
+            'super_admins_notified' => $superAdmins->count()
+        ]);
     }
 }

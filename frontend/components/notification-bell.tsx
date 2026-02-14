@@ -14,8 +14,6 @@ export default function NotificationBell() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  const hasAuthToken = () => typeof document !== 'undefined' && document.cookie.includes('backendToken=');
-
   useEffect(() => {
     loadNotifications();
     loadUnreadCount();
@@ -46,11 +44,6 @@ export default function NotificationBell() {
 
   async function loadNotifications() {
     try {
-      if (!hasAuthToken()) {
-        setNotifications([]);
-        setUnreadCount(0);
-        return;
-      }
       setLoading(true);
       const data = await notificationsApi.getAll();
       console.log('Loaded notifications:', data);
@@ -66,10 +59,6 @@ export default function NotificationBell() {
 
   async function loadUnreadCount() {
     try {
-      if (!hasAuthToken()) {
-        setUnreadCount(0);
-        return;
-      }
       const count = await notificationsApi.getUnreadCount();
       console.log('Loaded unread count:', count);
       setUnreadCount(count);
