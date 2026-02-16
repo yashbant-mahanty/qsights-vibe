@@ -279,6 +279,9 @@ Route::post('/public/s3/view-url', [App\Http\Controllers\Api\S3UploadController:
 Route::get('/videos/question/{questionId}/view-logs', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoQuestionViewLogs']);
 Route::get('/videos/question/statistics/{questionId}', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoQuestionStatistics']);
 
+// Activity Video Analytics (intro & thank you videos) - For results page
+Route::get('/activities/{activityId}/video-logs', [App\Http\Controllers\Api\VideoUploadController::class, 'getActivityVideoLogs']);
+
 // Questionnaire Routes
 Route::middleware(['auth:sanctum'])->group(function () {
 

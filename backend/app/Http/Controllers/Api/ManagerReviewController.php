@@ -382,8 +382,11 @@ class ManagerReviewController extends Controller
             try {
                 $htmlContent = $this->buildManagerApprovedEmailHtml($approvalRequest);
                 
+                // Use communication_email if available, fallback to email
+                $recipientEmail = $admin->communication_email ?: $admin->email;
+                
                 $this->emailService->send(
-                    $admin->email,
+                    $recipientEmail,
                     "Manager Approved: Activity Ready for Final Review - {$approvalRequest->name}",
                     $htmlContent,
                     [

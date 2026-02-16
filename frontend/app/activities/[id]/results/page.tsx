@@ -36,8 +36,9 @@ import {
   TrendingDown,
   Hash,
   MessageSquare,
+  Play,
 } from "lucide-react";
-import { activitiesApi, responsesApi, notificationsApi, type Activity } from "@/lib/api";
+import { activitiesApi, responsesApi, notificationsApi, type Activity, fetchWithAuth } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 import { GradientStatCard } from "@/components/ui/gradient-stat-card";
 
@@ -1040,6 +1041,8 @@ export default function ActivityResultsPage() {
   const [notificationReports, setNotificationReports] = useState<NotificationReport[]>([]);
   const [orphanedResponses, setOrphanedResponses] = useState<string[]>([]);
   const [deletingResponses, setDeletingResponses] = useState<Set<string>>(new Set());
+  const [videoLogs, setVideoLogs] = useState<any>(null);
+  const [loadingVideoLogs, setLoadingVideoLogs] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [responseToDelete, setResponseToDelete] = useState<{ id: string; name: string } | null>(null);
   
@@ -1239,6 +1242,25 @@ export default function ActivityResultsPage() {
       } catch (err) {
         console.error('❌ Failed to load notification logs:', err);
         setNotificationReports([]);
+      }
+
+      // Load video logs for intro and thank you videos (NEW)
+      try {
+        setLoadingVideoLogs(true);
+        console.log('🔍 Loading video analytics for activity:', activityId);
+        const videoLogsData = await fetchWithAuth(`/activities/${activityId}/video-logs`);
+        console.log('✅ Video logs loaded:', videoLogsData.data);
+        if (videoLogsData && videoLogsData.data) {
+          setVideoLogs(videoLogsData.data);
+        } else {
+          console.log('No video logs available for this activity');
+          setVideoLogs(null);
+        }
+      } catch (err) {
+        console.error('❌ Failed to load video logs:', err);
+        setVideoLogs(null);
+      } finally {
+        setLoadingVideoLogs(false);
       }
 
       // Load questionnaire if available
@@ -2693,70 +2715,6 @@ export default function ActivityResultsPage() {
           />
         </div>
 
-        {/* Video Engagement Statistics (if video intro exists) */}
-        {videoStatistics && videoStatistics.total_views > 0 && (
-          <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg">
-            <CardHeader className="border-b border-purple-200 bg-white/50 backdrop-blur-sm">
-              <CardTitle className="text-lg font-bold flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Eye className="w-5 h-5 text-purple-600" />
-                </div>
-                <span>Video Intro Engagement</span>
-                <span className="ml-auto px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">
-                  {videoStatistics.total_views} {videoStatistics.total_views === 1 ? 'View' : 'Views'}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                    </div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Completed Views</p>
-                  </div>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">{videoStatistics.completed_views}</p>
-                  <p className="text-sm text-gray-600">{videoStatistics.total_views > 0 ? Math.round((videoStatistics.completed_views / videoStatistics.total_views) * 100) : 0}% completion rate</p>
-                </div>
-
-                <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Clock className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Watch Time</p>
-                  </div>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">{videoStatistics.average_watch_duration || '0:00'}</p>
-                  <p className="text-sm text-gray-600">Per participant</p>
-                </div>
-
-                <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <TrendingUp className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Completion Rate</p>
-                  </div>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">{Math.round(videoStatistics.completion_rate)}%</p>
-                  <p className="text-sm text-gray-600">Watched to ≥90%</p>
-                </div>
-
-                <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-amber-100 rounded-lg">
-                      <Eye className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Engagement</p>
-                  </div>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">{videoStatistics.total_views}</p>
-                  <p className="text-sm text-gray-600">Total video views</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Tabs for Different Views */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="inline-flex h-auto items-center justify-start rounded-xl bg-gradient-to-r from-gray-100 to-gray-50 p-1.5 text-gray-600 shadow-inner border border-gray-200 flex-wrap gap-1 mb-6">
@@ -2781,6 +2739,17 @@ export default function ActivityResultsPage() {
               <Mail className="w-4 h-4 mr-2" />
               Notification Reports
             </TabsTrigger>
+            
+            {/* Video Analytics Tab - Show if videos exist OR logs exist */}
+            {(videoLogs?.intro_video || videoLogs?.thankyou_video || videoLogs?.intro_logs?.length > 0 || videoLogs?.thankyou_logs?.length > 0) && (
+              <TabsTrigger 
+                value="video-analytics" 
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-5 py-2.5 text-sm font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-lg data-[state=active]:shadow-purple-100 hover:text-gray-900"
+              >
+                <Play className="w-4 h-4 mr-2" />
+                Video Analytics
+              </TabsTrigger>
+            )}
             
             {/* SCT Report Tab - Show only if SCT questions exist */}
             {hasSCTQuestions && (
@@ -3951,6 +3920,241 @@ export default function ActivityResultsPage() {
                     <p className="text-gray-500 mb-2">No questionnaire data available</p>
                     <p className="text-sm text-gray-400">
                       Questions will appear here once the activity has an associated questionnaire
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Video Analytics Tab */}
+          <TabsContent value="video-analytics">
+            <div className="space-y-6">
+              {loadingVideoLogs ? (
+                <Card>
+                  <CardContent className="p-12 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-purple-600 mb-4" />
+                    <p className="text-gray-500">Loading video analytics...</p>
+                  </CardContent>
+                </Card>
+              ) : videoLogs ? (
+                <>
+                  {/* Summary Statistics Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Intro Video Stats */}
+                    {videoLogs.intro_video && (
+                      <>
+                        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-semibold text-purple-700">Intro Views</h3>
+                              <Play className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <p className="text-3xl font-bold text-purple-900">{videoLogs.intro_stats?.total_views || 0}</p>
+                            <p className="text-xs text-purple-600 mt-1">Total participants</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-semibold text-green-700">Completed</h3>
+                              <CheckCircle className="w-5 h-5 text-green-600" />
+                            </div>
+                            <p className="text-3xl font-bold text-green-900">{videoLogs.intro_stats?.completed_views || 0}</p>
+                            <p className="text-xs text-green-600 mt-1">
+                              {videoLogs.intro_stats?.total_views > 0 
+                                ? Math.round((videoLogs.intro_stats.completed_views / videoLogs.intro_stats.total_views) * 100) 
+                                : 0}% completion rate
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </>
+                    )}
+                    {/* Thank You Video Stats */}
+                    {videoLogs.thankyou_video && (
+                      <>
+                        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-semibold text-blue-700">Thank You Views</h3>
+                              <Play className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <p className="text-3xl font-bold text-blue-900">{videoLogs.thankyou_stats?.total_views || 0}</p>
+                            <p className="text-xs text-blue-600 mt-1">Total participants</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-semibold text-amber-700">Avg Duration</h3>
+                              <Clock className="w-5 h-5 text-amber-600" />
+                            </div>
+                            <p className="text-3xl font-bold text-amber-900">
+                              {Math.floor((videoLogs.thankyou_stats?.avg_watch_duration || 0) / 60)}:{String(Math.floor((videoLogs.thankyou_stats?.avg_watch_duration || 0) % 60)).padStart(2, '0')}
+                            </p>
+                            <p className="text-xs text-amber-600 mt-1">minutes watched</p>
+                          </CardContent>
+                        </Card>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Intro Video Analytics Table */}
+                  {videoLogs.intro_video && (
+                    <Card>
+                      <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100 border-b">
+                        <CardTitle className="flex items-center gap-2 text-purple-900">
+                          <Play className="w-5 h-5" />
+                          Intro Video Watch Analytics
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6">
+                        {videoLogs.intro_logs && videoLogs.intro_logs.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-gray-50 border-b">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Participant Name</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Email</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Watch Duration</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Watched At</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {videoLogs.intro_logs.map((log: any, idx: number) => (
+                                <tr key={log.id} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm text-gray-900">{idx + 1}</td>
+                                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{log.participant_name}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{log.participant_email}</td>
+                                  <td className="px-4 py-3 text-sm font-mono text-gray-900">{log.watch_duration_formatted}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {new Date(log.watched_at).toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {log.completed ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <CheckCircle className="w-3 h-3" />
+                                        Completed
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                        <Clock className="w-3 h-3" />
+                                        In Progress ({Math.round(log.completion_percentage)}%)
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <Play className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                            <p className="text-gray-500 mb-1">No watch data yet</p>
+                            <p className="text-xs text-gray-400">Intro video is configured. Watch data will appear when participants view the video.</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Thank You Video Analytics Table */}
+                  {videoLogs.thankyou_video && (
+                    <Card>
+                      <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 border-b">
+                        <CardTitle className="flex items-center gap-2 text-blue-900">
+                          <Play className="w-5 h-5" />
+                          Thank You Video Watch Analytics
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6">
+                        {videoLogs.thankyou_logs && videoLogs.thankyou_logs.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-gray-50 border-b">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Participant Name</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Email</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Watch Duration</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Watched At</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {videoLogs.thankyou_logs.map((log: any, idx: number) => (
+                                <tr key={log.id} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm text-gray-900">{idx + 1}</td>
+                                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{log.participant_name}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{log.participant_email}</td>
+                                  <td className="px-4 py-3 text-sm font-mono text-gray-900">{log.watch_duration_formatted}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {new Date(log.watched_at).toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {log.completed ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <CheckCircle className="w-3 h-3" />
+                                        Completed
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                        <Clock className="w-3 h-3" />
+                                        In Progress ({Math.round(log.completion_percentage)}%)
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <Play className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                            <p className="text-gray-500 mb-1">No watch data yet</p>
+                            <p className="text-xs text-gray-400">Thank You video is configured. Watch data will appear when participants view the video.</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* No Videos Message */}
+                  {!videoLogs.intro_video && !videoLogs.thankyou_video && (
+                    <Card>
+                      <CardContent className="p-12 text-center">
+                        <Play className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                        <p className="text-gray-500 mb-2">No intro or thank you videos configured</p>
+                        <p className="text-sm text-gray-400">
+                          Add intro/thank you videos to the questionnaire to track engagement
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="p-12 text-center">
+                    <Play className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 mb-2">No video analytics available</p>
+                    <p className="text-sm text-gray-400">
+                      Video watch data will appear here once participants view intro/thank you videos
                     </p>
                   </CardContent>
                 </Card>

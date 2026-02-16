@@ -135,6 +135,10 @@ function QuestionnaireBuilderPageContent() {
   const [customHeaderText, setCustomHeaderText] = useState('');
   const [showSectionHeader, setShowSectionHeader] = useState(true);
   const [sectionHeaderFormat, setSectionHeaderFormat] = useState<'numbered' | 'titleOnly'>('numbered');
+  
+  // Question Numbering state
+  const [questionNumberingEnabled, setQuestionNumberingEnabled] = useState(true);
+  const [questionNumberingFormat, setQuestionNumberingFormat] = useState<'numeric' | 'roman' | 'alphabet'>('numeric');
 
   // Video Intro Block state
   const [videoIntroEnabled, setVideoIntroEnabled] = useState(false);
@@ -907,6 +911,8 @@ function QuestionnaireBuilderPageContent() {
           custom_header_text: customHeaderText,
           show_section_header: showSectionHeader,
           section_header_format: sectionHeaderFormat,
+          question_numbering_enabled: questionNumberingEnabled,
+          question_numbering_format: questionNumberingFormat,
         },
         sections: sections.map((section) => ({
           title: section.title,
@@ -6114,6 +6120,50 @@ function QuestionnaireBuilderPageContent() {
                         </p>
                       </div>
                     )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Question Numbering Settings */}
+            <Card>
+              <CardHeader className="border-b border-gray-200">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <List className="w-4 h-4 text-purple-600" />
+                  Question Numbering
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-medium text-gray-700 block">Show Question Numbers</span>
+                    <span className="text-xs text-gray-500">Display numbers before each question</span>
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    checked={questionNumberingEnabled}
+                    onChange={(e) => setQuestionNumberingEnabled(e.target.checked)}
+                    className="w-4 h-4 cursor-pointer" 
+                  />
+                </div>
+
+                {questionNumberingEnabled && (
+                  <div className="space-y-2 pt-2 border-t border-gray-200">
+                    <label className="text-xs font-medium text-gray-700 block">
+                      Numbering Format
+                    </label>
+                    <select
+                      value={questionNumberingFormat}
+                      onChange={(e) => setQuestionNumberingFormat(e.target.value as 'numeric' | 'roman' | 'alphabet')}
+                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                    >
+                      <option value="numeric">Numeric (1, 2, 3...)</option>
+                      <option value="roman">Roman (I, II, III...)</option>
+                      <option value="alphabet">Alphabet (A, B, C...)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Preview: {questionNumberingFormat === 'numeric' ? '1, 2, 3...' : questionNumberingFormat === 'roman' ? 'I, II, III...' : 'A, B, C...'}
+                    </p>
                   </div>
                 )}
               </CardContent>

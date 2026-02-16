@@ -200,6 +200,8 @@ interface Questionnaire {
     custom_header_text?: string;
     show_section_header?: boolean;
     section_header_format?: 'numbered' | 'titleOnly';
+    question_numbering_enabled?: boolean;
+    question_numbering_format?: 'numeric' | 'roman' | 'alphabet';
     [key: string]: any;
   };
   sections?: Array<{
@@ -254,6 +256,48 @@ const LANGUAGE_NAMES: { [key: string]: string } = {
   FA: "Persian (فارسی)",
   SW: "Swahili (Kiswahili)",
 };
+
+// Helper function: Convert number to Roman numerals
+function convertToRoman(num: number): string {
+  const romanNumerals: [number, string][] = [
+    [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
+    [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
+    [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']
+  ];
+  let result = '';
+  for (const [value, numeral] of romanNumerals) {
+    while (num >= value) {
+      result += numeral;
+      num -= value;
+    }
+  }
+  return result;
+}
+
+// Helper function: Convert number to alphabet (A, B, C... AA, AB...)
+function convertToAlphabet(num: number): string {
+  let result = '';
+  while (num > 0) {
+    num--; // Adjust to 0-based
+    result = String.fromCharCode(65 + (num % 26)) + result;
+    num = Math.floor(num / 26);
+  }
+  return result;
+}
+
+// Helper function: Format question number based on format type
+function formatQuestionNumber(index: number, format: 'numeric' | 'roman' | 'alphabet' | undefined): string {
+  const num = index + 1; // Convert 0-based index to 1-based number
+  switch (format) {
+    case 'roman':
+      return convertToRoman(num);
+    case 'alphabet':
+      return convertToAlphabet(num);
+    case 'numeric':
+    default:
+      return num.toString();
+  }
+}
 
 export default function TakeActivityPage() {
   const router = useRouter();
@@ -473,6 +517,12 @@ export default function TakeActivityPage() {
   const [existingWatchLog, setExistingWatchLog] = useState<any>(null);
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [resumePosition, setResumePosition] = useState(0);
+
+  // Thank you video state
+  const [thankyouVideo, setThankyouVideo] = useState<any>(null);
+  const [thankyouVideoWatchTime, setThankyouVideoWatchTime] = useState(0);
+  const [thankyouVideoCompleted, setThankyouVideoCompleted] = useState(false);
+  const [thankyouVideoLogged, setThankyouVideoLogged] = useState(false);
 
   // Add to Calendar handler
   const handleAddToCalendar = () => {
@@ -1222,6 +1272,21 @@ export default function TakeActivityPage() {
           console.log('No video intro found or error loading:', videoErr);
           // Not a critical error, continue without video
         }
+        
+        // Fetch thank you video for this questionnaire
+        try {
+          const thankyouVideoResponse = await fetch(`/api/public/videos/questionnaire/${activityData.data.questionnaire.id}?type=thankyou`);
+          if (thankyouVideoResponse.ok) {
+            const thankyouVideoData = await thankyouVideoResponse.json();
+            if (thankyouVideoData.data) {
+              console.log('Loaded thank you video:', thankyouVideoData.data);
+              setThankyouVideo(thankyouVideoData.data);
+            }
+          }
+        } catch (thankyouVideoErr) {
+          console.log('No thank you video found or error loading:', thankyouVideoErr);
+          // Not a critical error, continue without thank you video
+        }
       }
       
       // Don't set default language - let user select on registration page
@@ -1655,6 +1720,27 @@ export default function TakeActivityPage() {
     setVideoWatchTime(Math.floor(currentTime));
   };
 
+  // FIX: Watch for video intro loading AFTER participant has started
+  // This handles the race condition where video loads after user clicks Start
+  useEffect(() => {
+    console.log('[VIDEO INTRO FIX] Checking state:', { 
+      videoIntro: !!videoIntro, 
+      started, 
+      showVideoIntro, 
+      submitted,
+      showForm,
+      videoCompleted
+    });
+    
+    // If video intro just loaded, participant has started, but video screen isn't showing
+    // AND video hasn't been completed yet (to prevent loop after watching)
+    if (videoIntro && started && !showVideoIntro && !submitted && !showForm && !videoCompleted) {
+      console.log('[VIDEO INTRO FIX] Video loaded after start - showing video screen now');
+      setShowVideoIntro(true);
+      setStarted(false); // Pause questionnaire until video is watched
+    }
+  }, [videoIntro, started, showVideoIntro, submitted, showForm, videoCompleted]);
+
   // Periodic save handler - saves watch progress every 30 seconds
   const handlePeriodicVideoSave = async (currentTime: number, duration: number, percentage: number, completed: boolean) => {
     if (!videoIntro || !questionnaire?.id || !activityId || !participantId) return;
@@ -1784,6 +1870,43 @@ export default function TakeActivityPage() {
     console.log('[Video Intro] Starting questionnaire');
     setShowVideoIntro(false);
     setStarted(true);
+  };
+
+  // Log thank you video view when completed
+  const logThankyouVideoView = async (watchDuration: number, completed: boolean) => {
+    if (thankyouVideoLogged || !thankyouVideo || !participantId || isPreview) {
+      console.log('[Thank You Video] Skipping log:', { alreadyLogged: thankyouVideoLogged, hasVideo: !!thankyouVideo, participantId, isPreview });
+      return;
+    }
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/videos/log-view`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          questionnaire_id: questionnaire?.id,
+          video_id: thankyouVideo.id,
+          activity_id: activityId,
+          participant_id: participantId,
+          participant_email: participantData.email || 'anonymous',
+          participant_name: participantData.name || participantData.full_name || 'Anonymous',
+          watch_duration_seconds: watchDuration,
+          completed: completed,
+          completion_percentage: completed ? 100 : Math.floor((watchDuration / (thankyouVideo.video_duration_seconds || 1)) * 100),
+        }),
+      });
+      
+      if (response.ok) {
+        console.log('[Thank You Video] View logged successfully');
+        setThankyouVideoLogged(true);
+      } else {
+        console.error('[Thank You Video] Failed to log view, response not ok:', response.status);
+      }
+    } catch (err) {
+      console.error('[Thank You Video] Failed to log view:', err);
+    }
   };
 
   // Save progress incrementally to backend
@@ -3730,6 +3853,29 @@ export default function TakeActivityPage() {
                   A confirmation has been sent to your email
                 </p>
                 
+                {/* Thank You Video Display */}
+                {thankyouVideo && (
+                  <div className="mt-8 bg-white rounded-2xl shadow-lg border border-gray-100 p-6 space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900 text-center">Thank You Message</h3>
+                    <div className="max-w-2xl mx-auto">
+                      <VideoPlayer
+                        videoUrl={thankyouVideo.video_url}
+                        thumbnailUrl={thankyouVideo.thumbnail_url}
+                        displayMode={thankyouVideo.display_mode || 'inline'}
+                        mustWatch={thankyouVideo.must_watch || false}
+                        autoplay={false}
+                        onTimeUpdate={(currentTime) => {
+                          setThankyouVideoWatchTime(Math.floor(currentTime));
+                        }}
+                        onComplete={() => {
+                          setThankyouVideoCompleted(true);
+                          logThankyouVideoView(thankyouVideoWatchTime, true);
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+                
                 {/* Take Event Again Button - Kiosk Mode (for assessments too) */}
                 {activity?.landing_config?.enableTakeEventAgainButton && !token && (
                   <div className="mt-6 pt-6 border-t border-gray-200">
@@ -3786,6 +3932,29 @@ export default function TakeActivityPage() {
                   <p className="text-sm text-gray-500">
                     A confirmation has been sent to your email
                   </p>
+                )}
+                
+                {/* Thank You Video Display */}
+                {thankyouVideo && (
+                  <div className="mt-8 bg-white rounded-2xl shadow-lg border border-gray-100 p-6 space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900 text-center">Thank You Message</h3>
+                    <div className="max-w-2xl mx-auto">
+                      <VideoPlayer
+                        videoUrl={thankyouVideo.video_url}
+                        thumbnailUrl={thankyouVideo.thumbnail_url}
+                        displayMode={thankyouVideo.display_mode || 'inline'}
+                        mustWatch={thankyouVideo.must_watch || false}
+                        autoplay={false}
+                        onTimeUpdate={(currentTime) => {
+                          setThankyouVideoWatchTime(Math.floor(currentTime));
+                        }}
+                        onComplete={() => {
+                          setThankyouVideoCompleted(true);
+                          logThankyouVideoView(thankyouVideoWatchTime, true);
+                        }}
+                      />
+                    </div>
+                  </div>
                 )}
                 
                 {/* Take Event Again Button - Kiosk Mode */}
@@ -5507,17 +5676,20 @@ export default function TakeActivityPage() {
                             <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                           ) : (
                             <div className="flex items-start gap-3">
-                              <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
-                                {currentQuestionIndex + 1}
-                              </span>
+                              {questionnaire?.settings?.question_numbering_enabled !== false && (
+                                <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                  {formatQuestionNumber(currentQuestionIndex, questionnaire?.settings?.question_numbering_format)}
+                                </span>
+                              )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1">
                                     <div 
-                                      className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                      dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                      className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_p]:inline [&_div]:inline [&_font]:inline [&_span]:inline"
+                                      dangerouslySetInnerHTML={{ 
+                                        __html: (getTranslatedText(question, 'question') as string) + (question.is_required ? ' <span class="text-red-500 text-sm font-medium">*</span>' : '') 
+                                      }}
                                     />
-                                    {question.is_required && <span className="text-red-500 text-sm font-medium ml-1">*</span>}
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <span className="text-xs text-gray-400 hidden">{question.type}</span>
@@ -5585,17 +5757,20 @@ export default function TakeActivityPage() {
                             <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                           ) : (
                             <div className="flex items-start gap-3">
-                              <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
-                                {qIndex + 1}
-                              </span>
+                              {questionnaire?.settings?.question_numbering_enabled !== false && (
+                                <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                  {formatQuestionNumber(qIndex, questionnaire?.settings?.question_numbering_format)}
+                                </span>
+                              )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1">
                                     <div 
-                                      className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                      dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                      className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_p]:inline [&_div]:inline [&_font]:inline [&_span]:inline"
+                                      dangerouslySetInnerHTML={{ 
+                                        __html: (getTranslatedText(question, 'question') as string) + (question.is_required ? ' <span class="text-red-500 text-sm font-medium">*</span>' : '') 
+                                      }}
                                     />
-                                    {question.is_required && <span className="text-red-500 text-sm font-medium ml-1">*</span>}
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <span className="text-xs text-gray-400 hidden">{question.type}</span>
@@ -5677,17 +5852,20 @@ export default function TakeActivityPage() {
                                   <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
                                 ) : (
                                   <div className="flex items-start gap-3">
-                                    <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
-                                      {qIdx + 1}
-                                    </span>
+                                    {questionnaire?.settings?.question_numbering_enabled !== false && (
+                                      <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                        {formatQuestionNumber(qIdx, questionnaire?.settings?.question_numbering_format)}
+                                      </span>
+                                    )}
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-start justify-between gap-2">
                                         <div className="flex-1">
                                           <div 
-                                            className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                            dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                            className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_p]:inline [&_div]:inline [&_font]:inline [&_span]:inline"
+                                            dangerouslySetInnerHTML={{ 
+                                              __html: (getTranslatedText(question, 'question') as string) + (question.is_required ? ' <span class="text-red-500 text-sm font-medium">*</span>' : '') 
+                                            }}
                                           />
-                                          {question.is_required && <span className="text-red-500 text-sm font-medium ml-1">*</span>}
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
                                           <span className="text-xs text-gray-400 hidden">{question.type}</span>

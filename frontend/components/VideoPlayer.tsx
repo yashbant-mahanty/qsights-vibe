@@ -42,9 +42,41 @@ export default function VideoPlayer({
   const [showModal, setShowModal] = useState(false);
   const [watchedSeconds, setWatchedSeconds] = useState(0);
   const [presignedVideoUrl, setPresignedVideoUrl] = useState<string | null>(null);
+  const [presignedThumbnailUrl, setPresignedThumbnailUrl] = useState<string | null>(null);
   const [loadingUrl, setLoadingUrl] = useState(true);
   const lastTimeRef = useRef(0);
   const autoplayAttemptedRef = useRef(false);
+
+  // Get presigned URL for S3 thumbnail
+  useEffect(() => {
+    async function fetchPresignedThumbnailUrl() {
+      if (!thumbnailUrl) {
+        setPresignedThumbnailUrl(null);
+        return;
+      }
+      
+      // If it's already a presigned URL or not an S3 URL, use it directly
+      const alreadyPresigned = isPresignedUrl(thumbnailUrl);
+      const isS3 = isS3Url(thumbnailUrl);
+      
+      if (alreadyPresigned || !isS3) {
+        setPresignedThumbnailUrl(thumbnailUrl);
+        return;
+      }
+      
+      try {
+        console.log('[VideoPlayer] Fetching presigned URL for thumbnail...');
+        const presigned = await getPresignedUrl(thumbnailUrl);
+        console.log('[VideoPlayer] Got presigned thumbnail URL');
+        setPresignedThumbnailUrl(presigned || thumbnailUrl);
+      } catch (err) {
+        console.error('[VideoPlayer] Failed to get presigned thumbnail URL:', err);
+        setPresignedThumbnailUrl(thumbnailUrl); // Fallback to original URL
+      }
+    }
+    
+    fetchPresignedThumbnailUrl();
+  }, [thumbnailUrl]);
 
   // Get presigned URL for S3 videos
   useEffect(() => {
@@ -324,7 +356,7 @@ export default function VideoPlayer({
       <video
         ref={videoRef}
         src={presignedVideoUrl!}
-        poster={thumbnailUrl}
+        poster={presignedThumbnailUrl || undefined}
         playsInline
         preload="auto"
         onPlay={() => setIsPlaying(true)}
@@ -443,9 +475,9 @@ export default function VideoPlayer({
             onClick={openModal}
             className="relative cursor-pointer group rounded-lg overflow-hidden"
           >
-            {thumbnailUrl ? (
+            {presignedThumbnailUrl ? (
               <img
-                src={thumbnailUrl}
+                src={presignedThumbnailUrl}
                 alt="Video thumbnail"
                 className="w-full h-64 object-cover group-hover:opacity-90 transition-opacity"
               />

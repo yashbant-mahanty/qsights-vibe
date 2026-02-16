@@ -117,6 +117,10 @@ export default function ViewQuestionnairePage() {
   const [showSectionHeader, setShowSectionHeader] = useState(true);
   const [sectionHeaderFormat, setSectionHeaderFormat] = useState<'numbered' | 'titleOnly'>('numbered');
   const [enabledLanguages, setEnabledLanguages] = useState(["EN"]);
+  
+  // Question Numbering state
+  const [questionNumberingEnabled, setQuestionNumberingEnabled] = useState(true);
+  const [questionNumberingFormat, setQuestionNumberingFormat] = useState<'numeric' | 'roman' | 'alphabet'>('numeric');
 
   // Video Intro Block state
   const [videoIntroEnabled, setVideoIntroEnabled] = useState(false);
@@ -143,6 +147,9 @@ export default function ViewQuestionnairePage() {
   const [viewMode, setViewMode] = useState<"tabs" | "side-by-side">("tabs");
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [translationData, setTranslationData] = useState<any>({});
+  
+  // Track if initial data has been loaded (to prevent auto-save on initial load)
+  const initialLoadCompleteRef = React.useRef(false);
 
   const availableLanguages = [
     { code: "EN", name: "English" },
@@ -215,8 +222,8 @@ export default function ViewQuestionnairePage() {
   const videoAutoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   
   useEffect(() => {
-    // Only auto-save if we have a valid questionnaire ID and video is enabled with a URL
-    if (!questionnaireId || !videoIntroEnabled || !videoIntroUrl || loading) {
+    // Only auto-save if we have a valid questionnaire ID, video is enabled with a URL, and initial load is complete
+    if (!questionnaireId || !videoIntroEnabled || !videoIntroUrl || loading || !initialLoadCompleteRef.current) {
       return;
     }
     
@@ -271,8 +278,8 @@ export default function ViewQuestionnairePage() {
   const thankyouVideoAutoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   
   useEffect(() => {
-    // Only auto-save if we have a valid questionnaire ID and video is enabled with a URL
-    if (!questionnaireId || !thankyouVideoEnabled || !thankyouVideoUrl || loading) {
+    // Only auto-save if we have a valid questionnaire ID, video is enabled with a URL, and initial load is complete
+    if (!questionnaireId || !thankyouVideoEnabled || !thankyouVideoUrl || loading || !initialLoadCompleteRef.current) {
       return;
     }
     
@@ -422,6 +429,8 @@ export default function ViewQuestionnairePage() {
         setCustomHeaderText(data.settings.custom_header_text || '');
         setShowSectionHeader(data.settings.show_section_header !== false);
         setSectionHeaderFormat(data.settings.section_header_format || 'numbered');
+        setQuestionNumberingEnabled(data.settings.question_numbering_enabled !== false);
+        setQuestionNumberingFormat(data.settings.question_numbering_format || 'numeric');
       }
       
       // Load enabled languages
@@ -505,6 +514,9 @@ export default function ViewQuestionnairePage() {
         setSections(transformedSections);
         setExpandedSections(transformedSections.map((s: any) => s.id));
       }
+      
+      // Mark initial load as complete (allows auto-save to work)
+      initialLoadCompleteRef.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load questionnaire');
       console.error('Error loading questionnaire:', err);
@@ -706,6 +718,8 @@ export default function ViewQuestionnairePage() {
           custom_header_text: customHeaderText,
           show_section_header: showSectionHeader,
           section_header_format: sectionHeaderFormat,
+          question_numbering_enabled: questionNumberingEnabled,
+          question_numbering_format: questionNumberingFormat,
         },
         sections: sectionsToSave.map((section, idx) => ({
           id: section.id,
@@ -5777,6 +5791,51 @@ export default function ViewQuestionnairePage() {
                         </p>
                       </div>
                     )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Question Numbering Settings */}
+            <Card>
+              <CardHeader className="border-b border-gray-200">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <List className="w-4 h-4 text-purple-600" />
+                  Question Numbering
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-medium text-gray-700 block">Show Question Numbers</span>
+                    <span className="text-xs text-gray-500">Display numbers before each question</span>
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    checked={questionNumberingEnabled}
+                    onChange={(e) => setQuestionNumberingEnabled(e.target.checked)}
+                    disabled={showPreview}
+                    className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed" 
+                  />
+                </div>
+
+                {questionNumberingEnabled && !showPreview && (
+                  <div className="space-y-2 pt-2 border-t border-gray-200">
+                    <label className="text-xs font-medium text-gray-700 block">
+                      Numbering Format
+                    </label>
+                    <select
+                      value={questionNumberingFormat}
+                      onChange={(e) => setQuestionNumberingFormat(e.target.value as 'numeric' | 'roman' | 'alphabet')}
+                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                    >
+                      <option value="numeric">Numeric (1, 2, 3...)</option>
+                      <option value="roman">Roman (I, II, III...)</option>
+                      <option value="alphabet">Alphabet (A, B, C...)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Preview: {questionNumberingFormat === 'numeric' ? '1, 2, 3...' : questionNumberingFormat === 'roman' ? 'I, II, III...' : 'A, B, C...'}
+                    </p>
                   </div>
                 )}
               </CardContent>

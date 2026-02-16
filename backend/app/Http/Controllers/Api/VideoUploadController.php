@@ -977,4 +977,144 @@ class VideoUploadController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get video view logs for an activity (intro & thank you videos)
+     * Returns participant-level watch analytics for results page
+     */
+    public function getActivityVideoLogs($activityId)
+    {
+        try {
+            // Get activity and its questionnaire
+            $activity = \App\Models\Activity::with('questionnaire')->findOrFail($activityId);
+            
+            if (!$activity->questionnaire_id) {
+                return response()->json([
+                    'status' => 'success',
+                    'data' => [
+                        'intro_video' => null,
+                        'thankyou_video' => null,
+                        'intro_logs' => [],
+                        'thankyou_logs' => [],
+                    ]
+                ]);
+            }
+
+            // Get intro and thank you videos
+            $introVideo = QuestionnaireVideo::where('questionnaire_id', $activity->questionnaire_id)
+                ->where('video_type', 'intro')
+                ->first();
+                
+            $thankyouVideo = QuestionnaireVideo::where('questionnaire_id', $activity->questionnaire_id)
+                ->where('video_type', 'thankyou')
+                ->first();
+
+            // Get view logs for intro video
+            $introLogs = [];
+            if ($introVideo) {
+                $logs = VideoViewLog::where('video_id', $introVideo->id)
+                    ->where('activity_id', $activityId)
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+                    
+                $introLogs = $logs->map(function ($log) {
+                    $hours = floor($log->watch_duration_seconds / 3600);
+                    $minutes = floor(($log->watch_duration_seconds % 3600) / 60);
+                    $seconds = $log->watch_duration_seconds % 60;
+                    $formattedDuration = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+                    
+                    return [
+                        'id' => $log->id,
+                        'participant_id' => $log->participant_id,
+                        'participant_name' => $log->participant_name ?? 'Anonymous',
+                        'participant_email' => $log->participant_email ?? '-',
+                        'watch_duration_seconds' => $log->watch_duration_seconds,
+                        'watch_duration_formatted' => $formattedDuration,
+                        'completed' => $log->completed,
+                        'completion_percentage' => $log->completion_percentage,
+                        'status' => $log->completed ? 'Completed' : 'In Progress',
+                        'watched_at' => $log->created_at->format('Y-m-d H:i:s'),
+                        'updated_at' => $log->updated_at->format('Y-m-d H:i:s'),
+                    ];
+                });
+            }
+
+            // Get view logs for thank you video
+            $thankyouLogs = [];
+            if ($thankyouVideo) {
+                $logs = VideoViewLog::where('video_id', $thankyouVideo->id)
+                    ->where('activity_id', $activityId)
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+                    
+                $thankyouLogs = $logs->map(function ($log) {
+                    $hours = floor($log->watch_duration_seconds / 3600);
+                    $minutes = floor(($log->watch_duration_seconds % 3600) / 60);
+                    $seconds = $log->watch_duration_seconds % 60;
+                    $formattedDuration = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+                    
+                    return [
+                        'id' => $log->id,
+                        'participant_id' => $log->participant_id,
+                        'participant_name' => $log->participant_name ?? 'Anonymous',
+                        'participant_email' => $log->participant_email ?? '-',
+                        'watch_duration_seconds' => $log->watch_duration_seconds,
+                        'watch_duration_formatted' => $formattedDuration,
+                        'completed' => $log->completed,
+                        'completion_percentage' => $log->completion_percentage,
+                        'status' => $log->completed ? 'Completed' : 'In Progress',
+                        'watched_at' => $log->created_at->format('Y-m-d H:i:s'),
+                        'updated_at' => $log->updated_at->format('Y-m-d H:i:s'),
+                    ];
+                });
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'intro_video' => $introVideo ? [
+                        'id' => $introVideo->id,
+                        'video_url' => $introVideo->video_url,
+                        'thumbnail_url' => $introVideo->thumbnail_url,
+                        'display_mode' => $introVideo->display_mode,
+                        'must_watch' => $introVideo->must_watch,
+                    ] : null,
+                    'thankyou_video' => $thankyouVideo ? [
+                        'id' => $thankyouVideo->id,
+                        'video_url' => $thankyouVideo->video_url,
+                        'thumbnail_url' => $thankyouVideo->thumbnail_url,
+                        'display_mode' => $thankyouVideo->display_mode,
+                        'must_watch' => $thankyouVideo->must_watch,
+                    ] : null,
+                    'intro_logs' => $introLogs,
+                    'thankyou_logs' => $thankyouLogs,
+                    'intro_stats' => [
+                        'total_views' => count($introLogs),
+                        'completed_views' => collect($introLogs)->where('completed', true)->count(),
+                        'avg_watch_duration' => count($introLogs) > 0 
+                            ? collect($introLogs)->avg('watch_duration_seconds') 
+                            : 0,
+                    ],
+                    'thankyou_stats' => [
+                        'total_views' => count($thankyouLogs),
+                        'completed_views' => collect($thankyouLogs)->where('completed', true)->count(),
+                        'avg_watch_duration' => count($thankyouLogs) > 0 
+                            ? collect($thankyouLogs)->avg('watch_duration_seconds') 
+                            : 0,
+                    ],
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('Failed to get activity video logs', [
+                'activity_id' => $activityId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to get video logs'
+            ], 500);
+        }
+    }
 }
