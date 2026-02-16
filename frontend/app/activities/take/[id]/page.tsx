@@ -45,6 +45,7 @@ import { createAnswerPayload } from "@/lib/valueDisplayUtils";
 import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 import VideoPlayer from "@/components/VideoPlayer";
 import VideoPlayerWithTracking from "@/components/VideoPlayerWithTracking";
+import { ReferencesDisplay } from "@/components/ui/references-display";
 
 interface FormField {
   id: string;
@@ -1206,9 +1207,9 @@ export default function TakeActivityPage() {
         console.log('Loaded questionnaire:', activityData.data.questionnaire);
         setQuestionnaire(activityData.data.questionnaire);
         
-        // Fetch video intro for this questionnaire
+        // Fetch video intro for this questionnaire (use public endpoint - no auth required)
         try {
-          const videoResponse = await fetch(`/api/videos/questionnaire/${activityData.data.questionnaire.id}`);
+          const videoResponse = await fetch(`/api/public/videos/questionnaire/${activityData.data.questionnaire.id}`);
           if (videoResponse.ok) {
             const videoData = await videoResponse.json();
             if (videoData.data) {
@@ -1601,10 +1602,13 @@ export default function TakeActivityPage() {
       // Check if video intro exists - show it before starting questionnaire
       if (videoIntro) {
         console.log('Video intro found, showing video screen first');
+        console.log('[VIDEO INTRO DEBUG] Setting states: showForm=false, showVideoIntro=true, started=false');
         setShowForm(false);
         setShowVideoIntro(true); // Show video intro screen
         setStarted(false); // Don't start questionnaire yet
+        console.log('[VIDEO INTRO DEBUG] States set - expecting video intro screen on next render');
       } else {
+        console.log('[VIDEO INTRO DEBUG] No video intro, starting questionnaire directly');
         setShowForm(false);
         setStarted(true); // No video, start questionnaire directly
       }
@@ -1683,9 +1687,14 @@ export default function TakeActivityPage() {
   // Check for existing watch log on mount (for resume functionality)
   useEffect(() => {
     const checkExistingWatchLog = async () => {
-      if (!videoIntro || !activityId || !participantId || !questionnaire?.id) return;
+      // CRITICAL: Must have valid participantId (not null/undefined/"" and not "undefined" string)
+      if (!videoIntro || !activityId || !participantId || participantId === 'undefined' || !questionnaire?.id) {
+        console.log('[Video Intro] Skipping watch-log check - missing required params:', { videoIntro: !!videoIntro, activityId, participantId, questionnaireId: questionnaire?.id });
+        return;
+      }
       if (showVideoIntro && !showResumeDialog) {
         try {
+          console.log('[Video Intro] Checking existing watch log with params:', { video_id: videoIntro.id, activity_id: activityId, participant_id: participantId });
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/videos/watch-log`, {
             method: 'POST',
             headers: {
@@ -3893,6 +3902,9 @@ export default function TakeActivityPage() {
     );
   }
 
+  // DEBUG: Log render state to trace video intro issue
+  console.log('[RENDER DEBUG] State check:', { showForm, isAnonymous, started, isPreview, showVideoIntro, hasVideoIntro: !!videoIntro });
+
   // Show landing page form when needed
   if (showForm || (isAnonymous && !started) || (isPreview && !started)) {
     // Determine form title based on link type
@@ -4792,8 +4804,12 @@ export default function TakeActivityPage() {
     );
   }
 
+  // DEBUG: Check video intro conditions
+  console.log('[VIDEO INTRO RENDER CHECK] showVideoIntro:', showVideoIntro, 'videoIntro:', !!videoIntro, 'willShowVideoScreen:', showVideoIntro && videoIntro);
+  
   // Show video intro screen after registration, before questionnaire
   if (showVideoIntro && videoIntro) {
+    console.log('[VIDEO INTRO RENDER] Rendering video intro screen');
     return (
       <div 
         className="min-h-screen relative flex items-center justify-center"
@@ -4896,8 +4912,8 @@ export default function TakeActivityPage() {
                 <VideoPlayer
                   videoUrl={videoIntro.video_url}
                   thumbnailUrl={videoIntro.thumbnail_url}
-                  autoplay={videoIntro.autoplay || false}
-                  mustWatch={videoIntro.must_watch || false}
+                  autoplay={videoIntro.autoplay ?? false}
+                  mustWatch={videoIntro.must_watch ?? false}
                   displayMode={videoIntro.display_mode || 'inline'}
                   onComplete={handleVideoComplete}
                   onTimeUpdate={handleVideoTimeUpdate}
@@ -5497,11 +5513,13 @@ export default function TakeActivityPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1">
-                                    <div 
-                                      className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                      dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                    />
-                                    {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
+                                    <div className="inline-flex items-start gap-1 flex-wrap">
+                                      <div 
+                                        className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
+                                        dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                      />
+                                      {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <span className="text-xs text-gray-400 hidden">{question.type}</span>
@@ -5522,9 +5540,23 @@ export default function TakeActivityPage() {
                                 {question.description && (
                                   <p className="text-sm text-gray-500 mt-1">{question.description}</p>
                                 )}
+                                {/* References - After Question */}
+                                {question.references && question.references.filter((r: any) => r.display_position === 'AFTER_QUESTION').length > 0 && (
+                                  <ReferencesDisplay 
+                                    references={question.references.filter((r: any) => r.display_position === 'AFTER_QUESTION')} 
+                                    className="mt-2"
+                                  />
+                                )}
                                 {/* Question Image */}
                                 {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                 <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                                {/* References - After Answer */}
+                                {question.references && question.references.filter((r: any) => r.display_position === 'AFTER_ANSWER').length > 0 && (
+                                  <ReferencesDisplay 
+                                    references={question.references.filter((r: any) => r.display_position === 'AFTER_ANSWER')} 
+                                    className="mt-3"
+                                  />
+                                )}
                                 {/* Comment Box - shows after answering if enabled */}
                                 {renderCommentBox(question)}
                               </div>
@@ -5561,11 +5593,13 @@ export default function TakeActivityPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1">
-                                    <div 
-                                      className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                      dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                    />
-                                    {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
+                                    <div className="inline-flex items-start gap-1 flex-wrap">
+                                      <div 
+                                        className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
+                                        dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                      />
+                                      {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <span className="text-xs text-gray-400 hidden">{question.type}</span>
@@ -5586,9 +5620,23 @@ export default function TakeActivityPage() {
                                 {question.description && (
                                   <p className="text-sm text-gray-500 mt-1">{question.description}</p>
                                 )}
+                                {/* References - After Question */}
+                                {question.references && question.references.filter((r: any) => r.display_position === 'AFTER_QUESTION').length > 0 && (
+                                  <ReferencesDisplay 
+                                    references={question.references.filter((r: any) => r.display_position === 'AFTER_QUESTION')} 
+                                    className="mt-2"
+                                  />
+                                )}
                                 {/* Question Image */}
                                 {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                 <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                                {/* References - After Answer */}
+                                {question.references && question.references.filter((r: any) => r.display_position === 'AFTER_ANSWER').length > 0 && (
+                                  <ReferencesDisplay 
+                                    references={question.references.filter((r: any) => r.display_position === 'AFTER_ANSWER')} 
+                                    className="mt-3"
+                                  />
+                                )}
                                 {/* Comment Box - shows after answering if enabled */}
                                 {renderCommentBox(question)}
                               </div>
@@ -5639,11 +5687,13 @@ export default function TakeActivityPage() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-start justify-between gap-2">
                                         <div className="flex-1">
-                                          <div 
-                                            className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                            dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                          />
-                                          {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
+                                          <div className="inline-flex items-start gap-1 flex-wrap">
+                                            <div 
+                                              className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
+                                              dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                            />
+                                            {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
+                                          </div>
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
                                           <span className="text-xs text-gray-400 hidden">{question.type}</span>
@@ -5664,9 +5714,23 @@ export default function TakeActivityPage() {
                                       {question.description && (
                                         <p className="text-sm text-gray-500 mt-1">{question.description}</p>
                                       )}
+                                      {/* References - After Question */}
+                                      {question.references && question.references.filter((r: any) => r.display_position === 'AFTER_QUESTION').length > 0 && (
+                                        <ReferencesDisplay 
+                                          references={question.references.filter((r: any) => r.display_position === 'AFTER_QUESTION')} 
+                                          className="mt-2"
+                                        />
+                                      )}
                                       {/* Question Image */}
                                       {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
                                       <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                                      {/* References - After Answer */}
+                                      {question.references && question.references.filter((r: any) => r.display_position === 'AFTER_ANSWER').length > 0 && (
+                                        <ReferencesDisplay 
+                                          references={question.references.filter((r: any) => r.display_position === 'AFTER_ANSWER')} 
+                                          className="mt-3"
+                                        />
+                                      )}
                                       {/* Comment Box - shows after answering if enabled */}
                                       {renderCommentBox(question)}
                                     </div>
