@@ -98,6 +98,13 @@ class Activity extends Model
         'approved_by',
         'approved_at',
         'approval_comments',
+        // Thank you video fields
+        'thankyou_video_enabled',
+        'thankyou_video_url',
+        'thankyou_video_duration_seconds',
+        'thankyou_video_thumbnail_url',
+        'thankyou_video_mandatory',
+        'thankyou_video_play_mode',
     ];
 
     protected $casts = [
@@ -126,6 +133,10 @@ class Activity extends Model
         'questions_to_randomize' => 'integer',
         // Approval audit fields
         'approved_at' => 'datetime',
+        // Thank you video fields
+        'thankyou_video_enabled' => 'boolean',
+        'thankyou_video_duration_seconds' => 'integer',
+        'thankyou_video_mandatory' => 'boolean',
     ];
 
     /**
