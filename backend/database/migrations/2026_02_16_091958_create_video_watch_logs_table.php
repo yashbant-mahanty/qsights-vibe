@@ -19,7 +19,7 @@ return new class extends Migration
             $table->enum('video_type', ['QUESTION', 'INTRO', 'THANKYOU'])->default('QUESTION')->after('question_id');
             
             // Make question_id nullable since intro/thankyou videos are not tied to questions
-            $table->uuid('question_id')->nullable()->change();
+            $table->bigInteger('question_id')->nullable()->change();
         });
         
         // Drop the old unique constraint and add new one
@@ -45,7 +45,7 @@ return new class extends Migration
             $table->unique(['response_id', 'question_id']);
             
             // Make question_id required again
-            $table->uuid('question_id')->nullable(false)->change();
+            $table->bigInteger('question_id')->nullable(false)->change();
             
             // Remove video_type column
             $table->dropColumn('video_type');
