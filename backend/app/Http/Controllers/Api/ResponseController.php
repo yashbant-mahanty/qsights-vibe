@@ -121,6 +121,8 @@ class ResponseController extends Controller
             'answers.*.value' => 'nullable',
             'answers.*.value_array' => 'nullable|array',
             'answers.*.other_text' => 'nullable|string',
+            'answers.*.comment_text' => 'nullable|string',
+            'answers.*.commented_at' => 'nullable|date',
             'answers.*.value_translations' => 'nullable|array',
             'answers.*.time_spent' => 'nullable|integer',
             'auto_save' => 'nullable|boolean',
@@ -166,6 +168,18 @@ class ResponseController extends Controller
                     $answer->other_text = $otherText !== '' ? $otherText : null;
                 } else {
                     $answer->other_text = null;
+                }
+
+                // Handle comment text
+                if (isset($answerData['comment_text'])) {
+                    $commentText = is_string($answerData['comment_text']) ? trim($answerData['comment_text']) : '';
+                    $answer->comment_text = $commentText !== '' ? $commentText : null;
+                    if ($commentText !== '' && isset($answerData['commented_at'])) {
+                        $answer->commented_at = $answerData['commented_at'];
+                    }
+                } else {
+                    $answer->comment_text = null;
+                    $answer->commented_at = null;
                 }
 
                 // Handle multilingual translations
@@ -235,6 +249,8 @@ class ResponseController extends Controller
             'answers.*.value' => 'nullable',
             'answers.*.value_array' => 'nullable|array',
             'answers.*.other_text' => 'nullable|string',
+            'answers.*.comment_text' => 'nullable|string',
+            'answers.*.commented_at' => 'nullable|date',
             'answers.*.value_translations' => 'nullable|array',
             'answers.*.time_spent' => 'nullable|integer',
         ]);
@@ -285,6 +301,18 @@ class ResponseController extends Controller
                     $answer->other_text = $otherText;
                 } else {
                     $answer->other_text = null;
+                }
+
+                // Handle comment text
+                if (isset($answerData['comment_text'])) {
+                    $commentText = is_string($answerData['comment_text']) ? trim($answerData['comment_text']) : '';
+                    $answer->comment_text = $commentText !== '' ? $commentText : null;
+                    if ($commentText !== '' && isset($answerData['commented_at'])) {
+                        $answer->commented_at = $answerData['commented_at'];
+                    }
+                } else {
+                    $answer->comment_text = null;
+                    $answer->commented_at = null;
                 }
 
                 if (isset($answerData['value_translations'])) {
@@ -472,6 +500,8 @@ class ResponseController extends Controller
                             'value' => $ans['value'] ?? null,
                             'value_array' => $ans['value_array'] ?? null,
                             'other_text' => $ans['other_text'] ?? null,
+                            'comment_text' => $ans['comment_text'] ?? null,
+                            'commented_at' => $ans['commented_at'] ?? null,
                         ];
                     })->toArray();
                     
@@ -502,6 +532,8 @@ class ResponseController extends Controller
                                     'value' => is_array($value) ? null : $value,
                                     'value_array' => is_array($value) ? $value : null,
                                     'other_text' => null,
+                                    'comment_text' => null,
+                                    'commented_at' => null,
                                 ];
                             }
                             $response->setRelation('answers', $formattedAnswers);

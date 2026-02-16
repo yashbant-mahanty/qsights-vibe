@@ -7,7 +7,7 @@ export async function POST(
   try {
     const { id: activityId } = await params;
     const body = await request.json();
-    const { participant_id, answers, started_at, time_expired_at, auto_submitted, token, is_preview, generated_link_tag } = body;
+    const { participant_id, answers, comments, started_at, time_expired_at, auto_submitted, token, is_preview, generated_link_tag } = body;
 
     // Validate required fields
     if (!participant_id) {
@@ -28,6 +28,7 @@ export async function POST(
       activityId,
       participant_id,
       answersCount: Object.keys(answers).length,
+      commentsCount: comments ? Object.keys(comments).length : 0,
       started_at,
       time_expired_at,
       auto_submitted,
@@ -47,6 +48,7 @@ export async function POST(
       body: JSON.stringify({
         participant_id,
         answers: answers,  // Send as object with question IDs as keys
+        comments: comments,  // Send comments as object with question IDs as keys
         started_at,
         time_expired_at,
         auto_submitted,
