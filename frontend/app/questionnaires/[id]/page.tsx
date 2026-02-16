@@ -210,6 +210,118 @@ export default function ViewQuestionnairePage() {
     loadPrograms();
   }, [questionnaireId]);
 
+  // Auto-save video intro metadata when video URL or settings change
+  const [videoAutoSaving, setVideoAutoSaving] = useState(false);
+  const videoAutoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    // Only auto-save if we have a valid questionnaire ID and video is enabled with a URL
+    if (!questionnaireId || !videoIntroEnabled || !videoIntroUrl || loading) {
+      return;
+    }
+    
+    // Debounce the auto-save to avoid too many API calls
+    if (videoAutoSaveTimeoutRef.current) {
+      clearTimeout(videoAutoSaveTimeoutRef.current);
+    }
+    
+    videoAutoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        setVideoAutoSaving(true);
+        console.log('🎬 AUTO-SAVING video intro metadata...');
+        
+        const videoPayload = {
+          questionnaire_id: questionnaireId,
+          video_url: videoIntroUrl,
+          thumbnail_url: videoThumbnailUrl || null,
+          video_type: 'intro',
+          display_mode: videoDisplayMode,
+          must_watch: videoMustWatch,
+          autoplay: videoAutoplay,
+          video_duration_seconds: videoDuration,
+        };
+        
+        console.log('🎬 Auto-save payload:', videoPayload);
+        
+        const result = await fetchWithAuth('/videos/metadata', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(videoPayload),
+        });
+        
+        console.log('🎬 Video intro auto-saved successfully:', result);
+        toast({ title: "Video Saved", description: "Intro video settings saved automatically", variant: "success" });
+      } catch (err) {
+        console.error('❌ Auto-save video intro failed:', err);
+        toast({ title: "Warning", description: "Failed to auto-save video settings. Please save questionnaire manually.", variant: "warning" });
+      } finally {
+        setVideoAutoSaving(false);
+      }
+    }, 1500); // 1.5 second debounce
+    
+    return () => {
+      if (videoAutoSaveTimeoutRef.current) {
+        clearTimeout(videoAutoSaveTimeoutRef.current);
+      }
+    };
+  }, [videoIntroEnabled, videoIntroUrl, videoThumbnailUrl, videoDisplayMode, videoMustWatch, videoAutoplay, videoDuration, questionnaireId, loading]);
+
+  // Auto-save thank you video metadata when video URL or settings change
+  const [thankyouVideoAutoSaving, setThankyouVideoAutoSaving] = useState(false);
+  const thankyouVideoAutoSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    // Only auto-save if we have a valid questionnaire ID and video is enabled with a URL
+    if (!questionnaireId || !thankyouVideoEnabled || !thankyouVideoUrl || loading) {
+      return;
+    }
+    
+    // Debounce the auto-save
+    if (thankyouVideoAutoSaveTimeoutRef.current) {
+      clearTimeout(thankyouVideoAutoSaveTimeoutRef.current);
+    }
+    
+    thankyouVideoAutoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        setThankyouVideoAutoSaving(true);
+        console.log('🎊 AUTO-SAVING thank you video metadata...');
+        
+        const videoPayload = {
+          questionnaire_id: questionnaireId,
+          video_url: thankyouVideoUrl,
+          thumbnail_url: thankyouVideoThumbnailUrl || null,
+          video_type: 'thankyou',
+          display_mode: thankyouVideoPlayMode,
+          must_watch: thankyouVideoMandatory,
+          autoplay: false,
+          video_duration_seconds: thankyouVideoDuration,
+        };
+        
+        console.log('🎊 Auto-save payload:', videoPayload);
+        
+        const result = await fetchWithAuth('/videos/metadata', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(videoPayload),
+        });
+        
+        console.log('🎊 Thank you video auto-saved successfully:', result);
+        toast({ title: "Video Saved", description: "Thank you video settings saved automatically", variant: "success" });
+      } catch (err) {
+        console.error('❌ Auto-save thank you video failed:', err);
+        toast({ title: "Warning", description: "Failed to auto-save video settings. Please save questionnaire manually.", variant: "warning" });
+      } finally {
+        setThankyouVideoAutoSaving(false);
+      }
+    }, 1500); // 1.5 second debounce
+    
+    return () => {
+      if (thankyouVideoAutoSaveTimeoutRef.current) {
+        clearTimeout(thankyouVideoAutoSaveTimeoutRef.current);
+      }
+    };
+  }, [thankyouVideoEnabled, thankyouVideoUrl, thankyouVideoThumbnailUrl, thankyouVideoPlayMode, thankyouVideoMandatory, thankyouVideoDuration, questionnaireId, loading]);
+
   // Memoized update callbacks to prevent re-renders
   const updateQuestionProperty = React.useCallback((sectionId: number, questionId: number, property: string, value: any) => {
     setSections((prevSections: any) =>
