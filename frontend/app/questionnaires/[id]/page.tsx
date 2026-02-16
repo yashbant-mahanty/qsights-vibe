@@ -126,6 +126,15 @@ export default function ViewQuestionnairePage() {
   const [videoMustWatch, setVideoMustWatch] = useState(false);
   const [videoAutoplay, setVideoAutoplay] = useState(false);
   const [videoDuration, setVideoDuration] = useState(0);
+  
+  // Thank You Video Block state
+  const [thankyouVideoEnabled, setThankyouVideoEnabled] = useState(false);
+  const [thankyouVideoUrl, setThankyouVideoUrl] = useState('');
+  const [thankyouVideoThumbnailUrl, setThankyouVideoThumbnailUrl] = useState('');
+  const [thankyouVideoPlayMode, setThankyouVideoPlayMode] = useState<'inline' | 'new_tab'>('inline');
+  const [thankyouVideoMandatory, setThankyouVideoMandatory] = useState(false);
+  const [thankyouVideoDuration, setThankyouVideoDuration] = useState(0);
+  
   const [activeLanguage, setActiveLanguage] = useState("EN");
   const [showMultilingualEditor, setShowMultilingualEditor] = useState(false);
   const [selectedQuestionForTranslation, setSelectedQuestionForTranslation] = useState<any>(null);
@@ -322,6 +331,21 @@ export default function ViewQuestionnairePage() {
         }
       } catch (videoErr) {
         console.log('No video intro configured:', videoErr);
+      }
+      
+      // Load thank you video metadata
+      try {
+        const thankyouVideoResponse = await fetchWithAuth(`/videos/questionnaire/${questionnaireId}?type=thankyou`);
+        if (thankyouVideoResponse.data) {
+          setThankyouVideoEnabled(true);
+          setThankyouVideoUrl(thankyouVideoResponse.data.video_url || '');
+          setThankyouVideoThumbnailUrl(thankyouVideoResponse.data.thumbnail_url || '');
+          setThankyouVideoPlayMode(thankyouVideoResponse.data.play_mode || 'inline');
+          setThankyouVideoMandatory(thankyouVideoResponse.data.mandatory ?? false);
+          setThankyouVideoDuration(thankyouVideoResponse.data.video_duration_seconds || 0);
+        }
+      } catch (thankyouVideoErr) {
+        console.log('No thank you video configured:', thankyouVideoErr);
       }
       
       // Transform backend sections/questions to frontend format
@@ -723,6 +747,45 @@ export default function ViewQuestionnairePage() {
         }
       } else {
         console.log('🎬 Skipping video metadata save (not enabled or no URL)');
+      }
+      
+      // Save thank you video metadata if enabled
+      console.log('🎊 Thank You Video Save Check:', {
+        thankyouVideoEnabled,
+        thankyouVideoUrl,
+        thankyouVideoThumbnailUrl,
+        thankyouVideoDuration,
+        thankyouVideoPlayMode,
+        thankyouVideoMandatory
+      });
+      
+      if (thankyouVideoEnabled && thankyouVideoUrl) {
+        try {
+          console.log('🎊 Saving thank you video metadata to /videos/metadata...');
+          const thankyouVideoPayload = {
+            questionnaire_id: questionnaireId,
+            video_url: thankyouVideoUrl,
+            thumbnail_url: thankyouVideoThumbnailUrl || null,
+            video_type: 'thankyou',
+            play_mode: thankyouVideoPlayMode,
+            mandatory: thankyouVideoMandatory,
+            video_duration_seconds: thankyouVideoDuration,
+          };
+          console.log('🎊 Thank you video metadata payload:', thankyouVideoPayload);
+          
+          const thankyouVideoResult = await fetchWithAuth('/videos/metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(thankyouVideoPayload),
+          });
+          console.log('🎊 Thank you video metadata saved successfully:', thankyouVideoResult);
+        } catch (videoError) {
+          console.error('❌ Failed to save thank you video metadata:', videoError);
+          console.warn('⚠️ Thank you video metadata save failed. Questionnaire saved successfully but thank you video metadata could not be updated. This is non-critical and can be ignored if video is already working.');
+          // Silent fail - don't block user with alert since questionnaire is saved
+        }
+      } else {
+        console.log('🎊 Skipping thank you video metadata save (not enabled or no URL)');
       }
       
       return result;
@@ -5503,6 +5566,101 @@ export default function ViewQuestionnairePage() {
                       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <p className="text-xs text-blue-800">
                           <strong>Video Duration:</strong> {Math.floor(videoDuration / 60)}:{(videoDuration % 60).toString().padStart(2, '0')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Thank You Video Block */}
+            <Card>
+              <CardHeader className="border-b border-gray-200">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Video className="w-4 h-4 text-green-600" />
+                  Thank You Page Video
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-700">Enable Thank You Video</span>
+                  <input 
+                    type="checkbox" 
+                    checked={thankyouVideoEnabled}
+                    onChange={(e) => setThankyouVideoEnabled(e.target.checked)}
+                    disabled={showPreview}
+                    className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed" 
+                  />
+                </div>
+
+                {thankyouVideoEnabled && !showPreview && (
+                  <div className="space-y-4 pt-2 border-t border-gray-200">
+                    {/* Video Upload */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Upload Video
+                      </label>
+                      <S3VideoUpload
+                        value={thankyouVideoUrl}
+                        onChange={setThankyouVideoUrl}
+                        onRemove={() => setThankyouVideoUrl('')}
+                        questionnaireId={questionnaireId}
+                        maxSize={100}
+                        onMetadataChange={(metadata) => setThankyouVideoDuration(metadata.duration)}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">MP4, WEBM up to 100MB</p>
+                    </div>
+
+                    {/* Thumbnail Upload */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Upload Thumbnail (Optional)
+                      </label>
+                      <S3ImageUpload
+                        value={thankyouVideoThumbnailUrl}
+                        onChange={setThankyouVideoThumbnailUrl}
+                        onRemove={() => setThankyouVideoThumbnailUrl('')}
+                        folder="video-thumbnails"
+                        maxSize={5}
+                        showPreview={true}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
+                    </div>
+
+                    {/* Play Mode */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Play Mode
+                      </label>
+                      <select
+                        value={thankyouVideoPlayMode}
+                        onChange={(e) => setThankyouVideoPlayMode(e.target.value as 'inline' | 'new_tab')}
+                        className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                      >
+                        <option value="inline">Inline (Play within page)</option>
+                        <option value="new_tab">New Tab (Open in new window)</option>
+                      </select>
+                    </div>
+
+                    {/* Mandatory Watch */}
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <span className="text-xs font-medium text-gray-700 block">Mandatory Full Watch</span>
+                        <span className="text-xs text-gray-500">User must watch full video before leaving</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={thankyouVideoMandatory}
+                        onChange={(e) => setThankyouVideoMandatory(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer" 
+                      />
+                    </div>
+
+                    {thankyouVideoDuration > 0 && (
+                      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-xs text-green-800">
+                          <strong>Video Duration:</strong> {Math.floor(thankyouVideoDuration / 60)}:{(thankyouVideoDuration % 60).toString().padStart(2, '0')}
                         </p>
                       </div>
                     )}
