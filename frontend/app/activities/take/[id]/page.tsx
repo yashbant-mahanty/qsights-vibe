@@ -5513,13 +5513,11 @@ export default function TakeActivityPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1">
-                                    <div className="inline-flex items-start gap-1 flex-wrap">
-                                      <div 
-                                        className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                        dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                      />
-                                      {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
-                                    </div>
+                                    <div 
+                                      className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
+                                      dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                    />
+                                    {question.is_required && <span className="text-red-500 text-sm font-medium ml-1">*</span>}
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <span className="text-xs text-gray-400 hidden">{question.type}</span>
@@ -5593,13 +5591,11 @@ export default function TakeActivityPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1">
-                                    <div className="inline-flex items-start gap-1 flex-wrap">
-                                      <div 
-                                        className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                        dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                      />
-                                      {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
-                                    </div>
+                                    <div 
+                                      className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
+                                      dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                    />
+                                    {question.is_required && <span className="text-red-500 text-sm font-medium ml-1">*</span>}
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     <span className="text-xs text-gray-400 hidden">{question.type}</span>
@@ -5687,13 +5683,11 @@ export default function TakeActivityPage() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-start justify-between gap-2">
                                         <div className="flex-1">
-                                          <div className="inline-flex items-start gap-1 flex-wrap">
-                                            <div 
-                                              className="text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
-                                              dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
-                                            />
-                                            {question.is_required && <span className="text-red-500 text-sm font-medium">*</span>}
-                                          </div>
+                                          <div 
+                                            className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1"
+                                            dangerouslySetInnerHTML={{ __html: getTranslatedText(question, 'question') as string }}
+                                          />
+                                          {question.is_required && <span className="text-red-500 text-sm font-medium ml-1">*</span>}
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
                                           <span className="text-xs text-gray-400 hidden">{question.type}</span>
