@@ -118,8 +118,8 @@ class PublicActivityController extends Controller
      */
     public function show(Request $request, $id)
     {
-        // Load questionnaire with sections and questions - questions already have translations as JSON field
-        $query = Activity::with(['questionnaire.sections.questions', 'program']);
+        // Load questionnaire with sections, questions and references
+        $query = Activity::with(['questionnaire.sections.questions.references', 'program']);
         
         // If preview mode is enabled, show any status
         $isPreview = $request->query('preview') === 'true';
@@ -1026,7 +1026,7 @@ class PublicActivityController extends Controller
             ]);
         }
 
-        $activity = Activity::with('questionnaire.sections.questions')->findOrFail($activityId);
+        $activity = Activity::with('questionnaire.sections.questions.references')->findOrFail($activityId);
         
         // Get or create participant (handles anonymous participants)
         if ($isAnonymous) {

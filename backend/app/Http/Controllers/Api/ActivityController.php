@@ -32,7 +32,7 @@ class ActivityController extends Controller
             $request->merge(['program_id' => $user->program_id]);
         }
         
-        $query = Activity::with(['program', 'questionnaire.sections.questions']);
+        $query = Activity::with(['program', 'questionnaire.sections.questions.references']);
         
         // Only exclude soft-deleted activities
         if (!$request->boolean('with_trashed')) {
@@ -378,7 +378,7 @@ class ActivityController extends Controller
      */
     public function show(string $id)
     {
-        $activity = Activity::with(['program', 'questionnaire.sections.questions'])
+        $activity = Activity::with(['program', 'questionnaire.sections.questions.references'])
             ->findOrFail($id);
 
         $activity->computed_status = $activity->getComputedStatus();

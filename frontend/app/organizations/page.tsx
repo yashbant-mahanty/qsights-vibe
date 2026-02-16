@@ -64,8 +64,9 @@ export default function OrganizationsPage() {
         if (response.ok) {
           const data = await response.json();
           const userRole = data.user?.role as UserRole;
-          // Allow super-admin, admin, and evaluation-admin (view-only) to access
-          if (!hasFullAccess(userRole) && userRole !== 'evaluation-admin') {
+          // Allow super-admin, admin, program-admin, and evaluation-admin to access
+          const allowedRoles = ['super-admin', 'admin', 'program-admin', 'evaluation-admin'];
+          if (!allowedRoles.includes(userRole)) {
             router.push('/dashboard');
           }
         }

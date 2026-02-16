@@ -130,6 +130,12 @@ export default function ApprovalReviewPage() {
   }
 
   const isAlreadyReviewed = approvalRequest.status !== 'pending';
+  
+  // Check if manager review is required and if it's approved
+  const isManagerReviewRequired = !!approvalRequest.manager_email;
+  const isManagerReviewApproved = approvalRequest.manager_review_status === 'approved';
+  const isManagerReviewPending = approvalRequest.manager_review_status === 'pending';
+  const canApprove = !isManagerReviewRequired || isManagerReviewApproved;
 
   return (
     <RoleBasedLayout>
@@ -500,6 +506,92 @@ export default function ApprovalReviewPage() {
           </CardContent>
         </Card>
 
+        {/* Manager Review Status - Only show if manager review is configured */}
+        {approvalRequest.manager_email && (
+          <Card className={`border-2 ${
+            approvalRequest.manager_review_status === 'approved'
+              ? 'bg-green-50 border-green-200'
+              : approvalRequest.manager_review_status === 'pending'
+              ? 'bg-yellow-50 border-yellow-200'
+              : 'bg-gray-50 border-gray-200'
+          }`}>
+            <CardHeader className="border-b border-gray-200 pb-4">
+              <CardTitle className="flex items-center gap-2">
+                {approvalRequest.manager_review_status === 'approved' ? (
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                ) : approvalRequest.manager_review_status === 'pending' ? (
+                  <Clock className="w-5 h-5 text-yellow-600" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-gray-600" />
+                )}
+                Manager Review Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">Manager Name</p>
+                  <p className="font-semibold text-gray-900">{approvalRequest.manager_name || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">Manager Email</p>
+                  <p className="font-semibold text-gray-900">{approvalRequest.manager_email}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">Review Status</p>
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                    approvalRequest.manager_review_status === 'approved'
+                      ? 'bg-green-100 text-green-800'
+                      : approvalRequest.manager_review_status === 'pending'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {approvalRequest.manager_review_status === 'approved' ? '✓ Approved' :
+                     approvalRequest.manager_review_status === 'pending' ? '⏳ Pending' :
+                     'Not Required'}
+                  </span>
+                </div>
+                {approvalRequest.manager_reviewed_at && (
+                  <div>
+                    <p className="text-xs text-gray-600 mb-1">Reviewed On</p>
+                    <p className="font-semibold text-gray-900">
+                      {new Date(approvalRequest.manager_reviewed_at).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {approvalRequest.manager_review_notes && (
+                <div className="pt-4 border-t border-gray-200">
+                  <p className="text-xs text-gray-600 mb-2">Manager's Notes</p>
+                  <p className="text-gray-900 bg-white p-3 rounded-lg border border-gray-200">
+                    {approvalRequest.manager_review_notes}
+                  </p>
+                </div>
+              )}
+              {approvalRequest.expected_participants && (
+                <div className="pt-4 border-t border-gray-200">
+                  <p className="text-xs text-gray-600 mb-1">Expected Participants (Manager Input)</p>
+                  <p className="font-semibold text-gray-900">{approvalRequest.expected_participants}</p>
+                </div>
+              )}
+              {approvalRequest.manager_review_status === 'pending' && currentUser && (currentUser.role === 'super-admin' || currentUser.role === 'admin') && (
+                <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded-r-lg mt-4">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-700 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold text-yellow-900">Awaiting Manager Review</p>
+                      <p className="text-sm text-yellow-800 mt-1">
+                        This event requires manager approval before you can approve it.
+                        The manager has been notified and will review the request.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Review Form - Only for Super Admin and Admin */}
         {!isAlreadyReviewed && currentUser && (currentUser.role === 'super-admin' || currentUser.role === 'admin') ? (
           <Card>
@@ -570,7 +662,7 @@ export default function ApprovalReviewPage() {
                 </button>
                 <button
                   onClick={handleReview}
-                  disabled={processing || !action || !remarks.trim()}
+                  disabled={processing || !action || !remarks.trim() || (action === 'approve' && !canApprove)}
                   className={`px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     action === 'approve'
                       ? 'bg-green-600 text-white hover:bg-green-700'
@@ -578,10 +670,29 @@ export default function ApprovalReviewPage() {
                       ? 'bg-red-600 text-white hover:bg-red-700'
                       : 'bg-gray-300 text-gray-600'
                   }`}
+                  title={
+                    action === 'approve' && !canApprove
+                      ? 'Awaiting manager review approval before you can approve'
+                      : ''
+                  }
                 >
                   {processing ? "Processing..." : action ? `Confirm ${action === 'approve' ? 'Approval' : 'Rejection'}` : "Select Action"}
                 </button>
               </div>
+              {action === 'approve' && isManagerReviewPending && (
+                <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded-r-lg mt-4">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-700 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold text-yellow-900">Manager Review and Submit Required</p>
+                      <p className="text-sm text-yellow-800 mt-1">
+                        This event requires manager review and submission before you can approve it.
+                        Please wait for the manager to complete their review.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : !isAlreadyReviewed && currentUser && (currentUser.role === 'program-admin' || currentUser.role === 'program-manager') ? (

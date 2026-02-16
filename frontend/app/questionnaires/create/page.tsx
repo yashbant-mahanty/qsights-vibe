@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import RichTextEditor from "@/components/RichTextEditor";
 import IsolatedTextInput from "@/components/IsolatedTextInput";
+import IsolatedReferenceItem from "@/components/IsolatedReferenceItem";
 import EnhancedConditionalLogicEditor from "@/components/EnhancedConditionalLogicEditor";
 import ImportPreviewModal from "@/components/ImportPreviewModal";
 import S3ImageUpload from "@/components/S3ImageUpload";
@@ -51,6 +52,8 @@ import {
   ClipboardList,
   Video,
   AlertCircle,
+  BookOpen,
+  ExternalLink,
 } from "lucide-react";
 import {
   SliderScale,
@@ -64,7 +67,7 @@ import {
 } from "@/components/questions";
 import { questionnairesApi, programsApi, type Program } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
-import { ConditionalLogic, QuestionWithLogic } from "@/types/conditionalLogic";
+import { ConditionalLogic, QuestionWithLogic, QuestionReference } from "@/types/conditionalLogic";
 import {
   DndContext,
   closestCenter,
@@ -901,7 +904,7 @@ function QuestionnaireBuilderPageContent() {
           title: section.title,
           description: section.description,
           order: sections.indexOf(section) + 1,
-          questions: section.questions.map((question: any) => {
+          questions: section.questions.map((question: any, qIdx: number) => {
             // For information blocks, use a short title and store full content in settings
             const isInformationBlock = question.type === 'information';
             // Strip HTML tags for the title field
@@ -947,6 +950,22 @@ function QuestionnaireBuilderPageContent() {
             // Add translations if they exist
             if (question.translations) {
               questionData.translations = question.translations;
+            }
+
+            // Add references if they exist
+            if (question.references && question.references.length > 0) {
+              console.log(`📚 Question ${qIdx + 1} has ${question.references.length} references:`, question.references);
+              questionData.references = question.references.map((ref: any, idx: number) => ({
+                reference_type: ref.reference_type || 'text',
+                title: ref.title || null,
+                content_text: ref.reference_type === 'text' ? (ref.content_text || null) : null,
+                content_url: ref.reference_type === 'url' ? (ref.content_url || null) : null,
+                display_position: ref.display_position || 'AFTER_QUESTION',
+                order_index: idx,
+              }));
+              console.log(`📚 Mapped references for Question ${qIdx + 1}:`, questionData.references);
+            } else {
+              console.log(`📚 Question ${qIdx + 1} has NO references. Raw:`, question.references);
             }
             
             return questionData;
@@ -1305,6 +1324,165 @@ function QuestionnaireBuilderPageContent() {
 
             {/* Question Controls */}
             <div className="pl-6">{renderQuestionPreview(question, sectionId)}</div>
+
+            {/* References Section */}
+            {question.type !== 'information' && (
+              <div className="pl-6 mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-gray-700">References</span>
+                    <span className="text-xs text-gray-500">({question.references?.length || 0})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newRef: QuestionReference = {
+                        id: `ref-${Date.now()}`,
+                        reference_type: 'text',
+                        title: '',
+                        content_text: '',
+                        content_url: '',
+                        display_position: 'AFTER_QUESTION',
+                        order_index: question.references?.length || 0,
+                      };
+                      setSections(prevSections =>
+                        prevSections.map(section =>
+                          section.id === sectionId
+                            ? {
+                                ...section,
+                                questions: section.questions.map((q: any) =>
+                                  q.id === question.id
+                                    ? { ...q, references: [...(q.references || []), newRef] }
+                                    : q
+                                )
+                              }
+                            : section
+                        )
+                      );
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Reference
+                  </button>
+                </div>
+
+                {question.references && question.references.length > 0 ? (
+                  <div className="space-y-3">
+                    {question.references.map((ref: QuestionReference, refIdx: number) => (
+                      <IsolatedReferenceItem
+                        key={ref.id || `ref-${refIdx}`}
+                        reference={ref}
+                        refIdx={refIdx}
+                        totalRefs={question.references.length}
+                        onUpdate={(updatedRef) => {
+                          console.log('📝 Reference onUpdate called:', { sectionId, questionId: question.id, refIdx, updatedRef });
+                          withPreservedScroll(() => {
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? {
+                                              ...q,
+                                              references: q.references.map((r: QuestionReference, i: number) =>
+                                                i === refIdx ? updatedRef : r
+                                              )
+                                            }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          });
+                        }}
+                        onDelete={() => {
+                          withPreservedScroll(() => {
+                            setSections(prevSections =>
+                              prevSections.map(section =>
+                                section.id === sectionId
+                                  ? {
+                                      ...section,
+                                      questions: section.questions.map((q: any) =>
+                                        q.id === question.id
+                                          ? {
+                                              ...q,
+                                              references: q.references.filter((_: any, i: number) => i !== refIdx)
+                                            }
+                                          : q
+                                      )
+                                    }
+                                  : section
+                              )
+                            );
+                          });
+                        }}
+                        onMoveUp={() => {
+                          if (refIdx > 0) {
+                            withPreservedScroll(() => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                references: q.references.map((r: QuestionReference, i: number) => {
+                                                  if (i === refIdx) return { ...q.references[refIdx - 1], order_index: refIdx };
+                                                  if (i === refIdx - 1) return { ...ref, order_index: refIdx - 1 };
+                                                  return r;
+                                                })
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            });
+                          }
+                        }}
+                        onMoveDown={() => {
+                          if (refIdx < question.references.length - 1) {
+                            withPreservedScroll(() => {
+                              setSections(prevSections =>
+                                prevSections.map(section =>
+                                  section.id === sectionId
+                                    ? {
+                                        ...section,
+                                        questions: section.questions.map((q: any) =>
+                                          q.id === question.id
+                                            ? {
+                                                ...q,
+                                                references: q.references.map((r: QuestionReference, i: number) => {
+                                                  if (i === refIdx) return { ...q.references[refIdx + 1], order_index: refIdx };
+                                                  if (i === refIdx + 1) return { ...ref, order_index: refIdx + 1 };
+                                                  return r;
+                                                })
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : section
+                                )
+                              );
+                            });
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 text-center py-2">No references added. Click "Add Reference" to add informational content.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -5740,7 +5918,6 @@ function QuestionnaireBuilderPageContent() {
                         value={videoIntroUrl}
                         onChange={setVideoIntroUrl}
                         onRemove={() => setVideoIntroUrl('')}
-                        questionnaireId={questionnaireName}
                         maxSize={100}
                         onMetadataChange={(metadata) => setVideoDuration(metadata.duration)}
                       />

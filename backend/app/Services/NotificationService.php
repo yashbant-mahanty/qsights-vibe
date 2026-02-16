@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Activity;
+use App\Models\ActivityApprovalRequest;
 use App\Models\Participant;
 use App\Models\UserNotification;
 use App\Models\User;
@@ -105,6 +106,28 @@ class NotificationService
             'entity_id' => $activity->id,
             'entity_name' => $activity->name,
             'action_url' => "/activities",
+        ]);
+    }
+
+    /**
+     * Create notification for manager review completed (sent to super admins).
+     */
+    public function createManagerReviewCompleted(ActivityApprovalRequest $approvalRequest, User $admin)
+    {
+        UserNotification::create([
+            'user_id' => $admin->id,
+            'type' => 'manager_review_completed',
+            'title' => 'Manager Review Completed',
+            'message' => "Manager has completed review for \"{$approvalRequest->name}\". Event is ready for your final approval.",
+            'entity_type' => 'approval',
+            'entity_id' => $approvalRequest->id,
+            'entity_name' => $approvalRequest->name,
+            'action_url' => "/activities/approvals/{$approvalRequest->id}",
+        ]);
+        
+        Log::info('Manager review completed notification created', [
+            'approval_request_id' => $approvalRequest->id,
+            'admin_id' => $admin->id
         ]);
     }
 

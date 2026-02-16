@@ -11,8 +11,8 @@ class QuestionnaireVideo extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $keyType = 'string';
-    public $incrementing = false;
+    protected $keyType = 'int';
+    public $incrementing = true;
 
     protected $fillable = [
         'questionnaire_id',
@@ -35,12 +35,7 @@ class QuestionnaireVideo extends Model
     protected static function boot()
     {
         parent::boot();
-
-        static::creating(function ($model) {
-            if (empty($model->id)) {
-                $model->id = (string) Str::uuid();
-            }
-        });
+        // Removed UUID generation - using auto-increment integer IDs
     }
 
     /**

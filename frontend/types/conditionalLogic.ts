@@ -42,6 +42,17 @@ export interface ConditionalLogic {
   };
 }
 
+// Question Reference Types
+export interface QuestionReference {
+  id?: string;
+  reference_type: 'text' | 'url';
+  title?: string;
+  content_text?: string;
+  content_url?: string;
+  display_position: 'AFTER_QUESTION' | 'AFTER_ANSWER';
+  order_index: number;
+}
+
 export interface QuestionWithLogic {
   id: number | string;
   type: string;
@@ -50,6 +61,8 @@ export interface QuestionWithLogic {
   // Legacy support
   parentQuestionId?: number | string | null;
   conditionalValue?: string | null;
+  // References
+  references?: QuestionReference[];
 }
 
 // Validation Result

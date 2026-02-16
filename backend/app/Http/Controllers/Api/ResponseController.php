@@ -36,7 +36,7 @@ class ResponseController extends Controller
             'metadata' => 'nullable|array',
         ]);
 
-        $activity = Activity::with('questionnaire.sections.questions')->findOrFail($activityId);
+        $activity = Activity::with('questionnaire.sections.questions.references')->findOrFail($activityId);
 
         // Check if activity allows responses
         if (!$activity->canAcceptResponses()) {
@@ -220,7 +220,7 @@ class ResponseController extends Controller
      */
     public function submit(Request $request, string $responseId)
     {
-        $response = Response::with('activity.questionnaire.sections.questions')->findOrFail($responseId);
+        $response = Response::with('activity.questionnaire.sections.questions.references')->findOrFail($responseId);
 
         if ($response->isSubmitted()) {
             return response()->json([
@@ -362,7 +362,7 @@ class ResponseController extends Controller
      */
     public function getProgress(string $responseId)
     {
-        $response = Response::with(['answers.question', 'activity.questionnaire.sections.questions'])
+        $response = Response::with(['answers.question', 'activity.questionnaire.sections.questions.references'])
             ->findOrFail($responseId);
 
         return response()->json([

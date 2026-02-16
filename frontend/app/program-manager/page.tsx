@@ -36,7 +36,7 @@ interface UserData {
 
 export default function ProgramManagerDashboard() {
   const router = useRouter();
-  const { currentUser: authUser } = useAuth();
+  const { currentUser: authUser, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
@@ -99,9 +99,14 @@ export default function ProgramManagerDashboard() {
     try {
       setLoading(true);
       
+      // Wait for auth to finish loading before redirecting
+      if (authLoading) {
+        return;
+      }
+      
       // Use AuthContext user
       if (!authUser) {
-        router.push('/login');
+        router.push('/');
         return;
       }
       

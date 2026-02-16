@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import RichTextEditor from "@/components/RichTextEditor";
 import IsolatedTextInput from "@/components/IsolatedTextInput";
+import IsolatedReferenceItem from "@/components/IsolatedReferenceItem";
 import EnhancedConditionalLogicEditor from "@/components/EnhancedConditionalLogicEditor";
 import {
   ArrowLeft,
@@ -48,10 +49,12 @@ import {
   ClipboardList,
   Video,
   AlertCircle,
+  BookOpen,
+  ExternalLink,
 } from "lucide-react";
-import { questionnairesApi, programsApi, type Program } from "@/lib/api";
+import { questionnairesApi, programsApi, type Program, fetchWithAuth } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
-import { ConditionalLogic, QuestionWithLogic } from "@/types/conditionalLogic";
+import { ConditionalLogic, QuestionWithLogic, QuestionReference } from "@/types/conditionalLogic";
 import {
   SliderScale,
   DialGauge,
@@ -114,6 +117,15 @@ export default function ViewQuestionnairePage() {
   const [showSectionHeader, setShowSectionHeader] = useState(true);
   const [sectionHeaderFormat, setSectionHeaderFormat] = useState<'numbered' | 'titleOnly'>('numbered');
   const [enabledLanguages, setEnabledLanguages] = useState(["EN"]);
+
+  // Video Intro Block state
+  const [videoIntroEnabled, setVideoIntroEnabled] = useState(false);
+  const [videoIntroUrl, setVideoIntroUrl] = useState('');
+  const [videoThumbnailUrl, setVideoThumbnailUrl] = useState('');
+  const [videoDisplayMode, setVideoDisplayMode] = useState<'inline' | 'modal'>('inline');
+  const [videoMustWatch, setVideoMustWatch] = useState(false);
+  const [videoAutoplay, setVideoAutoplay] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(0);
   const [activeLanguage, setActiveLanguage] = useState("EN");
   const [showMultilingualEditor, setShowMultilingualEditor] = useState(false);
   const [selectedQuestionForTranslation, setSelectedQuestionForTranslation] = useState<any>(null);
@@ -296,6 +308,22 @@ export default function ViewQuestionnairePage() {
         setEnabledLanguages((data as any).languages);
       }
       
+      // Load video intro metadata
+      try {
+        const videoResponse = await fetchWithAuth(`/videos/questionnaire/${questionnaireId}`);
+        if (videoResponse.data) {
+          setVideoIntroEnabled(true);
+          setVideoIntroUrl(videoResponse.data.video_url || '');
+          setVideoThumbnailUrl(videoResponse.data.thumbnail_url || '');
+          setVideoDisplayMode(videoResponse.data.display_mode || 'inline');
+          setVideoMustWatch(videoResponse.data.must_watch ?? false);
+          setVideoAutoplay(videoResponse.data.autoplay ?? false);
+          setVideoDuration(videoResponse.data.video_duration_seconds || 0);
+        }
+      } catch (videoErr) {
+        console.log('No video intro configured:', videoErr);
+      }
+      
       // Transform backend sections/questions to frontend format
       if (data.sections && data.sections.length > 0) {
         const transformedSections = data.sections.map((section: any) => ({
@@ -333,6 +361,8 @@ export default function ViewQuestionnairePage() {
               hyperlinksPosition: isInformationBlock ? (q.settings?.hyperlinksPosition || 'bottom') : undefined,
               // Preserve the entire settings object to include customImages, etc.
               settings: q.settings || {},
+              // Load references
+              references: q.references || [],
             };
           }) || []
         }));
@@ -624,6 +654,22 @@ export default function ViewQuestionnairePage() {
             if (question.translations) {
               questionData.translations = question.translations;
             }
+
+            // Add references if they exist
+            if (question.references && question.references.length > 0) {
+              console.log(`📚 Question ${qIdx + 1} has ${question.references.length} references:`, question.references);
+              questionData.references = question.references.map((ref: any, idx: number) => ({
+                reference_type: ref.reference_type || 'text',
+                title: ref.title || null,
+                content_text: ref.reference_type === 'text' ? (ref.content_text || null) : null,
+                content_url: ref.reference_type === 'url' ? (ref.content_url || null) : null,
+                display_position: ref.display_position || 'AFTER_QUESTION',
+                order_index: idx,
+              }));
+              console.log(`📚 Mapped references for Question ${qIdx + 1}:`, questionData.references);
+            } else {
+              console.log(`📚 Question ${qIdx + 1} has NO references. Raw:`, question.references);
+            }
             
             console.log(`Question ${qIdx + 1}:`, question.formattedQuestion || question.question, '| Type:', question.type, '| Required:', question.required, '| Settings:', settings);
             return questionData;
@@ -637,6 +683,48 @@ export default function ViewQuestionnairePage() {
       const result = await questionnairesApi.update(questionnaireId, questionnaireData);
       console.log('=== API RESPONSE ===');
       console.log(result);
+      
+      // Save video metadata if video intro is enabled
+      console.log('🎬 Video Intro Save Check:', {
+        videoIntroEnabled,
+        videoIntroUrl,
+        videoThumbnailUrl,
+        videoDuration,
+        videoDisplayMode,
+        videoMustWatch,
+        videoAutoplay
+      });
+      
+      if (videoIntroEnabled && videoIntroUrl) {
+        try {
+          console.log('🎬 Saving video metadata to /videos/metadata...');
+          const videoPayload = {
+            questionnaire_id: questionnaireId,
+            video_url: videoIntroUrl,
+            thumbnail_url: videoThumbnailUrl || null,
+            video_type: 'intro',
+            display_mode: videoDisplayMode,
+            must_watch: videoMustWatch,
+            autoplay: videoAutoplay,
+            video_duration_seconds: videoDuration,
+          };
+          console.log('🎬 Video metadata payload:', videoPayload);
+          
+          const videoResult = await fetchWithAuth('/videos/metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(videoPayload),
+          });
+          console.log('🎬 Video metadata saved successfully:', videoResult);
+        } catch (videoError) {
+          console.error('❌ Failed to save video metadata:', videoError);
+          console.warn('⚠️ Video metadata save failed. Questionnaire saved successfully but intro video metadata could not be updated. This is non-critical and can be ignored if video is already working.');
+          // Silent fail - don't block user with alert since questionnaire is saved
+        }
+      } else {
+        console.log('🎬 Skipping video metadata save (not enabled or no URL)');
+      }
+      
       return result;
   };
 
@@ -679,6 +767,14 @@ export default function ViewQuestionnairePage() {
 
   const handleSave = async () => {
     if (!questionnaire) return;
+
+    console.log('🔴 SAVE CLICKED - Current sections state:', JSON.stringify(sections.map((s: any) => ({
+      title: s.title,
+      questions: s.questions.map((q: any) => ({
+        title: q.title || q.question,
+        references: q.references
+      }))
+    })), null, 2));
 
     // Validation
     if (!questionnaire.program_id) {
@@ -985,6 +1081,165 @@ export default function ViewQuestionnairePage() {
 
             {/* Question Controls */}
             <div className="pl-6">{renderQuestionPreview(question, sectionId)}</div>
+
+            {/* References Section */}
+            {question.type !== 'information' && (
+              <div className="pl-6 mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-gray-700">References</span>
+                    <span className="text-xs text-gray-500">({question.references?.length || 0})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newRef: QuestionReference = {
+                        id: `ref-${Date.now()}`,
+                        reference_type: 'text',
+                        title: '',
+                        content_text: '',
+                        content_url: '',
+                        display_position: 'AFTER_QUESTION',
+                        order_index: question.references?.length || 0,
+                      };
+                      setSections((prevSections: any) =>
+                        prevSections.map((s: any, idx: number) =>
+                          idx === sectionIdx
+                            ? {
+                                ...s,
+                                questions: s.questions.map((q: any, qIdx: number) =>
+                                  qIdx === questionIdx
+                                    ? { ...q, references: [...(q.references || []), newRef] }
+                                    : q
+                                )
+                              }
+                            : s
+                        )
+                      );
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Reference
+                  </button>
+                </div>
+
+                {question.references && question.references.length > 0 ? (
+                  <div className="space-y-3">
+                    {question.references.map((ref: QuestionReference, refIdx: number) => (
+                      <IsolatedReferenceItem
+                        key={ref.id || `ref-${refIdx}`}
+                        reference={ref}
+                        refIdx={refIdx}
+                        totalRefs={question.references.length}
+                        onUpdate={(updatedRef) => {
+                          console.log('📝 Reference onUpdate called:', { sectionIdx, questionIdx, refIdx, updatedRef });
+                          withPreservedScroll(() => {
+                            setSections((prevSections: any) =>
+                              prevSections.map((s: any, idx: number) =>
+                                idx === sectionIdx
+                                  ? {
+                                      ...s,
+                                      questions: s.questions.map((q: any, qIdx: number) =>
+                                        qIdx === questionIdx
+                                          ? {
+                                              ...q,
+                                              references: q.references.map((r: QuestionReference, i: number) =>
+                                                i === refIdx ? updatedRef : r
+                                              )
+                                            }
+                                          : q
+                                      )
+                                    }
+                                  : s
+                              )
+                            );
+                          });
+                        }}
+                        onDelete={() => {
+                          withPreservedScroll(() => {
+                            setSections((prevSections: any) =>
+                              prevSections.map((s: any, idx: number) =>
+                                idx === sectionIdx
+                                  ? {
+                                      ...s,
+                                      questions: s.questions.map((q: any, qIdx: number) =>
+                                        qIdx === questionIdx
+                                          ? {
+                                              ...q,
+                                              references: q.references.filter((_: any, i: number) => i !== refIdx)
+                                            }
+                                          : q
+                                      )
+                                    }
+                                  : s
+                              )
+                            );
+                          });
+                        }}
+                        onMoveUp={() => {
+                          if (refIdx > 0) {
+                            withPreservedScroll(() => {
+                              setSections((prevSections: any) =>
+                                prevSections.map((s: any, idx: number) =>
+                                  idx === sectionIdx
+                                    ? {
+                                        ...s,
+                                        questions: s.questions.map((q: any, qIdx: number) =>
+                                          qIdx === questionIdx
+                                            ? {
+                                                ...q,
+                                                references: q.references.map((r: QuestionReference, i: number) => {
+                                                  if (i === refIdx) return { ...q.references[refIdx - 1], order_index: refIdx };
+                                                  if (i === refIdx - 1) return { ...ref, order_index: refIdx - 1 };
+                                                  return r;
+                                                })
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : s
+                                )
+                              );
+                            });
+                          }
+                        }}
+                        onMoveDown={() => {
+                          if (refIdx < question.references.length - 1) {
+                            withPreservedScroll(() => {
+                              setSections((prevSections: any) =>
+                                prevSections.map((s: any, idx: number) =>
+                                  idx === sectionIdx
+                                    ? {
+                                        ...s,
+                                        questions: s.questions.map((q: any, qIdx: number) =>
+                                          qIdx === questionIdx
+                                            ? {
+                                                ...q,
+                                                references: q.references.map((r: QuestionReference, i: number) => {
+                                                  if (i === refIdx) return { ...q.references[refIdx + 1], order_index: refIdx };
+                                                  if (i === refIdx + 1) return { ...ref, order_index: refIdx + 1 };
+                                                  return r;
+                                                })
+                                              }
+                                            : q
+                                        )
+                                      }
+                                    : s
+                                )
+                              );
+                            });
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 text-center py-2">No references added. Click "Add Reference" to add informational content.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -5144,6 +5399,115 @@ export default function ViewQuestionnairePage() {
                     )}
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Video Intro Block */}
+            <Card>
+              <CardHeader className="border-b border-gray-200">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Video className="w-4 h-4 text-qsights-blue" />
+                  Video Intro Block
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-700">Enable Video Intro</span>
+                  <input 
+                    type="checkbox" 
+                    checked={videoIntroEnabled}
+                    onChange={(e) => setVideoIntroEnabled(e.target.checked)}
+                    disabled={showPreview}
+                    className="w-4 h-4 cursor-pointer disabled:cursor-not-allowed" 
+                  />
+                </div>
+
+                {videoIntroEnabled && !showPreview && (
+                  <div className="space-y-4 pt-2 border-t border-gray-200">
+                    {/* Video Upload */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Upload Video
+                      </label>
+                      <S3VideoUpload
+                        value={videoIntroUrl}
+                        onChange={setVideoIntroUrl}
+                        onRemove={() => setVideoIntroUrl('')}
+                        questionnaireId={questionnaireId}
+                        maxSize={100}
+                        onMetadataChange={(metadata) => setVideoDuration(metadata.duration)}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">MP4, WEBM up to 100MB</p>
+                    </div>
+
+                    {/* Thumbnail Upload */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Upload Thumbnail (Optional)
+                      </label>
+                      <S3ImageUpload
+                        value={videoThumbnailUrl}
+                        onChange={setVideoThumbnailUrl}
+                        onRemove={() => setVideoThumbnailUrl('')}
+                        folder="video-thumbnails"
+                        maxSize={5}
+                        showPreview={true}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
+                    </div>
+
+                    {/* Display Mode */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-2">
+                        Display Mode
+                      </label>
+                      <select
+                        value={videoDisplayMode}
+                        onChange={(e) => setVideoDisplayMode(e.target.value as 'inline' | 'modal')}
+                        className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg"
+                      >
+                        <option value="inline">Inline (Play within page)</option>
+                        <option value="modal">Modal (Open in popup)</option>
+                      </select>
+                    </div>
+
+                    {/* Must Watch */}
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <span className="text-xs font-medium text-gray-700 block">Must Watch Before Starting</span>
+                        <span className="text-xs text-gray-500">Require completion to continue</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={videoMustWatch}
+                        onChange={(e) => setVideoMustWatch(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer" 
+                      />
+                    </div>
+
+                    {/* Autoplay */}
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <span className="text-xs font-medium text-gray-700 block">Autoplay</span>
+                        <span className="text-xs text-gray-500">Start playing automatically</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={videoAutoplay}
+                        onChange={(e) => setVideoAutoplay(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer" 
+                      />
+                    </div>
+
+                    {videoDuration > 0 && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs text-blue-800">
+                          <strong>Video Duration:</strong> {Math.floor(videoDuration / 60)}:{(videoDuration % 60).toString().padStart(2, '0')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

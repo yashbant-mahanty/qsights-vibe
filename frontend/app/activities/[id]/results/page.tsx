@@ -1174,26 +1174,51 @@ export default function ActivityResultsPage() {
 
       setActivity(activityData);
       setStatistics(stats);
+      
       // Sort responses by latest first (most recent at top)
       const sortedResponses = [...responsesData].sort((a, b) => {
         const dateA = new Date(a.submitted_at || a.updated_at || a.created_at || 0).getTime();
         const dateB = new Date(b.submitted_at || b.updated_at || b.created_at || 0).getTime();
         return dateB - dateA; // Descending order (latest first)
       });
-      setResponses(sortedResponses);
+      
+      // Deduplicate responses: Keep only the most recent response per participant
+      // This prevents duplicate entries in all analytics, charts, and tables
+      const responsesMap = new Map<string, any>();
+      sortedResponses.forEach((response) => {
+        const participantKey = String(response.participant_id || response.guest_identifier || response.id);
+        const existing = responsesMap.get(participantKey);
+        
+        // If no existing entry or this response is more recent, use this one
+        if (!existing) {
+          responsesMap.set(participantKey, response);
+        } else {
+          const existingDate = new Date(existing.submitted_at || existing.updated_at || existing.created_at || 0).getTime();
+          const currentDate = new Date(response.submitted_at || response.updated_at || response.created_at || 0).getTime();
+          
+          if (currentDate > existingDate) {
+            responsesMap.set(participantKey, response);
+          }
+        }
+      });
+      
+      const deduplicatedResponses = Array.from(responsesMap.values());
+      setResponses(deduplicatedResponses);
 
       // Debug log for data consistency verification
       console.log('=== DATA CONSISTENCY CHECK ===');
       console.log('Statistics Total Responses:', stats.total_responses);
-      console.log('Loaded Responses Array Length:', responsesData.length);
-      console.log('Responses with answers:', responsesData.filter((r: any) => r.answers && r.answers.length > 0).length);
-      if (responsesData.length > 0) {
+      console.log('Loaded Responses Array Length (Raw):', responsesData.length);
+      console.log('Deduplicated Responses Length:', deduplicatedResponses.length);
+      console.log('Duplicates Removed:', responsesData.length - deduplicatedResponses.length);
+      console.log('Responses with answers:', deduplicatedResponses.filter((r: any) => r.answers && r.answers.length > 0).length);
+      if (deduplicatedResponses.length > 0) {
         console.log('First Response Sample:', {
-          id: responsesData[0].id,
-          status: responsesData[0].status,
-          participant_id: responsesData[0].participant_id,
-          answers_count: responsesData[0].answers?.length || 0,
-          sample_answer: responsesData[0].answers?.[0]
+          id: deduplicatedResponses[0].id,
+          status: deduplicatedResponses[0].status,
+          participant_id: deduplicatedResponses[0].participant_id,
+          answers_count: deduplicatedResponses[0].answers?.length || 0,
+          sample_answer: deduplicatedResponses[0].answers?.[0]
         });
       }
       console.log('==============================');
@@ -1297,26 +1322,33 @@ export default function ActivityResultsPage() {
                         // Add each participant's video log to the map
                         // Use participant_id as key, store array of video logs by question
                         // Handle both registered and anonymous users
+                        
+                        // CRITICAL FIX: Deduplicate video logs by participant_id BEFORE storing
+                        const videoLogsByParticipant = new Map<string, any>();
                         viewLogsData.data?.forEach((log: any) => {
-                          // Get participant ID - handle various formats
-                          const participantKey = log.participant_id || log.response_id || log.id;
+                          // Get participant ID - ONLY use participant_id to avoid duplicates
+                          const participantKey = String(log.participant_id || log.guest_identifier || log.response_id || log.id);
                           if (participantKey) {
-                            // Store with ALL possible key variations to ensure export matching
-                            const keysToStore = [
-                              participantKey,
-                              String(participantKey), // String version for type safety
-                              log.response_id,
-                              String(log.response_id),
-                              log.guest_identifier // For anonymous users
-                            ].filter(Boolean); // Remove nulls/undefined
-                            
-                            keysToStore.forEach((key: any) => {
-                              if (!videoLogsMap[key]) {
-                                videoLogsMap[key] = {};
+                            const existing = videoLogsByParticipant.get(participantKey);
+                            // Keep the most recent log if duplicates exist
+                            if (!existing) {
+                              videoLogsByParticipant.set(participantKey, log);
+                            } else {
+                              const existingDate = new Date(existing.last_watched_at || existing.created_at || 0).getTime();
+                              const currentDate = new Date(log.last_watched_at || log.created_at || 0).getTime();
+                              if (currentDate > existingDate) {
+                                videoLogsByParticipant.set(participantKey, log);
                               }
-                              videoLogsMap[key][vq.id] = log;
-                            });
+                            }
                           }
+                        });
+                        
+                        // Store deduplicated logs with SINGLE key per participant
+                        videoLogsByParticipant.forEach((log, participantKey) => {
+                          if (!videoLogsMap[participantKey]) {
+                            videoLogsMap[participantKey] = {};
+                          }
+                          videoLogsMap[participantKey][vq.id] = log;
                         });
                       } else {
                         console.log(`No view logs for video question ${vq.id}`);
@@ -3378,7 +3410,7 @@ export default function ActivityResultsPage() {
 
                       // Get participants who responded to this question
                       // For video questions, use video view logs instead of answer records
-                      const participantResponses = question.type === 'video' && Object.keys(videoViewLogs).length > 0
+                      const allParticipantResponses = question.type === 'video' && Object.keys(videoViewLogs).length > 0
                         ? Object.entries(videoViewLogs).map(([participantId, participantLogs]: [string, any]) => {
                             // Access the specific question's video log from nested structure
                             const videoLog = participantLogs[question.id];
@@ -3434,6 +3466,20 @@ export default function ActivityResultsPage() {
                               score: participantScore,
                             };
                           }).filter(pr => pr.answer !== null && pr.answer !== undefined && pr.answer !== '');
+                      
+                      // Deduplicate by participant: keep only the most recent response for each participant
+                      const participantResponsesMap = new Map<string, any>();
+                      allParticipantResponses.forEach((pr) => {
+                        const key = String(pr.participantId);
+                        const existing = participantResponsesMap.get(key);
+                        
+                        // If no existing entry or this response is more recent, use this one
+                        if (!existing || new Date(pr.submittedAt || 0).getTime() > new Date(existing.submittedAt || 0).getTime()) {
+                          participantResponsesMap.set(key, pr);
+                        }
+                      });
+                      
+                      const participantResponses = Array.from(participantResponsesMap.values());
 
                       return (
                         <Card key={question.id || qIndex} className="overflow-hidden border-2 border-gray-200 hover:border-green-300 transition-all">
@@ -3775,7 +3821,7 @@ export default function ActivityResultsPage() {
                                               const watchDurationFormatted = videoLog?.watch_duration || formatVideoDuration(watchDurationSeconds);
                                               
                                               return (
-                                              <tr key={idx} className="hover:bg-blue-50 transition-colors">
+                                              <tr key={pr.participantId || idx} className="hover:bg-blue-50 transition-colors">
                                                 <td className="px-4 py-3 text-sm font-bold text-gray-600">{idx + 1}</td>
                                                 <td className="px-4 py-3">
                                                   <div className="text-sm">

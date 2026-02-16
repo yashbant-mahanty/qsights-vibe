@@ -93,6 +93,30 @@ class Question extends Model
     }
 
     /**
+     * Get references for this question
+     */
+    public function references()
+    {
+        return $this->hasMany(QuestionReference::class)->orderBy('order_index');
+    }
+
+    /**
+     * Get references to display after question text
+     */
+    public function referencesAfterQuestion()
+    {
+        return $this->references()->where('display_position', 'AFTER_QUESTION');
+    }
+
+    /**
+     * Get references to display after answer options
+     */
+    public function referencesAfterAnswer()
+    {
+        return $this->references()->where('display_position', 'AFTER_ANSWER');
+    }
+
+    /**
      * Scope to filter by type
      */
     public function scopeOfType($query, $type)

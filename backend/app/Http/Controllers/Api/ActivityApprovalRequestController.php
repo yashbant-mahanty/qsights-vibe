@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityApprovalRequest;
 use App\Models\Activity;
 use App\Models\User;
+use App\Models\ManagerReviewToken;
 use App\Services\NotificationService;
 use App\Services\EmailService;
 use Illuminate\Http\Request;
@@ -86,6 +87,36 @@ class ActivityApprovalRequestController extends Controller
     }
 
     /**
+     * Get current user's approval requests (for Program Admin/Manager)
+     */
+    public function myRequests(Request $request)
+    {
+        $user = $request->user();
+        
+        $query = ActivityApprovalRequest::with([
+            'program',
+            'questionnaire',
+            'requestedBy' => function($query) {
+                $query->select('id', 'name', 'email');
+            },
+            'reviewedBy' => function($query) {
+                $query->select('id', 'name', 'email');
+            },
+            'createdActivity'
+        ])
+        ->where('requested_by', $user->id);
+
+        // Filter by status if provided
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $requests = $query->orderBy('created_at', 'desc')->paginate(15);
+
+        return response()->json($requests);
+    }
+
+    /**
      * Create new approval request
      */
     public function store(Request $request)
@@ -136,25 +167,57 @@ class ActivityApprovalRequestController extends Controller
         $validated['requested_by'] = $request->user()->id;
         $validated['status'] = 'pending';
 
-        $approvalRequest = ActivityApprovalRequest::create($validated);
+        // Determine if manager review is required
+        $requiresManagerReview = !empty($validated['manager_email']);
+        $validated['manager_review_status'] = $requiresManagerReview ? 'pending' : 'not_required';
 
-        // Create a temporary Activity object for notification purposes
-        $tempActivity = new Activity();
-        $tempActivity->id = $approvalRequest->id;
-        $tempActivity->name = $approvalRequest->name;
-        $tempActivity->type = $approvalRequest->type;
+        DB::beginTransaction();
+        try {
+            $approvalRequest = ActivityApprovalRequest::create($validated);
 
-        // Send in-app notifications
-        $this->notificationService->createApprovalRequest($tempActivity, $request->user());
-        $this->notificationService->createApprovalPending($tempActivity, $request->user());
+            // If manager review is required, send manager review email
+            if ($requiresManagerReview) {
+                // Generate token for manager
+                $tokenData = ManagerReviewToken::generateToken(
+                    $approvalRequest,
+                    $validated['manager_email'],
+                    null // manager_id can be null if manager is external
+                );
 
-        // Send email notification to super admins
-        $this->notifySuperAdmins($approvalRequest);
+                // Send manager review email
+                $this->sendManagerReviewEmail($approvalRequest, $tokenData['token']);
+            }
 
-        return response()->json([
-            'message' => 'Activity approval request submitted successfully',
-            'data' => $approvalRequest->load(['program', 'questionnaire', 'requestedBy'])
-        ], 201);
+            // Create a temporary Activity object for notification purposes
+            $tempActivity = new Activity();
+            $tempActivity->id = $approvalRequest->id;
+            $tempActivity->name = $approvalRequest->name;
+            $tempActivity->type = $approvalRequest->type;
+
+            // Send in-app notifications
+            $this->notificationService->createApprovalRequest($tempActivity, $request->user());
+            $this->notificationService->createApprovalPending($tempActivity, $request->user());
+
+            // Send email notification to super admins
+            $this->notifySuperAdmins($approvalRequest, $requiresManagerReview);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => $requiresManagerReview 
+                    ? 'Activity approval request submitted. Manager review email sent.' 
+                    : 'Activity approval request submitted successfully',
+                'data' => $approvalRequest->load(['program', 'questionnaire', 'requestedBy']),
+                'manager_review_required' => $requiresManagerReview
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Failed to create approval request: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to create approval request',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -181,6 +244,14 @@ class ActivityApprovalRequestController extends Controller
         if (!$approvalRequest->isPending()) {
             return response()->json([
                 'message' => 'This approval request has already been reviewed.'
+            ], 400);
+        }
+
+        // Check if manager review is required and completed
+        if ($validated['action'] === 'approve' && !$approvalRequest->isReadyForSuperAdminReview()) {
+            return response()->json([
+                'message' => 'Cannot approve. Manager review is pending.',
+                'manager_review_status' => $approvalRequest->manager_review_status
             ], 400);
         }
 
@@ -333,19 +404,122 @@ class ActivityApprovalRequestController extends Controller
     }
 
     /**
-     * Send notification to super admins
+     * Resend rejected approval request
      */
-    protected function notifySuperAdmins(ActivityApprovalRequest $request)
+    public function resend(Request $request, $id)
+    {
+        $user = $request->user();
+        $approvalRequest = ActivityApprovalRequest::findOrFail($id);
+
+        // Check if user is the requester
+        if ($approvalRequest->requested_by !== $user->id) {
+            return response()->json([
+                'message' => 'You are not authorized to resend this approval request.'
+            ], 403);
+        }
+
+        // Check if status is rejected
+        if ($approvalRequest->status !== 'rejected') {
+            return response()->json([
+                'message' => 'Only rejected approval requests can be resubmitted.'
+            ], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Reset approval status
+            $approvalRequest->status = 'pending';
+            $approvalRequest->reviewed_by = null;
+            $approvalRequest->reviewed_at = null;
+            $approvalRequest->remarks = null;
+            $approvalRequest->review_message = null;
+            
+            // Check if manager review is required
+            $requiresManagerReview = !empty($approvalRequest->manager_email);
+            
+            // Always reset manager review on resend (manager must re-review)
+            if ($requiresManagerReview) {
+                $approvalRequest->manager_review_status = 'pending';
+                $approvalRequest->manager_reviewed_by = null;
+                $approvalRequest->manager_reviewed_at = null;
+                $approvalRequest->manager_review_notes = null;
+                $approvalRequest->expected_participants = null;
+                
+                // Invalidate all previous manager review tokens
+                ManagerReviewToken::where('approval_request_id', $approvalRequest->id)
+                    ->where('used', false)
+                    ->update(['used' => true]);
+                
+                // Generate new manager review token
+                $tokenData = ManagerReviewToken::generateToken(
+                    $approvalRequest,
+                    $approvalRequest->manager_email,
+                    null
+                );
+                
+                // Send new manager review email
+                $this->sendManagerReviewEmail($approvalRequest, $tokenData['token']);
+            } else {
+                $approvalRequest->manager_review_status = 'not_required';
+            }
+            
+            $approvalRequest->save();
+
+            // Create a temporary Activity object for notification purposes
+            $tempActivity = new Activity();
+            $tempActivity->id = $approvalRequest->id;
+            $tempActivity->name = $approvalRequest->name;
+            $tempActivity->type = $approvalRequest->type;
+
+            // Send in-app notifications
+            $this->notificationService->createApprovalRequest($tempActivity, $user);
+            $this->notificationService->createApprovalPending($tempActivity, $user);
+
+            // Only notify super admins if NO manager review is required
+            // If manager review is required, super admins will be notified after manager completes review
+            if (!$requiresManagerReview) {
+                $this->notifySuperAdmins($approvalRequest, false);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => $requiresManagerReview
+                    ? 'Approval request resubmitted. Manager review email sent.' 
+                    : 'Approval request resubmitted successfully',
+                'data' => $approvalRequest->load(['program', 'questionnaire', 'requestedBy']),
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Failed to resend approval request: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to resend approval request',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Notify super admins about new approval request
+     */
+    private function notifySuperAdmins(ActivityApprovalRequest $request, bool $requiresManagerReview = false)
     {
         $superAdmins = User::where('role', 'super-admin')->get();
         $emailService = new EmailService();
         
         foreach ($superAdmins as $admin) {
             try {
-                $htmlContent = $this->buildApprovalNotificationHtml($request, 'new');
+                $htmlContent = $this->buildApprovalNotificationHtml($request, 'new', $requiresManagerReview);
+                $subject = $requiresManagerReview
+                    ? "New Activity Awaiting Manager Review: {$request->name}"
+                    : "New Activity Approval Request: {$request->name}";
+                    
+                // Use communication_email if set, otherwise fallback to email
+                $recipientEmail = $admin->communication_email ?: $admin->email;
+                    
                 $emailService->send(
-                    $admin->email,
-                    "New Activity Approval Request: {$request->name}",
+                    $recipientEmail,
+                    $subject,
                     $htmlContent,
                     [
                         'event' => 'approval_request_notification',
@@ -379,18 +553,17 @@ class ActivityApprovalRequestController extends Controller
                     'event' => 'approval_request_result',
                     'user_id' => $requester->id,
                     'request_id' => $request->id,
-                    'status' => $status,
                 ]
             );
         } catch (\Exception $e) {
-            \Log::error("Failed to send requester notification email: " . $e->getMessage());
+            \Log::error("Failed to send approval notification to requester: " . $e->getMessage());
         }
     }
 
     /**
-     * Build HTML email for approval notifications
+     * Build HTML content for approval notification email
      */
-    private function buildApprovalNotificationHtml(ActivityApprovalRequest $request, string $type): string
+    private function buildApprovalNotificationHtml(ActivityApprovalRequest $request, string $type, bool $requiresManagerReview = false): string
     {
         $isNew = $type === 'new';
         $isApproved = $type === 'APPROVED';
@@ -398,13 +571,40 @@ class ActivityApprovalRequestController extends Controller
         $statusColor = $isNew ? '#3b82f6' : ($isApproved ? '#22c55e' : '#ef4444');
         $statusText = $isNew ? 'New Request' : $type;
         
+        $managerReviewNotice = '';
+        if ($isNew && $requiresManagerReview) {
+            $managerReviewNotice = "
+                <div style='background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 15px 0;'>
+                    <p style='margin: 0; color: #92400e; font-weight: 600;'>⏳ Awaiting Manager Review</p>
+                    <p style='margin: 5px 0 0 0; color: #78350f; font-size: 14px;'>
+                        This request is pending manager approval. Approve/Reject buttons will be enabled after manager completes their review.
+                    </p>
+                    <p style='margin: 5px 0 0 0; color: #78350f; font-size: 14px;'>
+                        <strong>Manager:</strong> {$request->manager_name} ({$request->manager_email})
+                    </p>
+                </div>";
+        }
+        
+        // Build review link
+        $reviewUrl = $isNew ? config('app.frontend_url') . "/activities/approvals/{$request->id}" : '';
+        $loginUrl = config('app.frontend_url') . "/login";
+        
+        $actionButton = $isNew 
+            ? "<div style='text-align: center; margin: 30px 0;'>
+                   <a href='{$reviewUrl}' style='display: inline-block; background: #3b82f6; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;'>Review Approval Request</a>
+               </div>"
+            : "<div style='text-align: center; margin: 30px 0;'>
+                   <a href='{$loginUrl}' style='display: inline-block; background: {$statusColor}; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;'>Login to View Activities</a>
+               </div>";
+        
         $content = $isNew
-            ? "<p>A new activity approval request has been submitted.</p>
+            ? "<p>A new activity approval request has been submitted and requires your attention.</p>
                <p><strong>Event Name:</strong> {$request->name}</p>
                <p><strong>Type:</strong> {$request->type}</p>
                <p><strong>Requested by:</strong> {$request->requestedBy->name} ({$request->requestedBy->email})</p>
                <p><strong>Program:</strong> {$request->program->name}</p>
-               <p style='margin-top: 20px;'>Please log in to review and approve/reject this request.</p>"
+               {$managerReviewNotice}
+               {$actionButton}"
             : "<p>Your activity approval request has been <strong>{$type}</strong>.</p>
                <p><strong>Event Name:</strong> {$request->name}</p>
                <p><strong>Reviewed by:</strong> {$request->reviewedBy->name}</p>
@@ -412,8 +612,9 @@ class ActivityApprovalRequestController extends Controller
                <p style='margin-top: 20px;'>" . 
                ($isApproved 
                    ? "Your activity has been approved and is now available in the Activities section."
-                   : "Your activity request has been rejected. Please review the remarks and resubmit if needed.") . 
-               "</p>";
+                   : "Your activity request has been rejected. Please review the remarks and make necessary changes before resubmitting.") . 
+               "</p>
+               {$actionButton}";
         
         return "
         <!DOCTYPE html>
@@ -440,8 +641,73 @@ class ActivityApprovalRequestController extends Controller
     }
 
     /**
-     * Get approval statistics
+     * Send manager review email helper
      */
+    protected function sendManagerReviewEmail(ActivityApprovalRequest $approvalRequest, string $token)
+    {
+        $reviewUrl = config('app.frontend_url') . "/manager/review/{$token}";
+        $managerName = $approvalRequest->manager_name ?? 'Manager';
+        $programName = $approvalRequest->program->name ?? 'N/A';
+        $requesterName = $approvalRequest->requestedBy->name ?? 'N/A';
+        
+        $htmlContent = "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='UTF-8'>
+            <title>Manager Review Required</title>
+        </head>
+        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 20px;'>
+            <div style='max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden;'>
+                <div style='background: #6366f1; color: #ffffff; padding: 20px; text-align: center;'>
+                    <h1 style='margin: 0; font-size: 20px;'>Manager Review Required</h1>
+                </div>
+                <div style='padding: 30px 20px;'>
+                    <p>Dear {$managerName},</p>
+                    <p>Your review and approval is required for a new activity approval request.</p>
+                    
+                    <div style='background: #f3f4f6; border-left: 4px solid #6366f1; padding: 15px; margin: 20px 0;'>
+                        <h3 style='margin: 0 0 10px 0; color: #1f2937;'>Activity Details</h3>
+                        <p style='margin: 5px 0;'><strong>Activity Name:</strong> {$approvalRequest->name}</p>
+                        <p style='margin: 5px 0;'><strong>Type:</strong> {$approvalRequest->type}</p>
+                        <p style='margin: 5px 0;'><strong>Program:</strong> {$programName}</p>
+                        <p style='margin: 5px 0;'><strong>Requested by:</strong> {$requesterName}</p>
+                    </div>
+                    
+                    <div style='text-align: center; margin: 30px 0;'>
+                        <a href='{$reviewUrl}' style='display: inline-block; background: #6366f1; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;'>Review & Submit</a>
+                    </div>
+                    
+                    <p style='font-size: 12px; color: #6b7280; margin-top: 20px;'>
+                        <strong>Note:</strong> This link is valid for 72 hours and can only be used once.
+                    </p>
+                </div>
+                <div style='background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
+                    <p style='margin: 0;'>This is an automated email from QSights. Please do not reply.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+        
+        try {
+            $emailService = new EmailService();
+            $emailService->send(
+                $approvalRequest->manager_email,
+                "Manager Review Required: Activity - {$approvalRequest->name}",
+                $htmlContent,
+                [
+                    'event' => 'manager_review_request',
+                    'approval_request_id' => $approvalRequest->id,
+                    'manager_email' => $approvalRequest->manager_email,
+                ]
+            );
+        } catch (\Exception $e) {
+            \Log::error('Failed to send manager review email: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
     public function statistics(Request $request)
     {
         $user = $request->user();

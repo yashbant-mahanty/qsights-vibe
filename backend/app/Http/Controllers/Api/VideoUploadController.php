@@ -233,7 +233,7 @@ class VideoUploadController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'questionnaire_id' => 'required|uuid|exists:questionnaires,id',
+                'questionnaire_id' => 'required|exists:questionnaires,id',
                 'video_url' => 'required|url',
                 'thumbnail_url' => 'nullable|url',
                 'video_type' => 'nullable|string|in:intro,section',
@@ -372,10 +372,10 @@ class VideoUploadController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'questionnaire_id' => 'required|uuid|exists:questionnaires,id',
-                'video_id' => 'required|uuid|exists:questionnaire_videos,id',
-                'activity_id' => 'nullable|uuid|exists:activities,id',
-                'participant_id' => 'nullable|uuid|exists:participants,id',
+                'questionnaire_id' => 'required|exists:questionnaires,id',
+                'video_id' => 'required|exists:questionnaire_videos,id',
+                'activity_id' => 'nullable|exists:activities,id',
+                'participant_id' => 'nullable|exists:participants,id',
                 'watch_duration_seconds' => 'required|integer|min:0',
                 'completed' => 'required|boolean',
                 'completion_percentage' => 'nullable|numeric|min:0|max:100',
@@ -492,9 +492,9 @@ class VideoUploadController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'video_id' => 'required|uuid|exists:questionnaire_videos,id',
-                'activity_id' => 'required|uuid|exists:activities,id',
-                'participant_id' => 'required|uuid|exists:participants,id',
+                'video_id' => 'required|exists:questionnaire_videos,id',
+                'activity_id' => 'required|exists:activities,id',
+                'participant_id' => 'required|exists:participants,id',
             ]);
 
             if ($validator->fails()) {

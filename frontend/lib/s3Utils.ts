@@ -113,25 +113,39 @@ export async function getPresignedUrl(keyOrUrl: string, expiresIn: number = 3600
  * Use this for public pages like take activity
  */
 export async function getPresignedUrlPublic(keyOrUrl: string, expiresIn: number = 3600): Promise<string | null> {
-  if (!keyOrUrl) return null;
+  console.log('[S3Utils Public] Called with:', keyOrUrl);
+  
+  if (!keyOrUrl) {
+    console.log('[S3Utils Public] No keyOrUrl, returning null');
+    return null;
+  }
   
   // If it's already a presigned URL, return it
   if (isPresignedUrl(keyOrUrl)) {
+    console.log('[S3Utils Public] Already presigned, returning as-is');
     return keyOrUrl;
   }
   
   // Extract key from URL if needed
   const key = isS3Url(keyOrUrl) ? extractS3KeyFromUrl(keyOrUrl) : keyOrUrl;
-  if (!key) return keyOrUrl; // Return original if we can't extract key
+  console.log('[S3Utils Public] Extracted key:', key);
+  if (!key) {
+    console.log('[S3Utils Public] No key extracted, returning original');
+    return keyOrUrl;
+  }
   
   // Check cache
   const cached = presignedUrlCache.get(key);
   if (cached && cached.expiresAt > Date.now() + CACHE_BUFFER_MS) {
+    console.log('[S3Utils Public] Returning cached URL');
     return cached.url;
   }
   
   try {
-    const response = await fetch(`${API_BASE_URL}/public/s3/view-url`, {
+    const apiUrl = `${API_BASE_URL}/public/s3/view-url`;
+    console.log('[S3Utils Public] Fetching from:', apiUrl, 'with key:', key);
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -140,7 +154,9 @@ export async function getPresignedUrlPublic(keyOrUrl: string, expiresIn: number 
       body: JSON.stringify({ key, expires: expiresIn }),
     });
     
+    console.log('[S3Utils Public] Response status:', response.status);
     const data = await response.json();
+    console.log('[S3Utils Public] Response data:', data);
     
     if (data.status === 'success' && data.data?.url) {
       // Cache the URL
@@ -148,6 +164,7 @@ export async function getPresignedUrlPublic(keyOrUrl: string, expiresIn: number 
         url: data.data.url,
         expiresAt: Date.now() + (expiresIn * 1000),
       });
+      console.log('[S3Utils Public] Success! Returning presigned URL');
       return data.data.url;
     }
     

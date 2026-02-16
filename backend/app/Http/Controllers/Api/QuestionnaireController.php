@@ -130,6 +130,14 @@ class QuestionnaireController extends Controller
             'sections.*.questions.*.is_required' => 'nullable|boolean',
             'sections.*.questions.*.is_comment_enabled' => 'nullable|boolean',
             'sections.*.questions.*.order' => 'nullable|integer',
+            // Reference validation rules
+            'sections.*.questions.*.references' => 'nullable|array',
+            'sections.*.questions.*.references.*.reference_type' => 'required|in:text,url',
+            'sections.*.questions.*.references.*.title' => 'nullable|string|max:255',
+            'sections.*.questions.*.references.*.content_text' => 'nullable|string',
+            'sections.*.questions.*.references.*.content_url' => 'nullable|string|max:500',
+            'sections.*.questions.*.references.*.display_position' => 'required|in:AFTER_QUESTION,AFTER_ANSWER',
+            'sections.*.questions.*.references.*.order_index' => 'nullable|integer',
         ]);
 
         // Validate questionnaire dates are within program date boundaries
@@ -184,7 +192,7 @@ class QuestionnaireController extends Controller
 
                     if (!empty($sectionData['questions'])) {
                         foreach ($sectionData['questions'] as $questionData) {
-                            $section->questions()->create([
+                            $question = $section->questions()->create([
                                 'type' => $questionData['type'],
                                 'title' => $questionData['title'],
                                 'description' => $questionData['description'] ?? null,
@@ -197,13 +205,27 @@ class QuestionnaireController extends Controller
                                 'is_comment_enabled' => $questionData['is_comment_enabled'] ?? false,
                                 'order' => $questionData['order'] ?? 0,
                             ]);
+
+                            // Create references if provided
+                            if (!empty($questionData['references'])) {
+                                foreach ($questionData['references'] as $refIndex => $refData) {
+                                    $question->references()->create([
+                                        'reference_type' => $refData['reference_type'] ?? 'text',
+                                        'title' => $refData['title'] ?? null,
+                                        'content_text' => $refData['content_text'] ?? null,
+                                        'content_url' => $refData['content_url'] ?? null,
+                                        'display_position' => $refData['display_position'] ?? 'AFTER_QUESTION',
+                                        'order_index' => $refData['order_index'] ?? $refIndex,
+                                    ]);
+                                }
+                            }
                         }
                     }
                 }
             }
 
             DB::commit();
-            $questionnaire->load(['program', 'sections.questions']);
+            $questionnaire->load(['program', 'sections.questions.references']);
 
             return response()->json([
                 'message' => 'Questionnaire created successfully',
@@ -237,7 +259,7 @@ class QuestionnaireController extends Controller
      */
     public function show(string $id)
     {
-        $questionnaire = Questionnaire::with(['program', 'sections.questions'])
+        $questionnaire = Questionnaire::with(['program', 'sections.questions.references'])
             ->findOrFail($id);
 
         return response()->json(['data' => $questionnaire]);
@@ -295,6 +317,14 @@ class QuestionnaireController extends Controller
             'sections.*.questions.*.is_required' => 'nullable|boolean',
             'sections.*.questions.*.is_comment_enabled' => 'nullable|boolean',
             'sections.*.questions.*.order' => 'nullable|integer',
+            // Reference validation rules
+            'sections.*.questions.*.references' => 'nullable|array',
+            'sections.*.questions.*.references.*.reference_type' => 'required|in:text,url',
+            'sections.*.questions.*.references.*.title' => 'nullable|string|max:255',
+            'sections.*.questions.*.references.*.content_text' => 'nullable|string',
+            'sections.*.questions.*.references.*.content_url' => 'nullable|string|max:500',
+            'sections.*.questions.*.references.*.display_position' => 'required|in:AFTER_QUESTION,AFTER_ANSWER',
+            'sections.*.questions.*.references.*.order_index' => 'nullable|integer',
         ]);
         } catch (\Illuminate\Validation\ValidationException $ve) {
             \Log::error('Questionnaire update validation failed', [
@@ -343,8 +373,11 @@ class QuestionnaireController extends Controller
 
             // Handle sections if provided
             if (isset($validated['sections'])) {
-                // Delete existing sections and questions
+                // Delete existing sections, questions, and their references
                 $questionnaire->sections()->each(function ($section) {
+                    $section->questions()->each(function ($question) {
+                        $question->references()->delete();
+                    });
                     $section->questions()->forceDelete();
                     $section->forceDelete();
                 });
@@ -361,7 +394,7 @@ class QuestionnaireController extends Controller
 
                     if (isset($sectionData['questions'])) {
                         foreach ($sectionData['questions'] as $questionData) {
-                            $section->questions()->create([
+                            $question = $section->questions()->create([
                                 'type' => $questionData['type'],
                                 'title' => $questionData['title'],
                                 'description' => $questionData['description'] ?? null,
@@ -374,13 +407,27 @@ class QuestionnaireController extends Controller
                                 'is_comment_enabled' => $questionData['is_comment_enabled'] ?? false,
                                 'order' => $questionData['order'] ?? 0,
                             ]);
+
+                            // Create references if provided
+                            if (!empty($questionData['references'])) {
+                                foreach ($questionData['references'] as $refIndex => $refData) {
+                                    $question->references()->create([
+                                        'reference_type' => $refData['reference_type'] ?? 'text',
+                                        'title' => $refData['title'] ?? null,
+                                        'content_text' => $refData['content_text'] ?? null,
+                                        'content_url' => $refData['content_url'] ?? null,
+                                        'display_position' => $refData['display_position'] ?? 'AFTER_QUESTION',
+                                        'order_index' => $refData['order_index'] ?? $refIndex,
+                                    ]);
+                                }
+                            }
                         }
                     }
                 }
             }
 
             DB::commit();
-            $questionnaire->load(['program', 'sections.questions']);
+            $questionnaire->load(['program', 'sections.questions.references']);
             
             return response()->json([
                 'message' => 'Questionnaire updated successfully',

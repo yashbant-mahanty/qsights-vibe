@@ -16,7 +16,7 @@ class ExportController extends Controller
      */
     public function exportActivityResults(Request $request, $activityId)
     {
-        $activity = Activity::with(['questionnaire.sections.questions'])->findOrFail($activityId);
+        $activity = Activity::with(['questionnaire.sections.questions.references'])->findOrFail($activityId);
         
         $responses = Response::with(['participant', 'answers'])
             ->where('activity_id', $activityId)

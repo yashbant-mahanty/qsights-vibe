@@ -37,6 +37,7 @@ import {
 import { activitiesApi, activityApprovalsApi, type Activity, fetchWithAuth } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import DuplicateConfirmationModal from "@/components/duplicate-confirmation-modal";
+import ResendApprovalModal from "@/components/resend-approval-modal";
 import { toast } from "@/components/ui/toast";
 import { QRCodeModal } from "@/components/ui/qr-code-modal";
 
@@ -49,11 +50,13 @@ export default function ActivitiesPage() {
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
+  const [rejectedApprovals, setRejectedApprovals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ role?: string; programId?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; activityId: string | null; activityName: string | null }>({ isOpen: false, activityId: null, activityName: null });
   const [duplicateModal, setDuplicateModal] = useState<{ isOpen: boolean; activityId: string | null; activityName: string | null }>({ isOpen: false, activityId: null, activityName: null });
+  const [resendModal, setResendModal] = useState<{ isOpen: boolean; approvalId: string | null; activityName: string | null; hasManagerReview: boolean }>({ isOpen: false, approvalId: null, activityName: null, hasManagerReview: false });
   const [linksDropdown, setLinksDropdown] = useState<{ activityId: string | null; links: any | null; loading: boolean }>({ activityId: null, links: null, loading: false });
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{ isOpen: boolean; url: string; title: string; subtitle: string; color: string }>({ isOpen: false, url: '', title: '', subtitle: '', color: 'blue' });
@@ -142,6 +145,18 @@ export default function ActivitiesPage() {
         }
       }
       
+      // Load rejected approvals for program roles to allow resubmission
+      if (isProgramRole) {
+        try {
+          const rejectedResponse = await fetchWithAuth('/activity-approvals/my-requests?status=rejected');
+          const rejected = rejectedResponse?.data || rejectedResponse || [];
+          setRejectedApprovals(Array.isArray(rejected) ? rejected : []);
+        } catch (err) {
+          console.error('Failed to load rejected approvals:', err);
+          setRejectedApprovals([]);
+        }
+      }
+      
       // Sort by updated_at or created_at descending (newest first)
       const sortedData = [...data].sort((a, b) => {
         const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
@@ -224,6 +239,39 @@ export default function ActivitiesPage() {
     } catch (err) {
       console.error('Failed to delete activity:', err);
       toast({ title: "Error", description: "Failed to delete activity", variant: "error" });
+    }
+  };
+
+  const handleResendApproval = async (approvalId: string, activityName: string, hasManagerReview: boolean = false) => {
+    setResendModal({ isOpen: true, approvalId, activityName, hasManagerReview });
+  };
+
+  const confirmResendApproval = async () => {
+    if (!resendModal.approvalId) return;
+
+    try {
+      setLoading(true);
+      const response = await fetchWithAuth(`/activity-approvals/${resendModal.approvalId}/resend`, {
+        method: 'POST',
+      });
+
+      if (response) {
+        toast({ 
+          title: "Success!", 
+          description: "Approval request resubmitted successfully!", 
+          variant: "success" 
+        });
+        await loadActivities();
+      }
+    } catch (err: any) {
+      console.error('Failed to resend approval:', err);
+      toast({ 
+        title: "Error", 
+        description: err?.message || "Failed to resend approval request", 
+        variant: "error" 
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -407,10 +455,41 @@ export default function ActivitiesPage() {
     approvalId: pa.id,
   })), [pendingApprovals]);
 
-  // Combine activities with pending approvals (pending approvals shown first)
+  // Add rejected approval requests as virtual "activities" with status "rejected"
+  const rejectedApprovalDisplay = useMemo(() => rejectedApprovals.map(ra => ({
+    id: ra.id,
+    title: ra.name || "",
+    code: ra.id ? String(ra.id).substring(0, 8) : "",
+    type: ra.type || "",
+    program: ra.program?.name || "N/A",
+    programId: ra.program_id || null,
+    questionnaires: ra.questionnaire_id ? 1 : 0,
+    participants: 0,
+    authenticatedParticipants: 0,
+    guestParticipants: 0,
+    responses: 0,
+    authenticatedResponses: 0,
+    guestResponses: 0,
+    status: "rejected",
+    startDate: ra.start_date ? new Date(ra.start_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : "N/A",
+    endDate: ra.end_date ? new Date(ra.end_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : "N/A",
+    progress: 0,
+    languages: ra.languages && ra.languages.length > 0 ? ra.languages : ["EN"],
+    allowGuests: ra.allow_guests || false,
+    allow_participant_reminders: false,
+    enable_generated_links: false,
+    isApprovalRequest: true,
+    approvalId: ra.id,
+    remarks: ra.remarks || ra.review_message || "No remarks provided",
+    reviewedBy: ra.reviewed_by_user?.name || ra.reviewed_by?.name || "N/A",
+    reviewedAt: ra.reviewed_at ? new Date(ra.reviewed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "N/A",
+    hasManagerReview: !!ra.manager_review_status,
+  })), [rejectedApprovals]);
+
+  // Combine activities with pending and rejected approvals (pending first, then rejected, then activities)
   const allActivitiesDisplay = useMemo(() => 
-    [...pendingApprovalDisplay, ...activities_display],
-    [pendingApprovalDisplay, activities_display]
+    [...pendingApprovalDisplay, ...rejectedApprovalDisplay, ...activities_display],
+    [pendingApprovalDisplay, rejectedApprovalDisplay, activities_display]
   );
 
   const totalActivities = activities.length + pendingApprovals.length;
@@ -418,6 +497,7 @@ export default function ActivitiesPage() {
   const scheduledActivities = activities.filter(a => a.status === 'upcoming').length;
   const completedActivities = activities.filter(a => a.status === 'closed' || a.status === 'archived').length;
   const pendingApprovalCount = pendingApprovals.length;
+  const rejectedApprovalCount = rejectedApprovals.length;
 
   // Calculate participant counts across all activities
   const totalEventParticipants = activities.reduce((sum, a) => sum + (a.responses_count || 0), 0);
@@ -530,6 +610,13 @@ export default function ActivitiesPage() {
           <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded-full">
             <Clock className="w-3 h-3" />
             Pending Approval
+          </span>
+        );
+      case "rejected":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-50 text-red-700 text-xs font-medium rounded-full">
+            <XCircle className="w-3 h-3" />
+            Rejected
           </span>
         );
       case "upcoming":
@@ -880,26 +967,67 @@ export default function ActivitiesPage() {
                           {/* Special handling for pending approval requests */}
                           {(activity as any).isApprovalRequest ? (
                             <>
-                              <button
-                                onClick={() => router.push(`/activities/approvals/${activity.id}`)}
-                                className={`p-1.5 rounded transition-colors ${
-                                  currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
-                                    ? 'text-green-600 hover:bg-green-50'
-                                    : 'text-amber-600 hover:bg-amber-50'
-                                }`}
-                                title={currentUser?.role === 'super-admin' || currentUser?.role === 'admin' ? 'Review Approval Request' : 'View Approval Request'}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <span className={`text-xs px-2 ${
-                                currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
-                                  ? 'text-green-600 font-medium'
-                                  : 'text-gray-400'
-                              }`}>
-                                {currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
-                                  ? 'Click to Review'
-                                  : 'Awaiting Super Admin Approval'}
-                              </span>
+                              {activity.status === 'rejected' && (currentUser?.role === 'program-admin' || currentUser?.role === 'program-manager') ? (
+                                <>
+                                  {/* Resend for Approval Button */}
+                                  <button
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      handleResendApproval(activity.id, activity.title, (activity as any).hasManagerReview || false);
+                                    }}
+                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium flex items-center gap-1"
+                                    title="Resend for Approval"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Resend for Approval
+                                  </button>
+                                  {/* View Details Button */}
+                                  <button
+                                    onClick={() => router.push(`/activities/approvals/${activity.id}`)}
+                                    className="p-1.5 rounded transition-colors text-red-600 hover:bg-red-50"
+                                    title="View Rejection Details"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => router.push(`/activities/approvals/${activity.id}`)}
+                                    className={`p-1.5 rounded transition-colors ${
+                                      activity.status === 'rejected'
+                                        ? 'text-red-600 hover:bg-red-50'
+                                        : currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
+                                        ? 'text-green-600 hover:bg-green-50'
+                                        : 'text-amber-600 hover:bg-amber-50'
+                                    }`}
+                                    title={
+                                      activity.status === 'rejected'
+                                        ? 'View Rejection Details'
+                                        : currentUser?.role === 'super-admin' || currentUser?.role === 'admin' 
+                                        ? 'Review Approval Request' 
+                                        : 'View Approval Request'
+                                    }
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <span className={`text-xs px-2 ${
+                                    activity.status === 'rejected'
+                                      ? 'text-red-600 font-medium'
+                                      : currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
+                                      ? 'text-green-600 font-medium'
+                                      : 'text-gray-400'
+                                  }`}>
+                                    {activity.status === 'rejected'
+                                      ? 'View Rejection Details'
+                                      : currentUser?.role === 'super-admin' || currentUser?.role === 'admin'
+                                      ? 'Click to Review'
+                                      : 'Awaiting Super Admin Approval'}
+                                  </span>
+                                </>
+                              )}
                             </>
                           ) : (
                             <>
@@ -1309,6 +1437,14 @@ export default function ActivitiesPage() {
         onClose={() => setDuplicateModal({ isOpen: false, activityId: null, activityName: null })}
         onConfirm={confirmDuplicate}
         itemName={duplicateModal.activityName || undefined}
+      />
+
+      <ResendApprovalModal
+        isOpen={resendModal.isOpen}
+        onClose={() => setResendModal({ isOpen: false, approvalId: null, activityName: null, hasManagerReview: false })}
+        onConfirm={confirmResendApproval}
+        itemName={resendModal.activityName || undefined}
+        hasManagerReview={resendModal.hasManagerReview}
       />
 
       {/* QR Code Modal */}

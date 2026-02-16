@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\QuestionnaireController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\ActivityApprovalRequestController;
+use App\Http\Controllers\Api\ManagerReviewController;
 use App\Http\Controllers\Api\ProgramController;
 use App\Http\Controllers\Api\ProgramRoleController;
 use App\Http\Controllers\Api\DashboardController;
@@ -32,6 +33,12 @@ Route::get('/public/email-response', [App\Http\Controllers\Api\Public\EmailRespo
 // Generated Link Validation (Public - No Auth Required for participants)
 Route::get('/public/generated-link/validate/{token}', [App\Http\Controllers\Api\Public\GeneratedLinkValidationController::class, 'validate']);
 Route::post('/public/generated-link/mark-used', [App\Http\Controllers\Api\Public\GeneratedLinkValidationController::class, 'markAsUsed']);
+
+// Manager Review Public Routes (No Auth Required - Token-based access)
+Route::prefix('manager/review')->group(function () {
+    Route::get('/{token}', [ManagerReviewController::class, 'validateToken']);
+    Route::post('/{token}', [ManagerReviewController::class, 'submitReview']);
+});
 
 // SendGrid Webhook (Public - No Auth Required, SendGrid will POST to this)
 Route::post('/webhooks/sendgrid', [SendGridWebhookController::class, 'handle']);
@@ -259,10 +266,14 @@ Route::middleware(['auth:sanctum'])->prefix('videos')->group(function () {
 // Public Video View Logging (No auth required for participants)
 Route::post('/public/videos/log-view', [App\Http\Controllers\Api\VideoUploadController::class, 'logVideoView']);
 Route::post('/public/videos/watch-log', [App\Http\Controllers\Api\VideoUploadController::class, 'getParticipantWatchLog']);
+Route::get('/public/videos/questionnaire/{questionnaireId}', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoByQuestionnaire']);
 
 // Video Question Watch Tracking (Public - for participants taking activity)
 Route::post('/public/videos/question/track-progress', [App\Http\Controllers\Api\VideoUploadController::class, 'trackVideoQuestionProgress']);
 Route::post('/public/videos/question/get-progress', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoQuestionProgress']);
+
+// Public S3 View URL - For displaying videos and images on public pages (take activity, etc.)
+Route::post('/public/s3/view-url', [App\Http\Controllers\Api\S3UploadController::class, 'getViewUrl']);
 
 // Video Question Analytics (for reports)
 Route::get('/videos/question/{questionId}/view-logs', [App\Http\Controllers\Api\VideoUploadController::class, 'getVideoQuestionViewLogs']);
@@ -315,9 +326,19 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Activity Approval Requests
     Route::prefix('activity-approvals')->group(function () {
         Route::get('/', [ActivityApprovalRequestController::class, 'index']);
+        Route::get('/my-requests', [ActivityApprovalRequestController::class, 'myRequests'])
+            ->middleware(['role:program-admin,program-manager']);
+        
+        // Manager Review Routes (authenticated)
+        Route::post('/{id}/send-manager-review', [ManagerReviewController::class, 'sendManagerReview'])
+            ->middleware(['role:program-admin,program-manager,super-admin']);
+        Route::post('/{id}/resend-manager-review', [ManagerReviewController::class, 'resendManagerReview'])
+            ->middleware(['role:program-admin,program-manager,super-admin']);
         Route::get('/statistics', [ActivityApprovalRequestController::class, 'statistics']);
         Route::get('/{id}', [ActivityApprovalRequestController::class, 'show']);
         Route::post('/', [ActivityApprovalRequestController::class, 'store'])
+            ->middleware(['role:program-admin,program-manager']);
+        Route::post('/{id}/resend', [ActivityApprovalRequestController::class, 'resend'])
             ->middleware(['role:program-admin,program-manager']);
         Route::post('/{id}/review', [ActivityApprovalRequestController::class, 'review'])
             ->middleware(['role:super-admin,admin']);

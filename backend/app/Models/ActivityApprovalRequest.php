@@ -32,6 +32,7 @@ class ActivityApprovalRequest extends Model
         'subscription_frequency',
         'tax_percentage',
         'number_of_participants',
+        'expected_participants',
         'questions_to_randomize',
         'allow_guests',
         'contact_us_enabled',
@@ -50,6 +51,11 @@ class ActivityApprovalRequest extends Model
         'reviewed_at',
         'created_activity_id',
         'activity_id', // Link to existing draft activity
+        // Manager review workflow fields
+        'manager_review_status',
+        'manager_reviewed_at',
+        'manager_reviewed_by',
+        'manager_review_notes',
     ];
 
     protected $casts = [
@@ -61,6 +67,7 @@ class ActivityApprovalRequest extends Model
         'subscription_price' => 'decimal:2',
         'tax_percentage' => 'decimal:2',
         'number_of_participants' => 'integer',
+        'expected_participants' => 'integer',
         'questions_to_randomize' => 'integer',
         'allow_guests' => 'boolean',
         'contact_us_enabled' => 'boolean',
@@ -75,6 +82,7 @@ class ActivityApprovalRequest extends Model
         'pass_percentage' => 'decimal:2',
         'max_retakes' => 'integer',
         'reviewed_at' => 'datetime',
+        'manager_reviewed_at' => 'datetime',
     ];
 
     /**
@@ -103,6 +111,24 @@ class ActivityApprovalRequest extends Model
     public function createdActivity()
     {
         return $this->belongsTo(Activity::class, 'created_activity_id');
+    }
+
+    public function managerReviewedBy()
+    {
+        return $this->belongsTo(User::class, 'manager_reviewed_by');
+    }
+
+    public function managerReviewTokens()
+    {
+        return $this->hasMany(ManagerReviewToken::class, 'approval_request_id');
+    }
+
+    public function activeManagerReviewToken()
+    {
+        return $this->hasOne(ManagerReviewToken::class, 'approval_request_id')
+            ->where('used', false)
+            ->where('expires_at', '>', now())
+            ->latest();
     }
 
     /**
@@ -136,6 +162,58 @@ class ActivityApprovalRequest extends Model
         return $this->status === 'pending';
     }
 
+    /**
+     * Check if awaiting manager review
+     */
+    public function isAwaitingManagerReview(): bool
+    {
+        return $this->status === 'pending' && $this->manager_review_status === 'pending';
+    }
+
+    /**
+     * Check if manager has approved
+     */
+    public function isManagerApproved(): bool
+    {
+        return $this->manager_review_status === 'approved';
+    }
+
+    /**
+     * Check if manager review is not required
+     */
+    public function isManagerReviewNotRequired(): bool
+    {
+        return $this->manager_review_status === 'not_required';
+    }
+
+    /**
+     * Check if ready for super admin approval
+     */
+    public function isReadyForSuperAdminReview(): bool
+    {
+        return $this->status === 'pending' 
+            && ($this->isManagerApproved() || $this->isManagerReviewNotRequired());
+    }
+
+    /**
+     * Scope: Awaiting manager review
+     */
+    public function scopeAwaitingManagerReview($query)
+    {
+        return $query->where('status', 'pending')
+            ->where('manager_review_status', 'pending');
+    }
+
+    /**
+     * Scope: Manager approved
+     */
+    public function scopeManagerApproved($query)
+    {
+        return $query->where('manager_review_status', 'approved');
+    }
+
+    /**
+     * 
     /**
      * Check if request is approved
      */

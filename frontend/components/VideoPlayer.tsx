@@ -44,11 +44,15 @@ export default function VideoPlayer({
   const [presignedVideoUrl, setPresignedVideoUrl] = useState<string | null>(null);
   const [loadingUrl, setLoadingUrl] = useState(true);
   const lastTimeRef = useRef(0);
+  const autoplayAttemptedRef = useRef(false);
 
   // Get presigned URL for S3 videos
   useEffect(() => {
     async function fetchPresignedUrl() {
+      console.log('[VideoPlayer] fetchPresignedUrl called with:', videoUrl);
+      
       if (!videoUrl) {
+        console.log('[VideoPlayer] No videoUrl, setting null');
         setPresignedVideoUrl(null);
         setLoadingUrl(false);
         return;
@@ -57,32 +61,33 @@ export default function VideoPlayer({
       setLoadingUrl(true);
       
       // If it's already a presigned URL or not an S3 URL, use it directly
-      if (isPresignedUrl(videoUrl) || !isS3Url(videoUrl)) {
+      const alreadyPresigned = isPresignedUrl(videoUrl);
+      const isS3 = isS3Url(videoUrl);
+      console.log('[VideoPlayer] URL check:', { alreadyPresigned, isS3 });
+      
+      if (alreadyPresigned || !isS3) {
+        console.log('[VideoPlayer] Using URL directly (already presigned or not S3)');
         setPresignedVideoUrl(videoUrl);
         setLoadingUrl(false);
         return;
       }
       
       try {
+        console.log('[VideoPlayer] Fetching presigned URL from API...');
         const presigned = await getPresignedUrl(videoUrl);
+        console.log('[VideoPlayer] Got presigned URL:', presigned?.substring(0, 100));
         setPresignedVideoUrl(presigned || videoUrl);
       } catch (err) {
         console.error('[VideoPlayer] Failed to get presigned URL:', err);
         setPresignedVideoUrl(videoUrl); // Fallback to original URL
       } finally {
+        console.log('[VideoPlayer] Setting loadingUrl to false');
         setLoadingUrl(false);
       }
     }
     
     fetchPresignedUrl();
   }, [videoUrl]);
-
-  useEffect(() => {
-    if (autoplay && videoRef.current) {
-      videoRef.current.play();
-      setIsPlaying(true);
-    }
-  }, [autoplay]);
 
   // Seek to initial position if resuming
   useEffect(() => {
@@ -161,9 +166,34 @@ export default function VideoPlayer({
   }, [enablePeriodicSave, onPeriodicSave]);
 
   const handlePlay = () => {
+    console.log('[VideoPlayer] handlePlay clicked, videoRef:', !!videoRef.current);
     if (videoRef.current) {
-      videoRef.current.play();
-      setIsPlaying(true);
+      console.log('[VideoPlayer] Video element found, calling play()');
+      console.log('[VideoPlayer] Video src:', videoRef.current.src?.substring(0, 100));
+      console.log('[VideoPlayer] Video readyState:', videoRef.current.readyState);
+      
+      videoRef.current.play()
+        .then(() => {
+          console.log('[VideoPlayer] Play started successfully');
+          setIsPlaying(true);
+        })
+        .catch(err => {
+          console.error('[VideoPlayer] Play failed:', err.name, err.message);
+          // Try playing muted if autoplay policy blocks unmuted playback
+          if (err.name === 'NotAllowedError') {
+            console.log('[VideoPlayer] Trying muted playback...');
+            videoRef.current!.muted = true;
+            setIsMuted(true);
+            videoRef.current!.play()
+              .then(() => {
+                console.log('[VideoPlayer] Muted play started');
+                setIsPlaying(true);
+              })
+              .catch(e => console.error('[VideoPlayer] Muted play also failed:', e));
+          }
+        });
+    } else {
+      console.error('[VideoPlayer] No video ref available!');
     }
   };
 
@@ -254,8 +284,16 @@ export default function VideoPlayer({
     }
   };
 
+  // Debug render state
+  console.log('[VideoPlayer RENDER]', { 
+    loadingUrl, 
+    presignedVideoUrl: presignedVideoUrl?.substring(0, 80), 
+    videoUrl: videoUrl?.substring(0, 80) 
+  });
+
   // Show loading state while fetching presigned URL
   if (loadingUrl) {
+    console.log('[VideoPlayer] Showing loading spinner');
     return (
       <div className={`relative bg-black rounded-lg overflow-hidden ${className}`}>
         <div className="w-full h-64 flex items-center justify-center">
@@ -270,6 +308,7 @@ export default function VideoPlayer({
 
   // Show error if no presigned URL available
   if (!presignedVideoUrl) {
+    console.log('[VideoPlayer] No presigned URL, showing error');
     return (
       <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
@@ -279,21 +318,44 @@ export default function VideoPlayer({
     );
   }
 
-  const VideoContent = () => (
+  // Video content JSX (defined as a variable to avoid re-creating function on each render)
+  const videoContentJsx = (
     <div className={`relative bg-black rounded-lg overflow-hidden ${className}`}>
       <video
         ref={videoRef}
-        src={presignedVideoUrl}
+        src={presignedVideoUrl!}
         poster={thumbnailUrl}
+        playsInline
+        preload="auto"
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
+        onError={(e) => {
+          const video = e.target as HTMLVideoElement;
+          console.error('[VideoPlayer] Video error:', {
+            error: video.error?.message,
+            code: video.error?.code,
+            src: video.src?.substring(0, 100)
+          });
+        }}
         onLoadedMetadata={() => {
+          console.log('[VideoPlayer] Video metadata loaded, duration:', videoRef.current?.duration);
           if (videoRef.current) {
             setDuration(videoRef.current.duration);
+            
+            // Handle autoplay once metadata is loaded - muted autoplay is allowed by browsers
+            if (autoplay && !autoplayAttemptedRef.current) {
+              autoplayAttemptedRef.current = true;
+              videoRef.current.muted = true;
+              setIsMuted(true);
+              videoRef.current.play().catch(err => {
+                console.log('[VideoPlayer] Autoplay blocked by browser:', err.message);
+              });
+            }
           }
         }}
+        onCanPlay={() => console.log('[VideoPlayer] Video can play')}
         className="w-full max-h-[500px] object-contain"
       >
         Your browser does not support the video tag.
@@ -411,7 +473,7 @@ export default function VideoPlayer({
               >
                 <X className="w-6 h-6" />
               </button>
-              <VideoContent />
+              {videoContentJsx}
             </div>
           </div>
         )}
@@ -420,5 +482,5 @@ export default function VideoPlayer({
   }
 
   // Inline mode
-  return <VideoContent />;
+  return videoContentJsx;
 }

@@ -62,12 +62,20 @@ export default function DashboardPage() {
       return;
     }
     
-    // NEW: Redirect to program-scoped pages
-    if (userRole === 'program-admin' || userRole === 'program-manager' || userRole === 'program-moderator') {
-      if (programId) {
-        router.push(`/program/${programId}/dashboard`);
-        return;
-      }
+    // Redirect program-level users to their respective dashboards
+    if (userRole === 'program-admin') {
+      router.push('/program-admin');
+      return;
+    }
+    
+    if (userRole === 'program-manager') {
+      router.push('/program-manager');
+      return;
+    }
+    
+    if (userRole === 'program-moderator') {
+      router.push('/program-moderator');
+      return;
     }
   }, [authLoading, currentUser, router]);
   const [loading, setLoading] = useState(true);
