@@ -60,7 +60,7 @@ class VideoUploadController extends Controller
             $validator = Validator::make($request->all(), [
                 'file' => 'required|file|mimes:mp4,webm|max:102400', // 100MB max
                 'questionnaire_id' => 'nullable|exists:questionnaires,id', // Accept both integer and UUID
-                'video_type' => 'nullable|string|in:intro,section',
+                'video_type' => 'nullable|string|in:intro,section,thankyou',
                 'thumbnail' => 'nullable|file|mimes:jpeg,jpg,png,webp|max:5120', // 5MB thumbnail
             ]);
 
@@ -236,8 +236,8 @@ class VideoUploadController extends Controller
                 'questionnaire_id' => 'required|exists:questionnaires,id',
                 'video_url' => 'required|url',
                 'thumbnail_url' => 'nullable|url',
-                'video_type' => 'nullable|string|in:intro,section',
-                'display_mode' => 'required|string|in:inline,modal',
+                'video_type' => 'nullable|string|in:intro,section,thankyou',
+                'display_mode' => 'required|string|in:inline,modal,new_tab',
                 'must_watch' => 'required|boolean',
                 'autoplay' => 'nullable|boolean',
                 'video_duration_seconds' => 'nullable|integer|min:0',
@@ -251,11 +251,11 @@ class VideoUploadController extends Controller
                 ], 422);
             }
 
-            // Check if intro video already exists for this questionnaire
+            // Check if video already exists for this questionnaire
             $videoType = $request->input('video_type', 'intro');
-            if ($videoType === 'intro') {
+            if ($videoType === 'intro' || $videoType === 'thankyou') {
                 $existingVideo = QuestionnaireVideo::where('questionnaire_id', $request->questionnaire_id)
-                    ->where('video_type', 'intro')
+                    ->where('video_type', $videoType)
                     ->first();
                 
                 if ($existingVideo) {
@@ -312,11 +312,14 @@ class VideoUploadController extends Controller
     /**
      * Get video by questionnaire ID
      */
-    public function getVideoByQuestionnaire($questionnaireId)
+    public function getVideoByQuestionnaire($questionnaireId, Request $request)
     {
         try {
+            // Default to 'intro' if type not specified (backward compatible)
+            $videoType = $request->query('type', 'intro');
+            
             $video = QuestionnaireVideo::where('questionnaire_id', $questionnaireId)
-                ->where('video_type', 'intro')
+                ->where('video_type', $videoType)
                 ->first();
 
             if (!$video) {

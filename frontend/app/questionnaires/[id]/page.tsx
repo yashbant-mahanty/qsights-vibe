@@ -340,8 +340,8 @@ export default function ViewQuestionnairePage() {
           setThankyouVideoEnabled(true);
           setThankyouVideoUrl(thankyouVideoResponse.data.video_url || '');
           setThankyouVideoThumbnailUrl(thankyouVideoResponse.data.thumbnail_url || '');
-          setThankyouVideoPlayMode(thankyouVideoResponse.data.play_mode || 'inline');
-          setThankyouVideoMandatory(thankyouVideoResponse.data.mandatory ?? false);
+          setThankyouVideoPlayMode(thankyouVideoResponse.data.display_mode || 'inline');
+          setThankyouVideoMandatory(thankyouVideoResponse.data.must_watch ?? false);
           setThankyouVideoDuration(thankyouVideoResponse.data.video_duration_seconds || 0);
         }
       } catch (thankyouVideoErr) {
@@ -767,8 +767,9 @@ export default function ViewQuestionnairePage() {
             video_url: thankyouVideoUrl,
             thumbnail_url: thankyouVideoThumbnailUrl || null,
             video_type: 'thankyou',
-            play_mode: thankyouVideoPlayMode,
-            mandatory: thankyouVideoMandatory,
+            display_mode: thankyouVideoPlayMode,
+            must_watch: thankyouVideoMandatory,
+            autoplay: false,
             video_duration_seconds: thankyouVideoDuration,
           };
           console.log('🎊 Thank you video metadata payload:', thankyouVideoPayload);
