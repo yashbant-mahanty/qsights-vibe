@@ -35,6 +35,7 @@ import {
   ClipboardList,
   TrendingDown,
   Hash,
+  MessageSquare,
 } from "lucide-react";
 import { activitiesApi, responsesApi, notificationsApi, type Activity } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -3427,6 +3428,7 @@ export default function ActivityResultsPage() {
                               participantEmail: matchingResponse?.participant?.email || videoLog.participant_email || 'N/A',
                               answer: videoLog, // Pass the specific question's video log as the answer
                               otherText: null,
+                              commentText: null,
                               submittedAt: videoLog.last_watched_at || videoLog.created_at,
                               score: null,
                             };
@@ -3462,6 +3464,7 @@ export default function ActivityResultsPage() {
                               participantEmail: r.participant?.email || 'N/A',
                               answer: answerValue,
                               otherText: answer?.other_text,
+                              commentText: answer?.comment_text,
                               submittedAt: r.submitted_at || r.updated_at,
                               score: participantScore,
                             };
@@ -3806,6 +3809,9 @@ export default function ActivityResultsPage() {
                                               {question.type === 'sct_likert' && (
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-purple-700 uppercase tracking-wider">Score</th>
                                               )}
+                                              {question.type !== 'video' && (
+                                                <th className="px-4 py-3 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Comment</th>
+                                              )}
                                               <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Submitted</th>
                                             </tr>
                                           </thead>
@@ -3889,6 +3895,20 @@ export default function ActivityResultsPage() {
                                                       </span>
                                                     ) : (
                                                       <span className="text-xs text-gray-400">N/A</span>
+                                                    )}
+                                                  </td>
+                                                )}
+                                                {question.type !== 'video' && (
+                                                  <td className="px-4 py-3">
+                                                    {pr.commentText && pr.commentText.trim().length > 0 ? (
+                                                      <div className="text-sm text-gray-700 max-w-xs">
+                                                        <div className="flex items-start gap-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                                                          <MessageSquare className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                                          <span className="italic break-words">{pr.commentText.trim()}</span>
+                                                        </div>
+                                                      </div>
+                                                    ) : (
+                                                      <span className="text-xs text-gray-400">-</span>
                                                     )}
                                                   </td>
                                                 )}
