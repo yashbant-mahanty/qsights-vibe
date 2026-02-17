@@ -605,30 +605,136 @@ function EvaluationNewPageContent() {
       const allScores: { question: string; score: number; count: number }[] = [];
       const textFeedback: { question: string; answer: string; evaluator: string }[] = [];
       
+      // Known MCQ scales - fallback when template_questions not available
+      const KNOWN_MCQ_SCORES: Record<string, number> = {
+        // Performance ratings (5 options = 5-1 scores)
+        "Exceptional": 5,
+        "Exceeds Expectations": 4,
+        "Meets Expectations": 3,
+        "Needs Improvement": 2,
+        "Unsatisfactory": 1,
+        // Goal achievement
+        "Exceeded all goals": 5,
+        "Met all goals": 4,
+        "Met most goals": 3,
+        "Met some goals": 2,
+        "Did not meet goals": 1,
+        // Alternative common scales
+        "Excellent": 5,
+        "Very Good": 4,
+        "Good": 3,
+        "Fair": 2,
+        "Poor": 1,
+        // Yes/No and agreement
+        "Strongly Agree": 5,
+        "Agree": 4,
+        "Neutral": 3,
+        "Disagree": 2,
+        "Strongly Disagree": 1,
+        "Always": 5,
+        "Often": 4,
+        "Sometimes": 3,
+        "Rarely": 2,
+        "Never": 1
+      };
+      
+      // Helper function to convert MCQ text response to numeric score
+      const convertMCQToScore = (answer: string, options: string[] | null | undefined): number | null => {
+        if (!options || !Array.isArray(options) || options.length === 0) return null;
+        
+        const optionIndex = options.findIndex(opt => opt === answer);
+        if (optionIndex === -1) return null;
+        
+        // Convert to score: first option = highest score, last option = 1
+        // For 5 options: [0,1,2,3,4] => [5,4,3,2,1]
+        return options.length - optionIndex;
+      };
+      
+      // Fallback: try to get score from known MCQ scales
+      const getKnownMCQScore = (answer: string): number | null => {
+        if (typeof answer !== 'string') return null;
+        return KNOWN_MCQ_SCORES[answer] ?? null;
+      };
+      
       staffReport.evaluations.forEach(evaluation => {
         if (evaluation.responses) {
+          // Handle case where responses is a plain array (team-performance API format)
+          // This format doesn't include template_questions, so use known MCQ scales
+          if (Array.isArray(evaluation.responses)) {
+            evaluation.responses.forEach((answer: any, index: number) => {
+              const questionText = `Question ${index + 1}`;
+              let numericScore: number | null = null;
+              
+              if (typeof answer === 'number') {
+                numericScore = answer;
+              } else if (typeof answer === 'string' && answer.trim()) {
+                // Try known MCQ scales
+                numericScore = getKnownMCQScore(answer);
+                if (numericScore === null) {
+                  textFeedback.push({ 
+                    question: questionText, 
+                    answer: String(answer), 
+                    evaluator: evaluation.evaluator_name 
+                  });
+                }
+              }
+              
+              if (numericScore !== null) {
+                const existing = allScores.find(s => s.question === questionText);
+                if (existing) {
+                  existing.score = (existing.score * existing.count + numericScore) / (existing.count + 1);
+                  existing.count++;
+                } else {
+                  allScores.push({ question: questionText, score: numericScore, count: 1 });
+                }
+              }
+            });
+          }
           // Handle new API format where responses is an object with responses array
-          if (evaluation.responses.responses && Array.isArray(evaluation.responses.responses)) {
+          else if (evaluation.responses.responses && Array.isArray(evaluation.responses.responses)) {
             // Map array responses to template questions
             const responsesArray = evaluation.responses.responses;
             evaluation.template_questions?.forEach((questionObj: any, index: number) => {
               const answer = responsesArray[index];
               const questionText = questionObj.question;
+              const questionType = questionObj.type;
+              const options = questionObj.options;
+              
+              let numericScore: number | null = null;
               
               if (typeof answer === 'number') {
+                numericScore = answer;
+              } else if (typeof answer === 'string' && answer.trim()) {
+                // Check if this is an MCQ/radio question with options
+                if ((questionType === 'mcq' || questionType === 'radio') && options) {
+                  numericScore = convertMCQToScore(answer, options);
+                  if (numericScore === null) {
+                    // Option not found, treat as text feedback
+                    textFeedback.push({ 
+                      question: questionText, 
+                      answer: String(answer), 
+                      evaluator: evaluation.evaluator_name 
+                    });
+                  }
+                } else {
+                  // Text question, add to feedback
+                  textFeedback.push({ 
+                    question: questionText, 
+                    answer: String(answer), 
+                    evaluator: evaluation.evaluator_name 
+                  });
+                }
+              }
+              
+              // Add numeric score if we have one
+              if (numericScore !== null) {
                 const existing = allScores.find(s => s.question === questionText);
                 if (existing) {
-                  existing.score = (existing.score * existing.count + answer) / (existing.count + 1);
+                  existing.score = (existing.score * existing.count + numericScore) / (existing.count + 1);
                   existing.count++;
                 } else {
-                  allScores.push({ question: questionText, score: answer, count: 1 });
+                  allScores.push({ question: questionText, score: numericScore, count: 1 });
                 }
-              } else if (typeof answer === 'string' && answer.trim()) {
-                textFeedback.push({ 
-                  question: questionText, 
-                  answer: String(answer), 
-                  evaluator: evaluation.evaluator_name 
-                });
               }
             });
           } else {
@@ -643,11 +749,23 @@ function EvaluationNewPageContent() {
                   allScores.push({ question, score: answer, count: 1 });
                 }
               } else if (typeof answer === 'string' && answer.trim()) {
-                textFeedback.push({ 
-                  question, 
-                  answer: String(answer), 
-                  evaluator: evaluation.evaluator_name 
-                });
+                // Try known MCQ scales first
+                const knownScore = getKnownMCQScore(answer);
+                if (knownScore !== null) {
+                  const existing = allScores.find(s => s.question === question);
+                  if (existing) {
+                    existing.score = (existing.score * existing.count + knownScore) / (existing.count + 1);
+                    existing.count++;
+                  } else {
+                    allScores.push({ question, score: knownScore, count: 1 });
+                  }
+                } else {
+                  textFeedback.push({ 
+                    question, 
+                    answer: String(answer), 
+                    evaluator: evaluation.evaluator_name 
+                  });
+                }
               }
             });
           }
@@ -672,6 +790,62 @@ function EvaluationNewPageContent() {
       };
     };
   }, []);
+
+  // Helper to compute score from a single evaluation's responses (for myPerformanceData)
+  const computeEvaluationScore = useMemo(() => {
+    // Helper function to convert MCQ text response to numeric score
+    const convertMCQToScore = (answer: string, options: string[] | null | undefined): number | null => {
+      if (!options || !Array.isArray(options) || options.length === 0) return null;
+      const optionIndex = options.findIndex(opt => opt === answer);
+      if (optionIndex === -1) return null;
+      return options.length - optionIndex;
+    };
+
+    return (evaluation: any): number => {
+      if (!evaluation) return 0;
+      
+      const scores: number[] = [];
+      
+      // Handle responses array format
+      if (evaluation.responses?.responses && Array.isArray(evaluation.responses.responses)) {
+        const responsesArray = evaluation.responses.responses;
+        const templateQuestions = evaluation.template_questions || [];
+        
+        responsesArray.forEach((answer: any, index: number) => {
+          const questionObj = templateQuestions[index];
+          const questionType = questionObj?.type;
+          const options = questionObj?.options;
+          
+          if (typeof answer === 'number' && !isNaN(answer)) {
+            scores.push(answer);
+          } else if (typeof answer === 'string' && answer.trim()) {
+            if ((questionType === 'mcq' || questionType === 'radio') && options) {
+              const score = convertMCQToScore(answer, options);
+              if (score !== null) scores.push(score);
+            }
+          }
+        });
+      }
+      // Handle responses object format (old API)
+      else if (evaluation.responses && typeof evaluation.responses === 'object') {
+        Object.values(evaluation.responses).forEach((answer: any) => {
+          if (typeof answer === 'number' && !isNaN(answer)) {
+            scores.push(answer);
+          }
+        });
+      }
+      
+      return scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : 0;
+    };
+  }, []);
+
+  // Compute overall score from myPerformanceData evaluations
+  const computedMyPerformanceScore = useMemo(() => {
+    if (!myPerformanceData?.evaluations || myPerformanceData.evaluations.length === 0) return 0;
+    const scores = myPerformanceData.evaluations.map((ev: any) => computeEvaluationScore(ev));
+    const validScores = scores.filter((s: number) => s > 0);
+    return validScores.length > 0 ? Math.round((validScores.reduce((a: number, b: number) => a + b, 0) / validScores.length) * 10) / 10 : 0;
+  }, [myPerformanceData, computeEvaluationScore]);
 
   // Filtered and paginated Role list
   const filteredRoles = useMemo(() => {
@@ -2039,7 +2213,7 @@ function EvaluationNewPageContent() {
                             <div className="flex items-center justify-between">
                               <div>
                                 <p className="text-sm text-blue-600 font-medium">Overall Score</p>
-                                <p className="text-2xl font-bold text-blue-900 mt-1">{myPerformanceData.overallScore}/5</p>
+                                <p className="text-2xl font-bold text-blue-900 mt-1">{computedMyPerformanceScore}/5</p>
                               </div>
                               <Star className="h-8 w-8 text-yellow-500" />
                             </div>
@@ -2082,7 +2256,7 @@ function EvaluationNewPageContent() {
                                   <div className="text-right">
                                     <div className="flex items-center gap-1">
                                       <Star className="h-4 w-4 text-yellow-500" />
-                                      <span className="font-bold text-gray-900">{evaluation.score || 'N/A'}</span>
+                                      <span className="font-bold text-gray-900">{computeEvaluationScore(evaluation) || 'N/A'}</span>
                                     </div>
                                     <p className="text-xs text-gray-500 mt-1">
                                       {formatDate(evaluation.completed_at)}
@@ -2194,7 +2368,7 @@ function EvaluationNewPageContent() {
                           <div>
                             <p className="text-sm text-blue-600 font-medium">Overall Score</p>
                             <p className="text-3xl font-bold text-blue-900 mt-2">
-                              {myPerformanceData.overallScore || '0.0'}/5
+                              {computedMyPerformanceScore || '0.0'}/5
                             </p>
                           </div>
                           <div className="bg-blue-200 rounded-full p-3">
@@ -2259,7 +2433,7 @@ function EvaluationNewPageContent() {
                                   </div>
                                   <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border">
                                     <Star className="h-5 w-5 text-amber-500" />
-                                    <span className="text-2xl font-bold text-gray-900">{evaluation.average_score.toFixed(1)}</span>
+                                    <span className="text-2xl font-bold text-gray-900">{computeEvaluationScore(evaluation).toFixed(1)}</span>
                                     <span className="text-sm text-gray-500">/5.0</span>
                                   </div>
                                 </div>
@@ -4069,7 +4243,7 @@ function EvaluationNewPageContent() {
                             <p className="text-sm text-amber-600 font-medium">Team Avg Score</p>
                             <p className="text-3xl font-bold text-amber-900 mt-2">
                               {teamPerformanceData.staff_reports.length > 0 
-                                ? (teamPerformanceData.staff_reports.reduce((sum: number, s: any) => sum + s.overall_average, 0) / teamPerformanceData.staff_reports.length).toFixed(1)
+                                ? (teamPerformanceData.staff_reports.reduce((sum: number, s: any) => sum + analyzeStaffPerformance(s).overallAverage, 0) / teamPerformanceData.staff_reports.length).toFixed(1)
                                 : '0.0'}/5
                             </p>
                           </div>
@@ -4165,13 +4339,13 @@ function EvaluationNewPageContent() {
                                       </div>
                                       <div className="flex items-center gap-6">
                                         <div className="text-center">
-                                          <p className="text-2xl font-bold text-blue-600">{staffReport.total_evaluations}</p>
+                                          <p className="text-2xl font-bold text-blue-600">{analysis.totalEvaluations}</p>
                                           <p className="text-xs text-gray-500">Evaluations</p>
                                         </div>
                                         <div className="text-center">
                                           <div className="flex items-center gap-1">
                                             <Star className="h-5 w-5 text-amber-500" />
-                                            <p className="text-2xl font-bold text-gray-900">{staffReport.overall_average.toFixed(1)}</p>
+                                            <p className="text-2xl font-bold text-gray-900">{analysis.overallAverage.toFixed(1)}</p>
                                           </div>
                                           <p className="text-xs text-gray-500">Avg Score</p>
                                         </div>
@@ -4186,30 +4360,90 @@ function EvaluationNewPageContent() {
                                   
                                   {expandedStaff.includes(staffReport.staff_id) && (
                                     <div className="border-t bg-white p-4 space-y-6">
-                                      {/* Radar Chart - Skills Overview */}
+                                      {/* Skills Performance Overview - Enhanced Visual */}
                                       {analysis.allScores.length > 0 && (
-                                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 border border-purple-200">
-                                          <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                                            <Activity className="h-5 w-5 text-purple-600" />
+                                        <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 rounded-xl p-6 border border-indigo-200">
+                                          <h4 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                                            <Activity className="h-5 w-5 text-indigo-600" />
                                             Skills Performance Overview
                                           </h4>
-                                          <div className="bg-white rounded-lg p-4">
-                                            <ResponsiveContainer width="100%" height={300}>
-                                              <RadarChart data={analysis.allScores.slice(0, 8).map((skill: any) => ({
-                                                skill: skill.question.length > 25 ? skill.question.substring(0, 25) + '...' : skill.question,
-                                                score: parseFloat(skill.score.toFixed(1)),
-                                                fullMark: 5
-                                              }))}>
-                                                <PolarGrid stroke="#e5e7eb" />
-                                                <PolarAngleAxis dataKey="skill" tick={{ fill: '#6b7280', fontSize: 12 }} />
-                                                <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fill: '#6b7280' }} />
-                                                <Radar name="Performance" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
-                                                <Tooltip 
-                                                  contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-                                                  formatter={(value: any) => [`${value}/5`, 'Score']}
-                                                />
-                                              </RadarChart>
-                                            </ResponsiveContainer>
+                                          
+                                          {/* Overall Score Circle + Skills Grid */}
+                                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                            {/* Overall Score Circle */}
+                                            <div className="flex flex-col items-center justify-center bg-white rounded-2xl p-6 shadow-sm border">
+                                              <div className="relative w-32 h-32">
+                                                <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
+                                                  <circle
+                                                    cx="50" cy="50" r="45"
+                                                    fill="none" stroke="#e5e7eb" strokeWidth="10"
+                                                  />
+                                                  <circle
+                                                    cx="50" cy="50" r="45"
+                                                    fill="none"
+                                                    stroke={analysis.overallAverage >= 4 ? '#22c55e' : analysis.overallAverage >= 3 ? '#3b82f6' : analysis.overallAverage >= 2 ? '#f59e0b' : '#ef4444'}
+                                                    strokeWidth="10"
+                                                    strokeLinecap="round"
+                                                    strokeDasharray={`${(analysis.overallAverage / 5) * 283} 283`}
+                                                  />
+                                                </svg>
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                  <span className="text-3xl font-bold text-gray-900">{analysis.overallAverage}</span>
+                                                  <span className="text-xs text-gray-500">out of 5</span>
+                                                </div>
+                                              </div>
+                                              <p className="mt-4 text-sm font-medium text-gray-700">Overall Score</p>
+                                              <p className="text-xs text-gray-500">{analysis.totalEvaluations} evaluation(s)</p>
+                                            </div>
+
+                                            {/* Individual Skills Progress Bars */}
+                                            <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border">
+                                              <h5 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wider">Skill Breakdown</h5>
+                                              <div className="space-y-4">
+                                                {analysis.allScores.map((skill: any, idx: number) => {
+                                                  const percentage = (skill.score / 5) * 100;
+                                                  const colorClass = skill.score >= 4 ? 'from-green-400 to-emerald-500' : 
+                                                                    skill.score >= 3 ? 'from-blue-400 to-indigo-500' : 
+                                                                    skill.score >= 2 ? 'from-amber-400 to-orange-500' : 'from-red-400 to-rose-500';
+                                                  return (
+                                                    <div key={idx} className="group">
+                                                      <div className="flex items-center justify-between mb-1.5">
+                                                        <span className="text-sm text-gray-700 font-medium truncate max-w-[70%]" title={skill.question}>
+                                                          {skill.question.length > 40 ? skill.question.substring(0, 40) + '...' : skill.question}
+                                                        </span>
+                                                        <span className="text-sm font-bold text-gray-900 ml-2">{skill.score.toFixed(1)}</span>
+                                                      </div>
+                                                      <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                                                        <div 
+                                                          className={`h-full rounded-full bg-gradient-to-r ${colorClass} transition-all duration-700 ease-out`}
+                                                          style={{ width: `${percentage}%` }}
+                                                        />
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Score Legend */}
+                                          <div className="mt-6 flex items-center justify-center gap-6 text-xs">
+                                            <div className="flex items-center gap-1.5">
+                                              <div className="w-3 h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500"></div>
+                                              <span className="text-gray-600">Excellent (4-5)</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                              <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-indigo-500"></div>
+                                              <span className="text-gray-600">Good (3-4)</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                              <div className="w-3 h-3 rounded-full bg-gradient-to-r from-amber-400 to-orange-500"></div>
+                                              <span className="text-gray-600">Average (2-3)</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                              <div className="w-3 h-3 rounded-full bg-gradient-to-r from-red-400 to-rose-500"></div>
+                                              <span className="text-gray-600">Needs Work (&lt;2)</span>
+                                            </div>
                                           </div>
                                         </div>
                                       )}
@@ -4356,7 +4590,7 @@ function EvaluationNewPageContent() {
                                                   </div>
                                                   <div className="flex items-center gap-2">
                                                     <Star className="h-4 w-4 text-amber-500" />
-                                                    <span className="font-bold text-lg text-gray-900">{evaluation.average_score.toFixed(1)}</span>
+                                                    <span className="font-bold text-lg text-gray-900">{computeEvaluationScore(evaluation).toFixed(1)}</span>
                                                     <span className="text-sm text-gray-500">/5.0</span>
                                                   </div>
                                                 </div>
@@ -4979,30 +5213,90 @@ function EvaluationNewPageContent() {
                               
                               {expandedStaff.includes(staffReport.staff_id) && (
                                 <div className="border-t bg-white p-4 space-y-6">
-                                  {/* Radar Chart - Skills Overview */}
+                                  {/* Skills Performance Overview - Enhanced Visual */}
                                   {analysis.allScores.length > 0 && (
-                                    <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 border border-purple-200">
-                                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                                        <Activity className="h-5 w-5 text-purple-600" />
+                                    <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 rounded-xl p-6 border border-indigo-200">
+                                      <h4 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                                        <Activity className="h-5 w-5 text-indigo-600" />
                                         Skills Performance Overview
                                       </h4>
-                                      <div className="bg-white rounded-lg p-4">
-                                        <ResponsiveContainer width="100%" height={300}>
-                                          <RadarChart data={analysis.allScores.slice(0, 8).map((skill: any) => ({
-                                            skill: skill.question.length > 25 ? skill.question.substring(0, 25) + '...' : skill.question,
-                                            score: parseFloat(skill.score.toFixed(1)),
-                                            fullMark: 5
-                                          }))}>
-                                            <PolarGrid stroke="#e5e7eb" />
-                                            <PolarAngleAxis dataKey="skill" tick={{ fill: '#6b7280', fontSize: 12 }} />
-                                            <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fill: '#6b7280' }} />
-                                            <Radar name="Performance" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
-                                            <Tooltip 
-                                              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-                                              formatter={(value: any) => [`${value}/5`, 'Score']}
-                                            />
-                                          </RadarChart>
-                                        </ResponsiveContainer>
+                                      
+                                      {/* Overall Score Circle + Skills Grid */}
+                                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                        {/* Overall Score Circle */}
+                                        <div className="flex flex-col items-center justify-center bg-white rounded-2xl p-6 shadow-sm border">
+                                          <div className="relative w-32 h-32">
+                                            <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
+                                              <circle
+                                                cx="50" cy="50" r="45"
+                                                fill="none" stroke="#e5e7eb" strokeWidth="10"
+                                              />
+                                              <circle
+                                                cx="50" cy="50" r="45"
+                                                fill="none"
+                                                stroke={analysis.overallAverage >= 4 ? '#22c55e' : analysis.overallAverage >= 3 ? '#3b82f6' : analysis.overallAverage >= 2 ? '#f59e0b' : '#ef4444'}
+                                                strokeWidth="10"
+                                                strokeLinecap="round"
+                                                strokeDasharray={`${(analysis.overallAverage / 5) * 283} 283`}
+                                              />
+                                            </svg>
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                              <span className="text-3xl font-bold text-gray-900">{analysis.overallAverage}</span>
+                                              <span className="text-xs text-gray-500">out of 5</span>
+                                            </div>
+                                          </div>
+                                          <p className="mt-4 text-sm font-medium text-gray-700">Overall Score</p>
+                                          <p className="text-xs text-gray-500">{analysis.totalEvaluations} evaluation(s)</p>
+                                        </div>
+
+                                        {/* Individual Skills Progress Bars */}
+                                        <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border">
+                                          <h5 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wider">Skill Breakdown</h5>
+                                          <div className="space-y-4">
+                                            {analysis.allScores.map((skill: any, idx: number) => {
+                                              const percentage = (skill.score / 5) * 100;
+                                              const colorClass = skill.score >= 4 ? 'from-green-400 to-emerald-500' : 
+                                                                skill.score >= 3 ? 'from-blue-400 to-indigo-500' : 
+                                                                skill.score >= 2 ? 'from-amber-400 to-orange-500' : 'from-red-400 to-rose-500';
+                                              return (
+                                                <div key={idx} className="group">
+                                                  <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-sm text-gray-700 font-medium truncate max-w-[70%]" title={skill.question}>
+                                                      {skill.question.length > 40 ? skill.question.substring(0, 40) + '...' : skill.question}
+                                                    </span>
+                                                    <span className="text-sm font-bold text-gray-900 ml-2">{skill.score.toFixed(1)}</span>
+                                                  </div>
+                                                  <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                                                    <div 
+                                                      className={`h-full rounded-full bg-gradient-to-r ${colorClass} transition-all duration-700 ease-out`}
+                                                      style={{ width: `${percentage}%` }}
+                                                    />
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Score Legend */}
+                                      <div className="mt-6 flex items-center justify-center gap-6 text-xs">
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="w-3 h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500"></div>
+                                          <span className="text-gray-600">Excellent (4-5)</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-indigo-500"></div>
+                                          <span className="text-gray-600">Good (3-4)</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="w-3 h-3 rounded-full bg-gradient-to-r from-amber-400 to-orange-500"></div>
+                                          <span className="text-gray-600">Average (2-3)</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="w-3 h-3 rounded-full bg-gradient-to-r from-red-400 to-rose-500"></div>
+                                          <span className="text-gray-600">Needs Work (&lt;2)</span>
+                                        </div>
                                       </div>
                                     </div>
                                   )}

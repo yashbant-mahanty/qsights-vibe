@@ -152,7 +152,7 @@ export default function NotificationBell() {
     } catch (error) {
       console.error('Error clearing all notifications:', error);
       // Reload notifications on error
-      await fetchNotifications();
+      await loadNotifications();
     }
   }
 

@@ -33,21 +33,46 @@ export default function EvaluationAdminDashboard() {
 
   // Analyze staff performance data
   const analyzeStaffPerformance = useMemo(() => {
+    // Helper function to convert MCQ text response to numeric score
+    const convertMCQToScore = (answer: string, options: string[] | null | undefined): number | null => {
+      if (!options || !Array.isArray(options) || options.length === 0) return null;
+      
+      const optionIndex = options.findIndex(opt => opt === answer);
+      if (optionIndex === -1) return null;
+      
+      // Convert to score: first option = highest score, last option = 1
+      // For 5 options: [0,1,2,3,4] => [5,4,3,2,1]
+      return options.length - optionIndex;
+    };
+
     return (staffReport: any) => {
       const allScores: any[] = [];
 
       staffReport.evaluations?.forEach((evaluation: any) => {
         if (evaluation.responses && evaluation.responses.responses && Array.isArray(evaluation.responses.responses)) {
-          // The API returns evaluation.responses.responses as an array of numbers
           const templateQuestions = evaluation.template_questions || [];
           
-          evaluation.responses.responses.forEach((score: number, idx: number) => {
-            if (typeof score === 'number' && !isNaN(score)) {
-              // Use actual question text if available, otherwise fallback to Criterion
-              const question = templateQuestions[idx]?.question || templateQuestions[idx] || `Criterion ${idx + 1}`;
+          evaluation.responses.responses.forEach((response: any, idx: number) => {
+            const questionObj = templateQuestions[idx];
+            const question = questionObj?.question || questionObj || `Criterion ${idx + 1}`;
+            const questionType = questionObj?.type;
+            const options = questionObj?.options;
+            
+            let numericScore: number | null = null;
+            
+            if (typeof response === 'number' && !isNaN(response)) {
+              numericScore = response;
+            } else if (typeof response === 'string' && response.trim()) {
+              // Check if this is an MCQ/radio question with options
+              if ((questionType === 'mcq' || questionType === 'radio') && options) {
+                numericScore = convertMCQToScore(response, options);
+              }
+            }
+            
+            if (numericScore !== null) {
               allScores.push({
                 question,
-                score: score
+                score: numericScore
               });
             }
           });
