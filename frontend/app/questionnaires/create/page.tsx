@@ -590,6 +590,7 @@ function QuestionnaireBuilderPageContent() {
         conditionalValue: null,
         nestingLevel: 0,
         ...(type === "mcq" || type === "multi" ? { options: ["Option 1", "Option 2", "Option 3"], correctAnswers: [] } : {}),
+        ...(type === "multi" ? { min_selection: null, max_selection: null } : {}),
         ...(type === "rating" ? { scale: 5 } : {}),
         ...(type === "slider" ? { min: 0, max: 100 } : {}),
         ...(type === "matrix" ? { rows: ["Row 1", "Row 2"], columns: ["Column 1", "Column 2"] } : {}),
@@ -958,6 +959,8 @@ function QuestionnaireBuilderPageContent() {
                   hyperlinksPosition: question.hyperlinksPosition || 'bottom'
                 } : {}),
               },
+              min_selection: question.type === 'multi' ? (question.min_selection ?? null) : null,
+              max_selection: question.type === 'multi' ? (question.max_selection ?? null) : null,
               order: section.questions.indexOf(question) + 1,
             };
             
@@ -1984,6 +1987,75 @@ function QuestionnaireBuilderPageContent() {
                 />
                 <span>Allow “Other (Please Specify)”</span>
               </label>
+            </div>
+
+            {/* Min/Max Selection Controls */}
+            <div className="pt-2 mt-2 border-t border-gray-200">
+              <div className="text-xs font-medium text-gray-700 mb-2">Selection Limits (Optional)</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-600 block mb-1">Minimum</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={question.max_selection || question.options?.length || 99}
+                    value={question.min_selection || ''}
+                    onChange={(e) => {
+                      const value = e.target.value === '' ? null : parseInt(e.target.value);
+                      setSections(prevSections =>
+                        prevSections.map(section =>
+                          section.id === sectionId
+                            ? {
+                                ...section,
+                                questions: section.questions.map((q: any) =>
+                                  q.id === question.id ? { ...q, min_selection: value } : q
+                                )
+                              }
+                            : section
+                        )
+                      );
+                    }}
+                    placeholder="Min"
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600 block mb-1">Maximum</label>
+                  <input
+                    type="number"
+                    min={question.min_selection || 1}
+                    max={question.options?.length || 99}
+                    value={question.max_selection || ''}
+                    onChange={(e) => {
+                      const value = e.target.value === '' ? null : parseInt(e.target.value);
+                      setSections(prevSections =>
+                        prevSections.map(section =>
+                          section.id === sectionId
+                            ? {
+                                ...section,
+                                questions: section.questions.map((q: any) =>
+                                  q.id === question.id ? { ...q, max_selection: value } : q
+                                )
+                              }
+                            : section
+                        )
+                      );
+                    }}
+                    placeholder="Max"
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              {(question.min_selection || question.max_selection) && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {question.min_selection && question.max_selection
+                    ? `Participants must select ${question.min_selection}-${question.max_selection} options`
+                    : question.min_selection
+                    ? `Participants must select at least ${question.min_selection} option${question.min_selection > 1 ? 's' : ''}`
+                    : `Participants can select up to ${question.max_selection} option${question.max_selection > 1 ? 's' : ''}`
+                  }
+                </div>
+              )}
             </div>
 
             <button
