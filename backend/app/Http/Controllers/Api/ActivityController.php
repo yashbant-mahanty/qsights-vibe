@@ -1743,6 +1743,90 @@ class ActivityController extends Controller
     }
 
     /**
+     * Update notification settings for an activity
+     */
+    public function updateNotificationSettings(Request $request, string $id)
+    {
+        $activity = Activity::findOrFail($id);
+        
+        $validated = $request->validate([
+            'welcome_email_enabled' => 'required|boolean',
+            'thank_you_email_enabled' => 'required|boolean',
+        ]);
+
+        // Get existing settings or create new array
+        $settings = $activity->settings ?? [];
+        
+        // Update notification settings
+        $settings['notifications'] = [
+            'welcome_email_enabled' => $validated['welcome_email_enabled'],
+            'thank_you_email_enabled' => $validated['thank_you_email_enabled'],
+        ];
+
+        $activity->settings = $settings;
+        $activity->save();
+
+        \Log::info('Activity notification settings updated', [
+            'activity_id' => $activity->id,
+            'settings' => $settings['notifications'],
+            'user_id' => $request->user()->id ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Notification settings updated successfully',
+            'data' => [
+                'notifications' => $settings['notifications']
+            ]
+        ]);
+    }
+
+    /**
+     * Update Contact Us email settings for an activity
+     */
+    public function updateContactUsSettings(Request $request, string $id)
+    {
+        $activity = Activity::findOrFail($id);
+        
+        $validated = $request->validate([
+            'recipient_email' => 'nullable|email',
+            'cc_emails' => 'nullable|array',
+            'cc_emails.*' => 'email',
+            'bcc_emails' => 'nullable|array',
+            'bcc_emails.*' => 'email',
+            'notify_program_admin' => 'nullable|boolean',
+            'notify_manager' => 'nullable|boolean',
+        ]);
+
+        // Get existing settings or create new array
+        $settings = $activity->settings ?? [];
+        
+        // Update contact us settings
+        $settings['contact_us'] = [
+            'recipient_email' => $validated['recipient_email'] ?? null,
+            'cc_emails' => $validated['cc_emails'] ?? [],
+            'bcc_emails' => $validated['bcc_emails'] ?? [],
+            'notify_program_admin' => $validated['notify_program_admin'] ?? true,
+            'notify_manager' => $validated['notify_manager'] ?? true,
+        ];
+
+        $activity->settings = $settings;
+        $activity->save();
+
+        \Log::info('Activity Contact Us settings updated', [
+            'activity_id' => $activity->id,
+            'settings' => $settings['contact_us'],
+            'user_id' => $request->user()->id ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Contact Us settings updated successfully',
+            'data' => [
+                'contact_us' => $settings['contact_us']
+            ]
+        ]);
+    }
+
+    /**
      * Notify Super Admins when an Activity/Event is created by Program Admin
      */
     protected function notifyActivityCreated(Activity $activity, User $creator)

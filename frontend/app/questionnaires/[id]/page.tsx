@@ -51,6 +51,7 @@ import {
   AlertCircle,
   BookOpen,
   ExternalLink,
+  PieChart,
 } from "lucide-react";
 import { questionnairesApi, programsApi, type Program, fetchWithAuth } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -210,6 +211,7 @@ export default function ViewQuestionnairePage() {
     { id: "drag_and_drop", label: "Drag & Drop Bucket", icon: MoveVertical, color: "text-purple-600" },
     { id: "sct_likert", label: "Script Concordance (SCT) Likert", icon: ClipboardList, color: "text-indigo-600" },
     { id: "video", label: "Video", icon: Video, color: "text-purple-600" },
+    { id: "percentage_allocation", label: "Percentage Allocation", icon: PieChart, color: "text-emerald-600" },
   ];
 
   useEffect(() => {
@@ -508,6 +510,9 @@ export default function ViewQuestionnairePage() {
               settings: q.settings || {},
               // Load references
               references: q.references || [],
+              // Load min/max selection limits for multi-select questions
+              min_selection: q.min_selection || null,
+              max_selection: q.max_selection || null,
             };
           }) || []
         }));
@@ -588,6 +593,8 @@ export default function ViewQuestionnairePage() {
         formattedQuestion: "",
         formattedOptions: [],
         ...(type === "mcq" || type === "multi" ? { options: ["Option 1", "Option 2", "Option 3"], correctAnswers: [] } : {}),
+        ...(type === "multi" ? { min_selection: null, max_selection: null } : {}),
+        ...(type === "percentage_allocation" ? { options: ["Option 1", "Option 2", "Option 3"] } : {}),
         ...(type === "rating" ? { scale: 5 } : {}),
         ...(type === "matrix" ? { rows: ["Row 1", "Row 2"], columns: ["Column 1", "Column 2", "Column 3"] } : {}),
         ...(type === "slider" ? { min: 0, max: 100 } : {}),
@@ -795,8 +802,10 @@ export default function ViewQuestionnairePage() {
               description: isInformationBlock ? (question.description || '').substring(0, 500) : null,
               is_required: question.required === true,
               is_comment_enabled: question.is_comment_enabled === true,
-              options: (question.type === 'mcq' || question.type === 'multi') && question.options ? question.options : null,
+              options: (question.type === 'mcq' || question.type === 'multi' || question.type === 'percentage_allocation') && question.options ? question.options : null,
               settings: settings,
+              min_selection: question.type === 'multi' ? (question.min_selection ?? null) : null,
+              max_selection: question.type === 'multi' ? (question.max_selection ?? null) : null,
               order: qIdx + 1,
             };
             
@@ -1727,6 +1736,93 @@ export default function ViewQuestionnairePage() {
               </div>
             )}
 
+            {/* Min/Max Selection Limits - Only for Multi-Select */}
+            {!showPreview && question.type === 'multi' && (
+              <div className="pt-3 mt-3 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Settings className="w-4 h-4 text-gray-500" />
+                  <span className="text-xs font-medium text-gray-700">Selection Limits</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-gray-600 block mb-1">Minimum Selections</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={question.options?.length || 10}
+                      value={question.min_selection ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setSections((prevSections: any) =>
+                          prevSections.map((s: any) =>
+                            s.id === sectionId
+                              ? {
+                                  ...s,
+                                  questions: s.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, min_selection: value }
+                                      : q
+                                  )
+                                }
+                              : s
+                          )
+                        );
+                      }}
+                      placeholder="0"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600 block mb-1">Maximum Selections</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={question.options?.length || 10}
+                      value={question.max_selection ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setSections((prevSections: any) =>
+                          prevSections.map((s: any) =>
+                            s.id === sectionId
+                              ? {
+                                  ...s,
+                                  questions: s.questions.map((q: any) =>
+                                    q.id === question.id
+                                      ? { ...q, max_selection: value }
+                                      : q
+                                  )
+                                }
+                              : s
+                          )
+                        );
+                      }}
+                      placeholder="No limit"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                {(question.min_selection || question.max_selection) && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    {question.min_selection && question.max_selection
+                      ? `Users must select between ${question.min_selection} and ${question.max_selection} options`
+                      : question.min_selection
+                      ? `Users must select at least ${question.min_selection} option${question.min_selection > 1 ? 's' : ''}`
+                      : `Users can select up to ${question.max_selection} option${question.max_selection > 1 ? 's' : ''}`}
+                  </p>
+                )}
+                {question.min_selection && question.max_selection && question.min_selection > question.max_selection && (
+                  <p className="text-xs text-red-500 mt-1">
+                    ⚠️ Minimum cannot be greater than maximum
+                  </p>
+                )}
+                {question.max_selection && question.options && question.max_selection > question.options.length && (
+                  <p className="text-xs text-red-500 mt-1">
+                    ⚠️ Maximum cannot exceed total options ({question.options.length})
+                  </p>
+                )}
+              </div>
+            )}
+
             {!showPreview && (
               <button
                 onClick={() => addQuestionOption(sectionId, question.id)}
@@ -1738,11 +1834,223 @@ export default function ViewQuestionnairePage() {
             )}
           </div>
         );
+      case "percentage_allocation":
+        return (
+          <div className="space-y-3">
+            {/* Header with instructions */}
+            <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-700 flex items-center gap-2">
+              <PieChart className="w-4 h-4" />
+              <span>Allocate percentages that total exactly 100%</span>
+            </div>
+            
+            {question.options?.map((option: string, idx: number) => (
+              <div key={idx} className="flex items-center gap-3 group">
+                {!showPreview ? (
+                  <>
+                    <IsolatedTextInput
+                      value={option}
+                      onValueChange={(newValue: string) => updateQuestionOption(sectionId, question.id, idx, newValue)}
+                      className="flex-1 text-sm text-gray-700 bg-transparent border-b border-gray-300 hover:border-gray-400 focus:border-emerald-500 focus:outline-none px-2 py-1.5"
+                      placeholder={`Option ${idx + 1}`}
+                    />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        className="w-16 px-2 py-1.5 text-sm border border-gray-300 rounded text-center bg-gray-50"
+                        disabled
+                      />
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                    {question.options.length > 2 && (
+                      <button
+                        onClick={() => removeQuestionOption(sectionId, question.id, idx)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-50 rounded transition-all"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-gray-700">{option}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        className="w-16 px-2 py-1.5 text-sm border border-gray-300 rounded text-center bg-gray-50"
+                        disabled
+                      />
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            
+            {/* Total display */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
+              <span className="text-sm font-medium text-gray-600">Total:</span>
+              <span className="text-sm font-bold text-emerald-600">0%</span>
+            </div>
+            
+            {!showPreview && (
+              <button
+                onClick={() => addQuestionOption(sectionId, question.id)}
+                className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+              >
+                <Plus className="w-3 h-3" />
+                Add Option
+              </button>
+            )}
+          </div>
+        );
       case "text":
+        if (!showPreview) {
+          return (
+            <div className="space-y-4">
+              {/* Input Format Settings */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-2">Input Format</label>
+                  <select
+                    value={question.settings?.inputFormat || 'text'}
+                    onChange={(e) => {
+                      setSections((prevSections: any) =>
+                        prevSections.map((s: any) =>
+                          s.id === sectionId
+                            ? {
+                                ...s,
+                                questions: s.questions.map((q: any) =>
+                                  q.id === question.id ? { 
+                                    ...q, 
+                                    settings: { 
+                                      ...q.settings, 
+                                      inputFormat: e.target.value 
+                                    } 
+                                  } : q
+                                )
+                              }
+                            : s
+                        )
+                      );
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
+                  >
+                    <option value="text">Any Text</option>
+                    <option value="alphanumeric">Letters & Numbers Only</option>
+                    <option value="letters_only">Letters Only</option>
+                    <option value="number">Numbers Only</option>
+                    <option value="decimal">Decimal Numbers</option>
+                    <option value="email">Email Address</option>
+                    <option value="phone">Phone Number</option>
+                    <option value="url">URL / Website</option>
+                    <option value="date">Date</option>
+                    <option value="time">Time</option>
+                    <option value="datetime">Date & Time</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-2">Max Length</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10000"
+                    value={question.settings?.maxLength || ''}
+                    onChange={(e) => {
+                      setSections((prevSections: any) =>
+                        prevSections.map((s: any) =>
+                          s.id === sectionId
+                            ? {
+                                ...s,
+                                questions: s.questions.map((q: any) =>
+                                  q.id === question.id ? { 
+                                    ...q, 
+                                    settings: { 
+                                      ...q.settings, 
+                                      maxLength: e.target.value ? parseInt(e.target.value) : null 
+                                    } 
+                                  } : q
+                                )
+                              }
+                            : s
+                        )
+                      );
+                    }}
+                    placeholder="No limit"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
+                  />
+                </div>
+              </div>
+              
+              {/* Placeholder Text */}
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-2">Placeholder Text</label>
+                <IsolatedTextInput
+                  value={question.settings?.placeholder || ''}
+                  onValueChange={(newValue: string) => {
+                    setSections((prevSections: any) =>
+                      prevSections.map((s: any) =>
+                        s.id === sectionId
+                          ? {
+                              ...s,
+                              questions: s.questions.map((q: any) =>
+                                q.id === question.id ? { 
+                                  ...q, 
+                                  settings: { 
+                                    ...q.settings, 
+                                    placeholder: newValue 
+                                  } 
+                                } : q
+                              )
+                            }
+                          : s
+                      )
+                    );
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
+                  placeholder="Enter placeholder text..."
+                />
+              </div>
+              
+              {/* Preview */}
+              <div className="pt-3 border-t border-gray-200">
+                <label className="text-xs font-medium text-gray-500 block mb-2">Preview</label>
+                <input
+                  type={question.settings?.inputFormat === 'email' ? 'email' : 
+                        question.settings?.inputFormat === 'number' || question.settings?.inputFormat === 'decimal' ? 'number' :
+                        question.settings?.inputFormat === 'phone' ? 'tel' :
+                        question.settings?.inputFormat === 'url' ? 'url' :
+                        question.settings?.inputFormat === 'date' ? 'date' :
+                        question.settings?.inputFormat === 'time' ? 'time' :
+                        question.settings?.inputFormat === 'datetime' ? 'datetime-local' : 'text'}
+                  placeholder={question.settings?.placeholder || "Enter your answer"}
+                  maxLength={question.settings?.maxLength || undefined}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50"
+                  disabled
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Format: {question.settings?.inputFormat || 'Any Text'}
+                  {question.settings?.maxLength ? ` • Max ${question.settings.maxLength} characters` : ''}
+                </p>
+              </div>
+            </div>
+          );
+        }
         return (
           <input
-            type="text"
-            placeholder={question.placeholder || "Enter your answer"}
+            type={question.settings?.inputFormat === 'email' ? 'email' : 
+                  question.settings?.inputFormat === 'number' || question.settings?.inputFormat === 'decimal' ? 'number' :
+                  question.settings?.inputFormat === 'phone' ? 'tel' :
+                  question.settings?.inputFormat === 'url' ? 'url' :
+                  question.settings?.inputFormat === 'date' ? 'date' :
+                  question.settings?.inputFormat === 'time' ? 'time' :
+                  question.settings?.inputFormat === 'datetime' ? 'datetime-local' : 'text'}
+            placeholder={question.settings?.placeholder || question.placeholder || "Enter your answer"}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
             disabled
           />
@@ -5192,6 +5500,87 @@ export default function ViewQuestionnairePage() {
             )}
           </div>
         );
+      case "percentage_allocation":
+        return (
+          <div className="space-y-3">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-emerald-700">
+                <PieChart className="w-4 h-4" />
+                <span className="font-medium">Percentage Allocation</span>
+                <span className="text-xs text-emerald-600 ml-auto">Total must equal 100%</span>
+              </div>
+            </div>
+            {question.options?.map((option: string, idx: number) => (
+              <div key={idx} className="flex items-center gap-3 group">
+                {!showPreview ? (
+                  <>
+                    <IsolatedTextInput
+                      value={option}
+                      onValueChange={(newValue: string) => updateQuestionOption(sectionId, question.id, idx, newValue)}
+                      className="flex-1 text-sm text-gray-700 bg-transparent border-b border-gray-300 hover:border-gray-400 focus:border-emerald-500 focus:outline-none px-2 py-1.5"
+                      placeholder={`Option ${idx + 1}`}
+                    />
+                    <div className="flex items-center gap-1 w-24">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        className="w-16 px-2 py-1.5 text-sm border border-gray-300 rounded text-center bg-gray-50"
+                        disabled
+                      />
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                    {question.options.length > 2 && (
+                      <button
+                        onClick={() => removeQuestionOption(sectionId, question.id, idx)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-50 rounded transition-all"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-gray-700">{option}</span>
+                    <div className="flex items-center gap-1 w-24">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        className="w-16 px-2 py-1.5 text-sm border border-gray-300 rounded text-center bg-gray-50"
+                        disabled
+                      />
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            {/* Total Display (Preview) */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
+              <span className="text-sm font-medium text-gray-700">Total:</span>
+              <span className="text-sm font-bold text-emerald-600">0%</span>
+            </div>
+            {!showPreview && (
+              <button
+                onClick={() => addQuestionOption(sectionId, question.id)}
+                className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium mt-2"
+              >
+                <Plus className="w-3 h-3" />
+                Add Option
+              </button>
+            )}
+            {/* Instructions */}
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+              <p className="flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                <span>Participants must allocate percentages that total exactly 100%.</span>
+              </p>
+            </div>
+          </div>
+        );
       default:
         return null;
     }
@@ -6022,30 +6411,61 @@ export default function ViewQuestionnairePage() {
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <Label className="text-sm font-medium text-gray-700">
-                        Question Text ({activeLanguage})
+                        {selectedQuestionForTranslation.type === 'information' ? 'Information Content' : 'Question Text'} ({activeLanguage})
                       </Label>
-                      <textarea
-                        value={
-                          activeLanguage === "EN"
-                            ? selectedQuestionForTranslation.question
-                            : (translationData[activeLanguage]?.question || selectedQuestionForTranslation.translations?.[activeLanguage]?.question || "")
-                        }
-                        onChange={(e) => {
-                          if (activeLanguage !== "EN") {
-                            setTranslationData({
-                              ...translationData,
-                              [activeLanguage]: {
-                                ...translationData[activeLanguage],
-                                question: e.target.value
+                      {selectedQuestionForTranslation.type === 'information' ? (
+                        /* Rich Text Editor for Information Block */
+                        <div className={activeLanguage === "EN" ? "opacity-60 pointer-events-none" : ""}>
+                          <RichTextEditor
+                            value={
+                              activeLanguage === "EN"
+                                ? (selectedQuestionForTranslation.formattedQuestion || selectedQuestionForTranslation.description || "")
+                                : (translationData[activeLanguage]?.formattedQuestion || selectedQuestionForTranslation.translations?.[activeLanguage]?.formattedQuestion || "")
+                            }
+                            onChange={(value) => {
+                              if (activeLanguage !== "EN") {
+                                setTranslationData({
+                                  ...translationData,
+                                  [activeLanguage]: {
+                                    ...translationData[activeLanguage],
+                                    formattedQuestion: value,
+                                    question: value.replace(/<[^>]*>/g, '').substring(0, 255)
+                                  }
+                                });
                               }
-                            });
+                            }}
+                            placeholder={`Enter information content in ${activeLanguage}...`}
+                            minHeight="200px"
+                          />
+                          {activeLanguage === "EN" && (
+                            <p className="text-xs text-gray-500 mt-1">English content is edited in the main builder</p>
+                          )}
+                        </div>
+                      ) : (
+                        /* Regular textarea for other question types */
+                        <textarea
+                          value={
+                            activeLanguage === "EN"
+                              ? selectedQuestionForTranslation.question
+                              : (translationData[activeLanguage]?.question || selectedQuestionForTranslation.translations?.[activeLanguage]?.question || "")
                           }
-                        }}
-                        rows={3}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
-                        placeholder={`Enter question in ${activeLanguage}...`}
-                        disabled={activeLanguage === "EN"}
-                      />
+                          onChange={(e) => {
+                            if (activeLanguage !== "EN") {
+                              setTranslationData({
+                                ...translationData,
+                                [activeLanguage]: {
+                                  ...translationData[activeLanguage],
+                                  question: e.target.value
+                                }
+                              });
+                            }
+                          }}
+                          rows={3}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
+                          placeholder={`Enter question in ${activeLanguage}...`}
+                          disabled={activeLanguage === "EN"}
+                        />
+                      )}
                     </div>
 
                     {/* Options for MCQ/Multi */}
@@ -6093,6 +6513,60 @@ export default function ViewQuestionnairePage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Hyperlink Button Text Translation for Information Blocks */}
+                    {selectedQuestionForTranslation.type === "information" && 
+                      ((selectedQuestionForTranslation.hyperlinks && selectedQuestionForTranslation.hyperlinks.length > 0) ||
+                       (selectedQuestionForTranslation.settings?.hyperlinks && selectedQuestionForTranslation.settings.hyperlinks.length > 0)) && (
+                      <div className="space-y-2 border-t border-gray-200 pt-4 mt-4">
+                        <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                          <Link2 className="w-4 h-4" />
+                          Hyperlink Button Text ({activeLanguage})
+                        </Label>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Translate the button labels. URLs remain the same across all languages.
+                        </p>
+                        <div className="space-y-2">
+                          {(selectedQuestionForTranslation.hyperlinks || selectedQuestionForTranslation.settings?.hyperlinks || []).map(
+                            (link: any, idx: number) => (
+                              link.text && link.url ? (
+                                <div key={idx} className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-400 w-6">{idx + 1}.</span>
+                                  <div className="flex-1 space-y-1">
+                                    <input
+                                      type="text"
+                                      value={
+                                        activeLanguage === "EN" 
+                                          ? link.text 
+                                          : (translationData[activeLanguage]?.hyperlinkTexts?.[idx] || selectedQuestionForTranslation.translations?.[activeLanguage]?.hyperlinkTexts?.[idx] || "")
+                                      }
+                                      onChange={(e) => {
+                                        if (activeLanguage !== "EN") {
+                                          const currentTexts = translationData[activeLanguage]?.hyperlinkTexts || [];
+                                          const newTexts = [...currentTexts];
+                                          newTexts[idx] = e.target.value;
+                                          setTranslationData({
+                                            ...translationData,
+                                            [activeLanguage]: {
+                                              ...translationData[activeLanguage],
+                                              hyperlinkTexts: newTexts
+                                            }
+                                          });
+                                        }
+                                      }}
+                                      placeholder={activeLanguage === "EN" ? link.text : `Button text in ${activeLanguage}...`}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
+                                      disabled={activeLanguage === "EN"}
+                                    />
+                                    <p className="text-xs text-gray-400 truncate">URL: {link.url}</p>
+                                  </div>
+                                </div>
+                              ) : null
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -6125,31 +6599,64 @@ export default function ViewQuestionnairePage() {
                           </div>
                         </div>
 
-                        {/* Question Text */}
+                        {/* Question Text / Information Content */}
                         <div className="space-y-2 mb-4">
-                          <Label className="text-xs font-medium text-gray-700">Question Text</Label>
-                          <textarea
-                            value={
-                              lang === "EN" 
-                                ? selectedQuestionForTranslation.question 
-                                : (translationData[lang]?.question || selectedQuestionForTranslation.translations?.[lang]?.question || "")
-                            }
-                            onChange={(e) => {
-                              if (lang !== "EN") {
-                                setTranslationData({
-                                  ...translationData,
-                                  [lang]: {
-                                    ...translationData[lang],
-                                    question: e.target.value
+                          <Label className="text-xs font-medium text-gray-700">
+                            {selectedQuestionForTranslation.type === 'information' ? 'Information Content' : 'Question Text'}
+                          </Label>
+                          {selectedQuestionForTranslation.type === 'information' ? (
+                            /* Rich Text Editor for Information Block */
+                            <div className={lang === "EN" ? "opacity-60 pointer-events-none" : ""}>
+                              <RichTextEditor
+                                value={
+                                  lang === "EN"
+                                    ? (selectedQuestionForTranslation.formattedQuestion || selectedQuestionForTranslation.description || "")
+                                    : (translationData[lang]?.formattedQuestion || selectedQuestionForTranslation.translations?.[lang]?.formattedQuestion || "")
+                                }
+                                onChange={(value) => {
+                                  if (lang !== "EN") {
+                                    setTranslationData({
+                                      ...translationData,
+                                      [lang]: {
+                                        ...translationData[lang],
+                                        formattedQuestion: value,
+                                        question: value.replace(/<[^>]*>/g, '').substring(0, 255)
+                                      }
+                                    });
                                   }
-                                });
+                                }}
+                                placeholder={`Enter information content in ${lang}...`}
+                                minHeight="150px"
+                              />
+                              {lang === "EN" && (
+                                <p className="text-xs text-gray-500 mt-1">Edit in main builder</p>
+                              )}
+                            </div>
+                          ) : (
+                            /* Regular textarea for other question types */
+                            <textarea
+                              value={
+                                lang === "EN" 
+                                  ? selectedQuestionForTranslation.question 
+                                  : (translationData[lang]?.question || selectedQuestionForTranslation.translations?.[lang]?.question || "")
                               }
-                            }}
-                            rows={3}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent bg-white"
-                            placeholder={`Enter question in ${lang}...`}
-                            disabled={lang === "EN"}
-                          />
+                              onChange={(e) => {
+                                if (lang !== "EN") {
+                                  setTranslationData({
+                                    ...translationData,
+                                    [lang]: {
+                                      ...translationData[lang],
+                                      question: e.target.value
+                                    }
+                                  });
+                                }
+                              }}
+                              rows={3}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent bg-white"
+                              placeholder={`Enter question in ${lang}...`}
+                              disabled={lang === "EN"}
+                            />
+                          )}
                         </div>
 
                         {/* Options for MCQ/Multi */}
@@ -6188,6 +6695,54 @@ export default function ViewQuestionnairePage() {
                                       disabled={lang === "EN"}
                                     />
                                   </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Hyperlink Button Text Translation for Information Blocks */}
+                        {selectedQuestionForTranslation.type === "information" && 
+                          ((selectedQuestionForTranslation.hyperlinks && selectedQuestionForTranslation.hyperlinks.length > 0) ||
+                           (selectedQuestionForTranslation.settings?.hyperlinks && selectedQuestionForTranslation.settings.hyperlinks.length > 0)) && (
+                          <div className="space-y-2 border-t border-gray-200 pt-3 mt-3">
+                            <Label className="text-xs font-medium text-gray-700 flex items-center gap-1">
+                              <Link2 className="w-3 h-3" />
+                              Hyperlink Buttons
+                            </Label>
+                            <div className="space-y-2">
+                              {(selectedQuestionForTranslation.hyperlinks || selectedQuestionForTranslation.settings?.hyperlinks || []).map(
+                                (link: any, idx: number) => (
+                                  link.text && link.url ? (
+                                    <div key={idx} className="space-y-0.5">
+                                      <input
+                                        type="text"
+                                        value={
+                                          lang === "EN" 
+                                            ? link.text 
+                                            : (translationData[lang]?.hyperlinkTexts?.[idx] || selectedQuestionForTranslation.translations?.[lang]?.hyperlinkTexts?.[idx] || "")
+                                        }
+                                        onChange={(e) => {
+                                          if (lang !== "EN") {
+                                            const currentTexts = translationData[lang]?.hyperlinkTexts || [];
+                                            const newTexts = [...currentTexts];
+                                            newTexts[idx] = e.target.value;
+                                            setTranslationData({
+                                              ...translationData,
+                                              [lang]: {
+                                                ...translationData[lang],
+                                                hyperlinkTexts: newTexts
+                                              }
+                                            });
+                                          }
+                                        }}
+                                        placeholder={lang === "EN" ? link.text : `Button ${idx + 1} text...`}
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue bg-white"
+                                        disabled={lang === "EN"}
+                                      />
+                                      <p className="text-xs text-gray-400 truncate pl-1">→ {link.url}</p>
+                                    </div>
+                                  ) : null
                                 )
                               )}
                             </div>

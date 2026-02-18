@@ -28,6 +28,8 @@ class Question extends Model
         'translations',
         'is_required',
         'is_comment_enabled',
+        'min_selection',
+        'max_selection',
         'order',
         // Video-specific fields
         'video_url',
@@ -46,6 +48,8 @@ class Question extends Model
         'is_required' => 'boolean',
         'is_comment_enabled' => 'boolean',
         'is_rich_text' => 'boolean',
+        'min_selection' => 'integer',
+        'max_selection' => 'integer',
         'order' => 'integer',
         'nesting_level' => 'integer',
         // Video-specific casts

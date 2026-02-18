@@ -54,6 +54,7 @@ import {
   AlertCircle,
   BookOpen,
   ExternalLink,
+  PieChart,
 } from "lucide-react";
 import {
   SliderScale,
@@ -263,6 +264,7 @@ function QuestionnaireBuilderPageContent() {
     { id: "star_rating", label: "Star Rating", icon: Heart, color: "text-rose-600" },
     { id: "drag_and_drop", label: "Drag & Drop Bucket", icon: MoveVertical, color: "text-purple-600" },
     { id: "sct_likert", label: "Script Concordance (SCT) Likert", icon: ClipboardList, color: "text-indigo-600" },
+    { id: "percentage_allocation", label: "Percentage Allocation", icon: PieChart, color: "text-emerald-600" },
   ];
 
   // Feedback-specific predefined question templates
@@ -591,6 +593,7 @@ function QuestionnaireBuilderPageContent() {
         nestingLevel: 0,
         ...(type === "mcq" || type === "multi" ? { options: ["Option 1", "Option 2", "Option 3"], correctAnswers: [] } : {}),
         ...(type === "multi" ? { min_selection: null, max_selection: null } : {}),
+        ...(type === "percentage_allocation" ? { options: ["Option 1", "Option 2", "Option 3"] } : {}),
         ...(type === "rating" ? { scale: 5 } : {}),
         ...(type === "slider" ? { min: 0, max: 100 } : {}),
         ...(type === "matrix" ? { rows: ["Row 1", "Row 2"], columns: ["Column 1", "Column 2"] } : {}),
@@ -893,6 +896,7 @@ function QuestionnaireBuilderPageContent() {
         'slider': 'scale',
         'rating': 'rating',
         'matrix': 'matrix',
+        'percentage_allocation': 'percentage_allocation',
       };
       
       // Transform sections and questions to match backend format
@@ -2067,11 +2071,202 @@ function QuestionnaireBuilderPageContent() {
             </button>
           </div>
         );
+      case "percentage_allocation":
+        return (
+          <div className="space-y-3">
+            {/* Header with instructions */}
+            <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-700 flex items-center gap-2">
+              <PieChart className="w-4 h-4" />
+              <span>Allocate percentages that total exactly 100%</span>
+            </div>
+            
+            {question.options?.map((option: string, idx: number) => (
+              <div key={`${question.id}-paqopt-${idx}`} className="flex items-center gap-3 group">
+                <IsolatedTextInput
+                  value={option}
+                  onValueChange={(newValue: string) => updateQuestionOption(sectionId, question.id, idx, newValue)}
+                  className="flex-1 text-sm text-gray-700 bg-transparent border-b border-gray-300 hover:border-gray-400 focus:border-emerald-500 focus:outline-none px-2 py-1.5"
+                  placeholder={`Option ${idx + 1}`}
+                />
+                <div className="flex items-center gap-1 shrink-0">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="0"
+                    className="w-16 px-2 py-1.5 text-sm border border-gray-300 rounded text-center bg-gray-50"
+                    disabled
+                  />
+                  <span className="text-sm text-gray-500">%</span>
+                </div>
+                {question.options.length > 2 && (
+                  <button
+                    onClick={() => removeQuestionOption(sectionId, question.id, idx)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-50 rounded transition-all"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+            
+            {/* Total display */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
+              <span className="text-sm font-medium text-gray-600">Total:</span>
+              <span className="text-sm font-bold text-emerald-600">0%</span>
+            </div>
+            
+            <button
+              onClick={() => addQuestionOption(sectionId, question.id)}
+              className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+            >
+              <Plus className="w-3 h-3" />
+              Add Option
+            </button>
+          </div>
+        );
       case "text":
+        if (!showPreview) {
+          return (
+            <div className="space-y-4">
+              {/* Input Format Settings */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-2">Input Format</label>
+                  <select
+                    value={question.settings?.inputFormat || 'text'}
+                    onChange={(e) => {
+                      setSections((prevSections: any) =>
+                        prevSections.map((s: any) =>
+                          s.id === sectionId
+                            ? {
+                                ...s,
+                                questions: s.questions.map((q: any) =>
+                                  q.id === question.id ? { 
+                                    ...q, 
+                                    settings: { 
+                                      ...q.settings, 
+                                      inputFormat: e.target.value 
+                                    } 
+                                  } : q
+                                )
+                              }
+                            : s
+                        )
+                      );
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
+                  >
+                    <option value="text">Any Text</option>
+                    <option value="alphanumeric">Letters & Numbers Only</option>
+                    <option value="letters_only">Letters Only</option>
+                    <option value="number">Numbers Only</option>
+                    <option value="decimal">Decimal Numbers</option>
+                    <option value="email">Email Address</option>
+                    <option value="phone">Phone Number</option>
+                    <option value="url">URL / Website</option>
+                    <option value="date">Date</option>
+                    <option value="time">Time</option>
+                    <option value="datetime">Date & Time</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-2">Max Length</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10000"
+                    value={question.settings?.maxLength || ''}
+                    onChange={(e) => {
+                      setSections((prevSections: any) =>
+                        prevSections.map((s: any) =>
+                          s.id === sectionId
+                            ? {
+                                ...s,
+                                questions: s.questions.map((q: any) =>
+                                  q.id === question.id ? { 
+                                    ...q, 
+                                    settings: { 
+                                      ...q.settings, 
+                                      maxLength: e.target.value ? parseInt(e.target.value) : null 
+                                    } 
+                                  } : q
+                                )
+                              }
+                            : s
+                        )
+                      );
+                    }}
+                    placeholder="No limit"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
+                  />
+                </div>
+              </div>
+              
+              {/* Placeholder Text */}
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-2">Placeholder Text</label>
+                <IsolatedTextInput
+                  value={question.settings?.placeholder || ''}
+                  onValueChange={(newValue: string) => {
+                    setSections((prevSections: any) =>
+                      prevSections.map((s: any) =>
+                        s.id === sectionId
+                          ? {
+                              ...s,
+                              questions: s.questions.map((q: any) =>
+                                q.id === question.id ? { 
+                                  ...q, 
+                                  settings: { 
+                                    ...q.settings, 
+                                    placeholder: newValue 
+                                  } 
+                                } : q
+                              )
+                            }
+                          : s
+                      )
+                    );
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
+                  placeholder="Enter placeholder text..."
+                />
+              </div>
+              
+              {/* Preview */}
+              <div className="pt-3 border-t border-gray-200">
+                <label className="text-xs font-medium text-gray-500 block mb-2">Preview</label>
+                <input
+                  type={question.settings?.inputFormat === 'email' ? 'email' : 
+                        question.settings?.inputFormat === 'number' || question.settings?.inputFormat === 'decimal' ? 'number' :
+                        question.settings?.inputFormat === 'phone' ? 'tel' :
+                        question.settings?.inputFormat === 'url' ? 'url' :
+                        question.settings?.inputFormat === 'date' ? 'date' :
+                        question.settings?.inputFormat === 'time' ? 'time' :
+                        question.settings?.inputFormat === 'datetime' ? 'datetime-local' : 'text'}
+                  placeholder={question.settings?.placeholder || "Enter your answer"}
+                  maxLength={question.settings?.maxLength || undefined}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50"
+                  disabled
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Format: {question.settings?.inputFormat || 'Any Text'}
+                  {question.settings?.maxLength ? ` • Max ${question.settings.maxLength} characters` : ''}
+                </p>
+              </div>
+            </div>
+          );
+        }
         return (
           <input
-            type="text"
-            placeholder={question.placeholder || "Enter your answer"}
+            type={question.settings?.inputFormat === 'email' ? 'email' : 
+                  question.settings?.inputFormat === 'number' || question.settings?.inputFormat === 'decimal' ? 'number' :
+                  question.settings?.inputFormat === 'phone' ? 'tel' :
+                  question.settings?.inputFormat === 'url' ? 'url' :
+                  question.settings?.inputFormat === 'date' ? 'date' :
+                  question.settings?.inputFormat === 'time' ? 'time' :
+                  question.settings?.inputFormat === 'datetime' ? 'datetime-local' : 'text'}
+            placeholder={question.settings?.placeholder || question.placeholder || "Enter your answer"}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
             disabled
           />

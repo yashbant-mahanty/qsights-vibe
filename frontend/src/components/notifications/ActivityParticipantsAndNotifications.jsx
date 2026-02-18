@@ -4,10 +4,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, UserPlus, Trash2, Power, X, Upload, Download, Mail, Send, CheckSquare, Square, AlertCircle, CheckCircle2, Edit, Search, ChevronLeft, ChevronRight, Filter, FileText, Eye, Edit2, Users, Inbox, MessageSquare, Info, Star, CheckCircle } from 'lucide-react';
+import { Loader2, UserPlus, Trash2, Power, X, Upload, Download, Mail, Send, CheckSquare, Square, AlertCircle, CheckCircle2, Edit, Search, ChevronLeft, ChevronRight, Filter, FileText, Eye, Edit2, Users, Inbox, MessageSquare, Info, Star, CheckCircle, Settings, Save } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { toast } from '@/components/ui/toast';
 import DeleteConfirmationModal from '@/components/delete-confirmation-modal';
 import { useAuth } from '@/contexts/AuthContext';
@@ -81,6 +82,21 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'active', 'inactive'
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  
+  // Notification settings states
+  const [welcomeEmailEnabled, setWelcomeEmailEnabled] = useState(false);
+  const [thankYouEmailEnabled, setThankYouEmailEnabled] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  
+  // Contact Us settings states
+  const [contactUsRecipient, setContactUsRecipient] = useState('');
+  const [contactUsCc, setContactUsCc] = useState([]);
+  const [contactUsBcc, setContactUsBcc] = useState([]);
+  const [notifyProgramAdmin, setNotifyProgramAdmin] = useState(true);
+  const [notifyManager, setNotifyManager] = useState(true);
+  const [savingContactUsSettings, setSavingContactUsSettings] = useState(false);
+  const [ccInputValue, setCcInputValue] = useState('');
+  const [bccInputValue, setBccInputValue] = useState('');
   
   // Portal mount state
   const [mounted, setMounted] = useState(false);
@@ -161,6 +177,20 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       }
       const result = await response.json();
       setActivity(result.data);
+      
+      // Load notification settings
+      const notificationSettings = result.data.settings?.notifications || {};
+      setWelcomeEmailEnabled(notificationSettings.welcome_email_enabled ?? false);
+      setThankYouEmailEnabled(notificationSettings.thank_you_email_enabled ?? false);
+      
+      // Load Contact Us settings
+      const contactUsSettings = result.data.settings?.contact_us || {};
+      setContactUsRecipient(contactUsSettings.recipient_email || '');
+      setContactUsCc(contactUsSettings.cc_emails || []);
+      setContactUsBcc(contactUsSettings.bcc_emails || []);
+      setNotifyProgramAdmin(contactUsSettings.notify_program_admin ?? true);
+      setNotifyManager(contactUsSettings.notify_manager ?? true);
+      
       console.log('✓ Activity loaded:', result.data.name);
       console.log('✓ Registration fields:', result.data.registration_form_fields);
     } catch (err) {
@@ -725,6 +755,144 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
       toast({ title: "Error", description: err.message, variant: "error" });
     }
   }, [fetchParticipants]);
+
+  // Save notification settings
+  const saveNotificationSettings = async () => {
+    try {
+      setSavingSettings(true);
+      
+      const response = await fetch(`${API_URL}/activities/${activityId}/notification-settings`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          welcome_email_enabled: welcomeEmailEnabled,
+          thank_you_email_enabled: thankYouEmailEnabled,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save notification settings');
+      }
+
+      // Reload activity to get updated settings
+      await fetchActivityDetails();
+      
+      toast({ 
+        title: "Success", 
+        description: "Notification settings saved successfully", 
+        variant: "success" 
+      });
+    } catch (err) {
+      console.error('Error saving notification settings:', err);
+      toast({ 
+        title: "Error", 
+        description: err.message || 'Failed to save notification settings', 
+        variant: "error" 
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Save Contact Us settings
+  const saveContactUsSettings = async () => {
+    try {
+      setSavingContactUsSettings(true);
+      
+      // Auto-add any typed CC email before saving
+      let finalCcEmails = [...contactUsCc];
+      if (ccInputValue && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccInputValue)) {
+        if (!finalCcEmails.includes(ccInputValue)) {
+          finalCcEmails.push(ccInputValue);
+          setContactUsCc(finalCcEmails);
+          setCcInputValue('');
+        }
+      }
+      
+      // Auto-add any typed BCC email before saving
+      let finalBccEmails = [...contactUsBcc];
+      if (bccInputValue && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bccInputValue)) {
+        if (!finalBccEmails.includes(bccInputValue)) {
+          finalBccEmails.push(bccInputValue);
+          setContactUsBcc(finalBccEmails);
+          setBccInputValue('');
+        }
+      }
+      
+      const response = await fetch(`${API_URL}/activities/${activityId}/contact-us-settings`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          recipient_email: contactUsRecipient || null,
+          cc_emails: finalCcEmails,
+          bcc_emails: finalBccEmails,
+          notify_program_admin: notifyProgramAdmin,
+          notify_manager: notifyManager,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save Contact Us settings');
+      }
+
+      // Reload activity to get updated settings
+      await fetchActivityDetails();
+      
+      toast({ 
+        title: "Success", 
+        description: "Contact Us settings saved successfully", 
+        variant: "success" 
+      });
+    } catch (err) {
+      console.error('Error saving Contact Us settings:', err);
+      toast({ 
+        title: "Error", 
+        description: err.message || 'Failed to save Contact Us settings', 
+        variant: "error" 
+      });
+    } finally {
+      setSavingContactUsSettings(false);
+    }
+  };
+
+  // Helper functions for CC/BCC email management
+  const addCcEmail = () => {
+    if (ccInputValue && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ccInputValue)) {
+      if (!contactUsCc.includes(ccInputValue)) {
+        setContactUsCc([...contactUsCc, ccInputValue]);
+        setCcInputValue('');
+      }
+    } else {
+      toast({ title: "Error", description: "Please enter a valid email address", variant: "error" });
+    }
+  };
+
+  const removeCcEmail = (email) => {
+    setContactUsCc(contactUsCc.filter(e => e !== email));
+  };
+
+  const addBccEmail = () => {
+    if (bccInputValue && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bccInputValue)) {
+      if (!contactUsBcc.includes(bccInputValue)) {
+        setContactUsBcc([...contactUsBcc, bccInputValue]);
+        setBccInputValue('');
+      }
+    } else {
+      toast({ title: "Error", description: "Please enter a valid email address", variant: "error" });
+    }
+  };
+
+  const removeBccEmail = (email) => {
+    setContactUsBcc(contactUsBcc.filter(e => e !== email));
+  };
 
   // Send notification functions
   const handleOpenSendNotification = useCallback(() => {
@@ -1525,6 +1693,285 @@ const ActivityParticipantsAndNotifications = ({ activityId, activityName }) => {
 
         {/* Notification Setting Tab */}
         <TabsContent value="notifications" className="mt-6">
+          {/* Notification Settings Card */}
+          <Card className="p-6 mb-6 border-2 border-orange-200 bg-gradient-to-br from-orange-50/50 to-amber-50/50">
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-100">
+                  <Settings className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-gray-900">Email Notification Settings</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Control automatic email notifications sent to participants during registration and completion.
+                  </p>
+                </div>
+              </div>
+
+              {/* Settings Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Welcome Email Toggle */}
+                <div className="p-5 bg-white rounded-xl border-2 border-blue-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Mail className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <h4 className="text-base font-semibold text-gray-900">Welcome Email</h4>
+                      </div>
+                      <p className="text-sm text-gray-600 ml-13">
+                        Send welcome email when participant registers. Includes event details and access link.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={welcomeEmailEnabled}
+                      onCheckedChange={setWelcomeEmailEnabled}
+                      className="ml-3 flex-shrink-0"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs ml-13">
+                    <div className={`w-2 h-2 rounded-full ${welcomeEmailEnabled ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                    <span className={`font-medium ${welcomeEmailEnabled ? 'text-green-700' : 'text-gray-500'}`}>
+                      {welcomeEmailEnabled ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Thank You Email Toggle */}
+                <div className="p-5 bg-white rounded-xl border-2 border-green-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        </div>
+                        <h4 className="text-base font-semibold text-gray-900">Thank You Email</h4>
+                      </div>
+                      <p className="text-sm text-gray-600 ml-13">
+                        Send thank you email when participant completes their response. Includes confirmation and results.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={thankYouEmailEnabled}
+                      onCheckedChange={setThankYouEmailEnabled}
+                      className="ml-3 flex-shrink-0"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs ml-13">
+                    <div className={`w-2 h-2 rounded-full ${thankYouEmailEnabled ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                    <span className={`font-medium ${thankYouEmailEnabled ? 'text-green-700' : 'text-gray-500'}`}>
+                      {thankYouEmailEnabled ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-2 border-t border-orange-200">
+                <Button
+                  onClick={saveNotificationSettings}
+                  disabled={savingSettings}
+                  className="flex items-center gap-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 shadow-lg shadow-orange-100 font-semibold"
+                >
+                  {savingSettings ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Settings
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* Contact Us Email Settings Card */}
+          <Card className="p-6 mb-6 border-2 border-purple-200 bg-gradient-to-br from-purple-50/50 to-indigo-50/50">
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-100">
+                  <MessageSquare className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-gray-900">Contact Us Email Settings</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Configure recipient, CC, BCC emails for Contact Us form submissions. Default recipient is Program Admin if not specified.
+                  </p>
+                </div>
+              </div>
+
+              {/* Recipient Email */}
+              <div className="bg-white rounded-xl border-2 border-purple-200 p-5">
+                <Label className="text-sm font-semibold text-gray-900 mb-2 block">
+                  Primary Recipient Email
+                </Label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Leave empty to use Program Admin's email by default
+                </p>
+                <Input
+                  type="email"
+                  value={contactUsRecipient}
+                  onChange={(e) => setContactUsRecipient(e.target.value)}
+                  placeholder="manager@company.com (optional)"
+                  className="w-full"
+                />
+              </div>
+
+              {/* CC Emails */}
+              <div className="bg-white rounded-xl border-2 border-blue-200 p-5">
+                <Label className="text-sm font-semibold text-gray-900 mb-2 block">
+                  CC (Carbon Copy)
+                </Label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Add email addresses to receive copies of Contact Us messages
+                </p>
+                <div className="flex gap-2 mb-3">
+                  <Input
+                    type="email"
+                    value={ccInputValue}
+                    onChange={(e) => setCcInputValue(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && addCcEmail()}
+                    placeholder="cc@example.com"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    onClick={addCcEmail}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    Add CC
+                  </Button>
+                </div>
+                {contactUsCc.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {contactUsCc.map((email, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-sm border border-blue-200"
+                      >
+                        <span>{email}</span>
+                        <button
+                          onClick={() => removeCcEmail(email)}
+                          className="hover:bg-blue-100 rounded p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* BCC Emails */}
+              <div className="bg-white rounded-xl border-2 border-indigo-200 p-5">
+                <Label className="text-sm font-semibold text-gray-900 mb-2 block">
+                  BCC (Blind Carbon Copy)
+                </Label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Add email addresses to receive hidden copies of Contact Us messages
+                </p>
+                <div className="flex gap-2 mb-3">
+                  <Input
+                    type="email"
+                    value={bccInputValue}
+                    onChange={(e) => setBccInputValue(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && addBccEmail()}
+                    placeholder="bcc@example.com"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    onClick={addBccEmail}
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                  >
+                    Add BCC
+                  </Button>
+                </div>
+                {contactUsBcc.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {contactUsBcc.map((email, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-sm border border-indigo-200"
+                      >
+                        <span>{email}</span>
+                        <button
+                          onClick={() => removeBccEmail(email)}
+                          className="hover:bg-indigo-100 rounded p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Bell Notification Toggles */}
+              <div className="bg-white rounded-xl border-2 border-green-200 p-5">
+                <Label className="text-sm font-semibold text-gray-900 mb-3 block">
+                  Dashboard Notifications (Bell Icon)
+                </Label>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Users className="w-5 h-5 text-green-600" />
+                      <div>
+                        <p className="font-medium text-gray-900">Notify Program Admin</p>
+                        <p className="text-xs text-gray-500">Send bell notification to Program Admin</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={notifyProgramAdmin}
+                      onCheckedChange={setNotifyProgramAdmin}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Star className="w-5 h-5 text-green-600" />
+                      <div>
+                        <p className="font-medium text-gray-900">Notify Manager</p>
+                        <p className="text-xs text-gray-500">Send bell notification to Event Manager</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={notifyManager}
+                      onCheckedChange={setNotifyManager}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-2 border-t border-purple-200">
+                <Button
+                  onClick={saveContactUsSettings}
+                  disabled={savingContactUsSettings}
+                  className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-100 font-semibold"
+                >
+                  {savingContactUsSettings ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Contact Us Settings
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
           <Card className="p-6">
             <div className="space-y-6">
               {/* Header with icon */}

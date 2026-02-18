@@ -24,6 +24,9 @@ import {
   Bell,
   BellRing,
   ExternalLink,
+  AlertCircle,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { filterQuestionsByLogic } from "@/utils/conditionalLogicEvaluator";
@@ -46,6 +49,17 @@ import { getPresignedUrl, isS3Url, isPresignedUrl } from '@/lib/s3Utils';
 import VideoPlayer from "@/components/VideoPlayer";
 import VideoPlayerWithTracking from "@/components/VideoPlayerWithTracking";
 import { ReferencesDisplay } from "@/components/ui/references-display";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
+  Tooltip,
+} from "recharts";
 
 interface FormField {
   id: string;
@@ -1954,8 +1968,28 @@ export default function TakeActivityPage() {
   };
 
   const handleMultipleChoiceToggle = (questionId: string, optionValue: string) => {
+    // Find the question to check for min/max selection limits
+    const allSections = questionnaire?.sections || [];
+    const allQuestions = allSections.flatMap((section: any) => section.questions || []);
+    const question = allQuestions.find((q: any) => q.id === questionId);
+    
     const currentValues = responses[questionId] || [];
-    const newValues = currentValues.includes(optionValue)
+    const isCurrentlySelected = currentValues.includes(optionValue);
+    
+    // Check max_selection limit when trying to select a new option
+    if (!isCurrentlySelected && question?.max_selection) {
+      if (currentValues.length >= question.max_selection) {
+        toast({
+          title: "Selection Limit Reached",
+          description: `You can select maximum ${question.max_selection} option${question.max_selection > 1 ? 's' : ''}.`,
+          variant: "warning",
+          duration: 3000
+        });
+        return; // Prevent selection
+      }
+    }
+    
+    const newValues = isCurrentlySelected
       ? currentValues.filter((v: string) => v !== optionValue)
       : [...currentValues, optionValue];
     handleResponseChange(questionId, newValues);
@@ -2340,6 +2374,16 @@ export default function TakeActivityPage() {
           });
           return false;
         }
+        
+        // Check min_selection for multiple choice questions
+        if (Array.isArray(answer) && question.min_selection && answer.length < question.min_selection) {
+          toast({
+            title: "Selection Required",
+            description: `Please select at least ${question.min_selection} option${question.min_selection > 1 ? 's' : ''} to continue.`,
+            variant: "warning"
+          });
+          return false;
+        }
       }
       
       return true;
@@ -2378,6 +2422,31 @@ export default function TakeActivityPage() {
             return false;
           }
         }
+        
+        // Check min_selection for multiple choice questions (even if not required, if user started answering)
+        const answer = responses[question.id];
+        if (Array.isArray(answer) && answer.length > 0 && question.min_selection && answer.length < question.min_selection) {
+          toast({
+            title: "Selection Required",
+            description: `Please select at least ${question.min_selection} option${question.min_selection > 1 ? 's' : ''} for "${question.title}" to continue.`,
+            variant: "warning"
+          });
+          return false;
+        }
+        
+        // Validate percentage_allocation questions - total must equal 100%
+        if ((question.type === 'percentage_allocation' || question.type === 'PERCENTAGE_ALLOCATION') && answer) {
+          const percentages = answer as Record<string, number>;
+          const total = Object.values(percentages).reduce((sum: number, val: number) => sum + (parseFloat(String(val)) || 0), 0);
+          if (total !== 100) {
+            toast({
+              title: "Invalid Total",
+              description: `Percentage allocation must total exactly 100% (currently ${total.toFixed(1)}%) for "${question.title}".`,
+              variant: "warning"
+            });
+            return false;
+          }
+        }
       }
       
       return true;
@@ -2411,6 +2480,31 @@ export default function TakeActivityPage() {
                 description: isAssessment 
                   ? "Please answer all questions before submitting."
                   : "Please answer all required questions before submitting.",
+                variant: "warning"
+              });
+              return false;
+            }
+          }
+          
+          // Check min_selection for multiple choice questions (even if not required, if user started answering)
+          const answer = responses[question.id];
+          if (Array.isArray(answer) && answer.length > 0 && question.min_selection && answer.length < question.min_selection) {
+            toast({
+              title: "Selection Required",
+              description: `Please select at least ${question.min_selection} option${question.min_selection > 1 ? 's' : ''} for "${question.title}" before submitting.`,
+              variant: "warning"
+            });
+            return false;
+          }
+          
+          // Validate percentage_allocation questions - total must equal 100%
+          if ((question.type === 'percentage_allocation' || question.type === 'PERCENTAGE_ALLOCATION') && answer) {
+            const percentages = answer as Record<string, number>;
+            const total = Object.values(percentages).reduce((sum: number, val: number) => sum + (parseFloat(String(val)) || 0), 0);
+            if (total !== 100) {
+              toast({
+                title: "Invalid Total",
+                description: `Percentage allocation must total exactly 100% (currently ${total.toFixed(1)}%) for "${question.title}".`,
                 variant: "warning"
               });
               return false;
@@ -2596,29 +2690,35 @@ export default function TakeActivityPage() {
             ...prev,
             [questionId]: data.data.results
           }));
+        } else {
+          // No results yet - generate empty results from options
+          const emptyResults = generateEmptyPollResults(question, responses[questionId]);
+          setPollResults(prev => ({
+            ...prev,
+            [questionId]: emptyResults
+          }));
         }
       } else {
-        // If API fails, generate mock results based on current answer
-        // This provides instant feedback even without backend support
-        const mockResults = generateMockPollResults(question, responses[questionId]);
+        // API returned error - show empty results (no fake data)
+        const emptyResults = generateEmptyPollResults(question, responses[questionId]);
         setPollResults(prev => ({
           ...prev,
-          [questionId]: mockResults
+          [questionId]: emptyResults
         }));
       }
     } catch (err) {
       console.error("Failed to submit poll answer:", err);
-      // Generate mock results as fallback
-      const mockResults = generateMockPollResults(question, responses[questionId]);
+      // Generate empty results - no fake data
+      const emptyResults = generateEmptyPollResults(question, responses[questionId]);
       setPollResults(prev => ({
         ...prev,
-        [questionId]: mockResults
+        [questionId]: emptyResults
       }));
     }
   };
   
-  // Generate mock poll results for demonstration
-  const generateMockPollResults = (question: any, userAnswer: string | number) => {
+  // Generate empty poll results (no fake votes) - shows user's vote as 1
+  const generateEmptyPollResults = (question: any, userAnswer: string | number) => {
     let options = [];
     
     // Handle rating questions
@@ -2630,48 +2730,19 @@ export default function TakeActivityPage() {
       options = question.options || [];
     }
     
-    const totalVotes = Math.floor(Math.random() * 50) + 20; // 20-70 total votes
-    
-    // For rating questions, create a more realistic distribution with normal curve
-    const isRating = question.type === 'rating';
-    
+    // Generate results with only the user's vote counted
     const results = options.map((option: any) => {
       const optionValue = typeof option === 'string' ? option : (option.value || option.text || option.label || option);
-      const optionNum = parseInt(optionValue);
-      
-      let count;
-      if (String(optionValue) === String(userAnswer)) {
-        // Give user's answer a realistic percentage (15-40%)
-        count = Math.floor(totalVotes * (Math.random() * 0.25 + 0.15)); // 15-40%
-      } else if (isRating && !isNaN(optionNum)) {
-        // For ratings, create a normal distribution (bell curve)
-        const maxRating = options.length;
-        const middle = (maxRating + 1) / 2;
-        const distance = Math.abs(optionNum - middle);
-        const weight = 1 - (distance / maxRating) * 0.6; // Higher ratings get more weight
-        count = Math.floor(Math.random() * (totalVotes * 0.3 * weight));
-      } else {
-        // Distribute remaining votes among other options
-        count = Math.floor(Math.random() * (totalVotes * 0.3));
-      }
-      
-      const percentage = (count / totalVotes) * 100;
+      const isUserAnswer = String(optionValue) === String(userAnswer);
       
       return {
         option: String(optionValue),
-        count: count,
-        percentage: percentage
+        count: isUserAnswer ? 1 : 0,
+        percentage: isUserAnswer ? 100 : 0
       };
     });
     
-    // Normalize percentages to add up to 100%
-    const totalPercentage = results.reduce((sum: number, r: any) => sum + r.percentage, 0);
-    const normalizedResults = results.map((r: any) => ({
-      ...r,
-      percentage: (r.percentage / totalPercentage) * 100
-    }));
-    
-    return normalizedResults.sort((a: any, b: any) => b.percentage - a.percentage); // Sort by percentage descending
+    return results;
   };
 
   // Render comment box for questions with is_comment_enabled
@@ -2725,18 +2796,94 @@ export default function TakeActivityPage() {
 
     switch (question.type) {
       case "text":
-      case "short_answer":
+      case "short_answer": {
         const translatedPlaceholder = getTranslatedText(question, 'placeholder') as string;
+        const textInputFormat = question.settings?.inputFormat || 'text';
+        const textMaxLength = question.settings?.maxLength;
+        const textPlaceholder = translatedPlaceholder || question.settings?.placeholder || "Enter your answer...";
+        
+        // Determine input type based on format
+        const getTextInputType = () => {
+          switch (textInputFormat) {
+            case 'email': return 'email';
+            case 'number': return 'number';
+            case 'decimal': return 'number';
+            case 'phone': return 'tel';
+            case 'url': return 'url';
+            case 'date': return 'date';
+            case 'time': return 'time';
+            case 'datetime': return 'datetime-local';
+            default: return 'text';
+          }
+        };
+
+        // Get pattern for HTML5 validation
+        const getTextInputPattern = () => {
+          switch (textInputFormat) {
+            case 'alphanumeric': return '[A-Za-z0-9\\s]*';
+            case 'letters_only': return '[A-Za-z\\s]*';
+            case 'number': return '[0-9]*';
+            case 'phone': return '[0-9+\\-()\\s]*';
+            default: return undefined;
+          }
+        };
+
+        // Real-time validation handler
+        const handleTextInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+          let value = e.target.value;
+          
+          // Apply strict validation based on format
+          if (textInputFormat === 'letters_only') {
+            value = value.replace(/[^A-Za-z\s]/g, '');
+          } else if (textInputFormat === 'alphanumeric') {
+            value = value.replace(/[^A-Za-z0-9\s]/g, '');
+          } else if (textInputFormat === 'number') {
+            value = value.replace(/[^0-9]/g, '');
+          } else if (textInputFormat === 'decimal') {
+            // Allow digits, one decimal point, and negative sign at start
+            value = value.replace(/[^0-9.-]/g, '').replace(/(?!^)-/g, '').replace(/\.(?=.*\.)/g, '');
+          } else if (textInputFormat === 'phone') {
+            value = value.replace(/[^0-9+\-()\s]/g, '');
+          }
+          
+          handleResponseChange(questionId, value);
+        };
+
         return (
-          <Input
-            type="text"
-            placeholder={translatedPlaceholder || "Enter your answer..."}
-            value={responses[questionId] || ""}
-            onChange={(e) => handleResponseChange(questionId, e.target.value)}
-            className="w-full"
-            disabled={isSubmitted}
-          />
+          <div className="space-y-2">
+            <Input
+              type={getTextInputType()}
+              pattern={getTextInputPattern()}
+              placeholder={textPlaceholder}
+              value={responses[questionId] || ""}
+              onChange={handleTextInputChange}
+              maxLength={textMaxLength}
+              step={textInputFormat === 'decimal' ? '0.01' : undefined}
+              className="w-full"
+              disabled={isSubmitted}
+            />
+            {(textInputFormat !== 'text' || textMaxLength) && (
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>
+                  {textInputFormat === 'email' && 'Enter a valid email address'}
+                  {textInputFormat === 'number' && 'Numbers only'}
+                  {textInputFormat === 'decimal' && 'Decimal numbers allowed'}
+                  {textInputFormat === 'phone' && 'Enter phone number'}
+                  {textInputFormat === 'url' && 'Enter a valid URL'}
+                  {textInputFormat === 'date' && 'Select a date'}
+                  {textInputFormat === 'time' && 'Select a time'}
+                  {textInputFormat === 'datetime' && 'Select date and time'}
+                  {textInputFormat === 'alphanumeric' && 'Letters and numbers only'}
+                  {textInputFormat === 'letters_only' && 'Letters only'}
+                </span>
+                {textMaxLength && (
+                  <span>{(responses[questionId] || '').length} / {textMaxLength}</span>
+                )}
+              </div>
+            )}
+          </div>
         );
+      }
 
       case "textarea":
       case "long_answer":
@@ -2855,6 +3002,92 @@ export default function TakeActivityPage() {
                 <span>Your vote has been recorded</span>
               </div>
             )}
+            
+            {/* Graphical Poll Results Chart */}
+            {isPollSubmitted && questionResults && questionResults.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <BarChart3 className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Results Visualization</span>
+                </div>
+                
+                {/* Bar Chart for all question types */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <ResponsiveContainer width="100%" height={Math.max(180, questionResults.length * 40)}>
+                    <BarChart
+                      data={questionResults}
+                      layout="vertical"
+                      margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                    >
+                      <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                      <YAxis 
+                        type="category" 
+                        dataKey="option" 
+                        width={100}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) => value.length > 15 ? value.substring(0, 15) + '...' : value}
+                      />
+                      <Tooltip
+                        formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, 'Percentage']}
+                        labelFormatter={(label) => `Option: ${label}`}
+                      />
+                      <Bar dataKey="percentage" radius={[0, 4, 4, 0]}>
+                        {questionResults.map((entry: any, index: number) => (
+                          <Cell 
+                            key={`cell-${index}`}
+                            fill={String(entry.option) === String(responses[questionId]) ? '#3B82F6' : '#94A3B8'}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  
+                  {/* Mini donut chart for distribution */}
+                  {totalVotes > 1 && (
+                    <div className="flex items-center justify-center mt-4">
+                      <div className="w-32 h-32">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={questionResults.filter((r: any) => r.count > 0)}
+                              dataKey="percentage"
+                              nameKey="option"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={25}
+                              outerRadius={50}
+                              paddingAngle={2}
+                            >
+                              {questionResults.filter((r: any) => r.count > 0).map((entry: any, index: number) => (
+                                <Cell 
+                                  key={`pie-${index}`}
+                                  fill={String(entry.option) === String(responses[questionId]) ? '#3B82F6' : `hsl(${index * 45 + 200}, 50%, 60%)`}
+                                />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value: number) => [`${value.toFixed(1)}%`, 'Share']} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="ml-4 text-xs text-gray-500">
+                        <div className="font-medium text-gray-700 mb-1">Vote Distribution</div>
+                        {questionResults.filter((r: any) => r.count > 0).slice(0, 5).map((entry: any, idx: number) => (
+                          <div key={idx} className="flex items-center gap-1 mb-0.5">
+                            <div 
+                              className="w-2 h-2 rounded-full" 
+                              style={{ 
+                                backgroundColor: String(entry.option) === String(responses[questionId]) ? '#3B82F6' : `hsl(${idx * 45 + 200}, 50%, 60%)` 
+                              }}
+                            />
+                            <span className="truncate max-w-[80px]">{entry.option}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         );
 
@@ -2863,18 +3096,40 @@ export default function TakeActivityPage() {
       case "multiselect":
       case "multiple_choice_multiple":
         const translatedMultiOptions = getTranslatedText(question, 'options') as string[];
+        const selectedCount = (responses[questionId] || []).length;
+        const hasMinSelection = question.min_selection && question.min_selection > 0;
+        const hasMaxSelection = question.max_selection && question.max_selection > 0;
+        
         return (
           <div className="space-y-3">
+            {/* Selection limit indicator */}
+            {(hasMinSelection || hasMaxSelection) && !isSubmitted && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2 text-sm">
+                  <AlertCircle className="w-4 h-4 text-blue-600" />
+                  <span className="text-blue-800">
+                    {hasMinSelection && hasMaxSelection
+                      ? `Select between ${question.min_selection} and ${question.max_selection} options (${selectedCount} selected)`
+                      : hasMinSelection
+                      ? `Select at least ${question.min_selection} option${question.min_selection > 1 ? 's' : ''} (${selectedCount} selected)`
+                      : `Select up to ${question.max_selection} option${question.max_selection > 1 ? 's' : ''} (${selectedCount} selected)`}
+                  </span>
+                </div>
+              </div>
+            )}
+            
             {translatedMultiOptions?.map((option: any, index: number) => {
               const optionValue = typeof option === 'string' ? option : (option.value || option.text || option.label || option);
               const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
               const isSelected = (responses[questionId] || []).includes(optionValue);
+              const isMaxReached = hasMaxSelection && selectedCount >= question.max_selection && !isSelected;
+              
               return (
                 <div
                   key={index}
-                  onClick={() => !isSubmitted && handleMultipleChoiceToggle(questionId, optionValue)}
+                  onClick={() => !isSubmitted && !isMaxReached && handleMultipleChoiceToggle(questionId, optionValue)}
                   className={`flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
-                    isSubmitted ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                    isSubmitted || isMaxReached ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
                   } ${
                     isSelected ? "border-qsights-blue bg-blue-50" : "border-gray-200 hover:border-gray-300"
                   }`}
@@ -2885,6 +3140,9 @@ export default function TakeActivityPage() {
                   <span className="text-sm text-gray-700">{optionLabel}</span>
                   {isSubmitted && isSelected && (
                     <span className="ml-auto text-xs text-gray-500">(Submitted)</span>
+                  )}
+                  {isMaxReached && (
+                    <span className="ml-auto text-xs text-gray-400">(Limit reached)</span>
                   )}
                 </div>
               );
@@ -3362,13 +3620,24 @@ export default function TakeActivityPage() {
         // Check for hyperlinks in question directly or in settings
         const infoHyperlinks = question.hyperlinks || question.settings?.hyperlinks || [];
         const hyperlinksPosition = question.hyperlinksPosition || question.settings?.hyperlinksPosition || 'bottom';
-        // Check for formatted content in question directly or in settings
-        const formattedContent = question.formattedQuestion || question.settings?.formattedContent || question.settings?.formattedQuestion || '';
+        // Get translated content using getTranslatedText (supports formattedQuestion from translations)
+        const translatedInfoContent = getTranslatedText(question, 'question') as string;
+        // Fallback to original content if no translation
+        const formattedContent = translatedInfoContent || question.formattedQuestion || question.settings?.formattedContent || question.settings?.formattedQuestion || '';
+        
+        // Get current language for hyperlink text translation
+        const currentInfoLang = perQuestionLanguages[question.id] || selectedLanguage || 'EN';
+        const infoTranslations = question.translations?.[currentInfoLang];
         
         const hyperlinkButtons = infoHyperlinks.length > 0 && (
           <div className="flex flex-wrap gap-3">
-            {infoHyperlinks.map((link: any, idx: number) => (
-              link.text && link.url ? (
+            {infoHyperlinks.map((link: any, idx: number) => {
+              // Get translated button text if available, otherwise use original
+              const buttonText = (currentInfoLang !== 'EN' && infoTranslations?.hyperlinkTexts?.[idx]) 
+                ? infoTranslations.hyperlinkTexts[idx] 
+                : link.text;
+              
+              return link.text && link.url ? (
                 <a
                   key={idx}
                   href={link.url}
@@ -3377,10 +3646,10 @@ export default function TakeActivityPage() {
                   className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 underline decoration-blue-400 hover:decoration-blue-600 transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  {link.text}
+                  {buttonText}
                 </a>
-              ) : null
-            ))}
+              ) : null;
+            })}
           </div>
         );
         
@@ -3471,14 +3740,191 @@ export default function TakeActivityPage() {
         );
 
       default:
+        // Text input with format support
+        const inputFormat = question.settings?.inputFormat || 'text';
+        const inputMaxLength = question.settings?.maxLength;
+        const inputPlaceholder = question.settings?.placeholder || "Enter your answer...";
+        
+        // Determine input type based on format
+        const getInputType = () => {
+          switch (inputFormat) {
+            case 'email': return 'email';
+            case 'number': return 'number';
+            case 'decimal': return 'number';
+            case 'phone': return 'tel';
+            case 'url': return 'url';
+            case 'date': return 'date';
+            case 'time': return 'time';
+            case 'datetime': return 'datetime-local';
+            default: return 'text';
+          }
+        };
+
+        // Get pattern for validation
+        const getInputPattern = () => {
+          switch (inputFormat) {
+            case 'alphanumeric': return '[A-Za-z0-9\\s]*';
+            case 'letters_only': return '[A-Za-z\\s]*';
+            case 'number': return '[0-9]*';
+            case 'phone': return '[0-9+\\-()\\s]*';
+            default: return undefined;
+          }
+        };
+
+        // Validate input based on format
+        const handleTextInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+          let value = e.target.value;
+          
+          // Apply validation based on format
+          if (inputFormat === 'letters_only') {
+            value = value.replace(/[^A-Za-z\s]/g, '');
+          } else if (inputFormat === 'alphanumeric') {
+            value = value.replace(/[^A-Za-z0-9\s]/g, '');
+          } else if (inputFormat === 'number') {
+            value = value.replace(/[^0-9]/g, '');
+          }
+          
+          handleResponseChange(questionId, value);
+        };
+
         return (
-          <Input
-            type="text"
-            placeholder="Enter your answer..."
-            value={responses[questionId] || ""}
-            onChange={(e) => handleResponseChange(questionId, e.target.value)}
-            className="w-full"
-          />
+          <div className="space-y-2">
+            <Input
+              type={getInputType()}
+              pattern={getInputPattern()}
+              placeholder={inputPlaceholder}
+              value={responses[questionId] || ""}
+              onChange={handleTextInput}
+              maxLength={inputMaxLength}
+              step={inputFormat === 'decimal' ? '0.01' : undefined}
+              className="w-full"
+            />
+            {(inputFormat !== 'text' || inputMaxLength) && (
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>
+                  {inputFormat === 'email' && 'Enter a valid email address'}
+                  {inputFormat === 'number' && 'Numbers only'}
+                  {inputFormat === 'decimal' && 'Decimal numbers allowed'}
+                  {inputFormat === 'phone' && 'Enter phone number'}
+                  {inputFormat === 'url' && 'Enter a valid URL'}
+                  {inputFormat === 'date' && 'Select a date'}
+                  {inputFormat === 'time' && 'Select a time'}
+                  {inputFormat === 'datetime' && 'Select date and time'}
+                  {inputFormat === 'alphanumeric' && 'Letters and numbers only'}
+                  {inputFormat === 'letters_only' && 'Letters only'}
+                </span>
+                {inputMaxLength && (
+                  <span>{(responses[questionId] || '').length} / {inputMaxLength}</span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      case "percentage_allocation":
+        const paqOptions = getTranslatedText(question, 'options') as string[];
+        const currentPercentages = responses[questionId] || {};
+        
+        // Calculate total percentage
+        const totalPercentage = Object.values(currentPercentages as Record<string, number>).reduce(
+          (sum: number, val: number) => sum + (parseFloat(String(val)) || 0), 
+          0
+        );
+        const isValidTotal = totalPercentage === 100;
+        const exceedsTotal = totalPercentage > 100;
+        
+        return (
+          <div className="space-y-4">
+            {/* Instructions */}
+            <div className={`p-3 rounded-lg border text-sm flex items-center gap-2 ${
+              exceedsTotal 
+                ? 'bg-red-50 border-red-200 text-red-700' 
+                : isValidTotal
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : 'bg-blue-50 border-blue-200 text-blue-700'
+            }`}>
+              <AlertCircle className="w-4 h-4" />
+              <span>
+                {exceedsTotal 
+                  ? 'Total percentage cannot exceed 100%' 
+                  : isValidTotal 
+                  ? 'Perfect! Total equals 100%' 
+                  : 'Allocate percentages that total exactly 100%'}
+              </span>
+            </div>
+            
+            {/* Options with percentage inputs */}
+            <div className="space-y-3">
+              {paqOptions?.map((option: any, index: number) => {
+                const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
+                const optionKey = `option_${index}`;
+                const currentValue = currentPercentages[optionKey] || '';
+                
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-4 p-3 border border-gray-200 rounded-lg bg-white"
+                  >
+                    <span className="flex-1 text-sm text-gray-700 font-medium">{optionLabel}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={currentValue}
+                        onChange={(e) => {
+                          if (isSubmitted) return;
+                          const value = e.target.value;
+                          // Allow empty string for clearing
+                          const numValue = value === '' ? '' : Math.min(100, Math.max(0, parseFloat(value) || 0));
+                          handleResponseChange(questionId, {
+                            ...currentPercentages,
+                            [optionKey]: numValue
+                          });
+                        }}
+                        disabled={isSubmitted}
+                        placeholder="0"
+                        className={`w-20 px-3 py-2 text-sm border rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent ${
+                          isSubmitted ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                        } ${exceedsTotal ? 'border-red-300' : 'border-gray-300'}`}
+                      />
+                      <span className="text-sm text-gray-500 w-4">%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Total display */}
+            <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${
+              exceedsTotal 
+                ? 'bg-red-50 border-red-300' 
+                : isValidTotal
+                ? 'bg-emerald-50 border-emerald-300'
+                : 'bg-gray-50 border-gray-200'
+            }`}>
+              <span className="text-sm font-semibold text-gray-700">Total:</span>
+              <span className={`text-lg font-bold ${
+                exceedsTotal 
+                  ? 'text-red-600' 
+                  : isValidTotal
+                  ? 'text-emerald-600'
+                  : 'text-gray-600'
+              }`}>
+                {totalPercentage.toFixed(1)}%
+              </span>
+            </div>
+            
+            {/* Validation message */}
+            {!isSubmitted && totalPercentage > 0 && !isValidTotal && (
+              <p className={`text-sm ${exceedsTotal ? 'text-red-600' : 'text-amber-600'}`}>
+                {exceedsTotal 
+                  ? `Please reduce by ${(totalPercentage - 100).toFixed(1)}%`
+                  : `${(100 - totalPercentage).toFixed(1)}% remaining to allocate`}
+              </p>
+            )}
+          </div>
         );
     }
   };
@@ -3652,11 +4098,11 @@ export default function TakeActivityPage() {
           <div 
             className="w-full flex-shrink-0 relative z-10" 
             style={{ 
-              backgroundColor: activity.landing_config.bannerBackgroundColor || "#3B82F6",
-              height: activity.landing_config.bannerHeight || "120px",
-              backgroundImage: (presignedBannerUrl || activity.landing_config.bannerImageUrl) ? `url(${presignedBannerUrl || activity.landing_config.bannerImageUrl})` : undefined,
+              backgroundColor: activity.landing_config?.bannerBackgroundColor || "#3B82F6",
+              height: activity.landing_config?.bannerHeight || "120px",
+              backgroundImage: (presignedBannerUrl || activity.landing_config?.bannerImageUrl) ? `url(${presignedBannerUrl || activity.landing_config?.bannerImageUrl})` : undefined,
               backgroundSize: "cover",
-              backgroundPosition: activity.landing_config.bannerImagePosition || "center",
+              backgroundPosition: activity.landing_config?.bannerImagePosition || "center",
             }}
           >
             {/* Mobile: Stacked Layout */}

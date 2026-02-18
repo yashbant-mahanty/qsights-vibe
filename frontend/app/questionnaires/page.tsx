@@ -304,37 +304,7 @@ function QuestionnairesPageContent() {
     [filteredQuestionnaires, startIndex, endIndex]
   );
 
-  if (loading) {
-    return (
-      <RoleBasedLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qsights-blue mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading questionnaires...</p>
-          </div>
-        </div>
-      </RoleBasedLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <RoleBasedLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <p className="text-red-600 font-semibold">{error}</p>
-            <button 
-              onClick={loadQuestionnaires}
-              className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
-            >
-              Retry
-            </button>
-          </div>
-        </div>
-      </RoleBasedLayout>
-    );
-  }
+  // Loading and error states are rendered inside the single RoleBasedLayout below
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -417,9 +387,31 @@ function QuestionnairesPageContent() {
 
   return (
     <RoleBasedLayout>
-      <div className="space-y-6">
-        {/* Selection Mode Banner */}
-        {selectionMode && (
+      <>
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-qsights-blue mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading questionnaires...</p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <p className="text-red-600 font-semibold">{error}</p>
+              <button 
+                onClick={loadQuestionnaires}
+                className="mt-4 px-4 py-2 bg-qsights-cyan text-white rounded-lg hover:bg-blue-700"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : (
+        <div className="space-y-6">
+          {/* Selection Mode Banner */}
+          {selectionMode && (
           <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-4 text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -836,6 +828,7 @@ function QuestionnairesPageContent() {
           </CardContent>
         </Card>
       </div>
+        )}
 
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}
@@ -853,6 +846,7 @@ function QuestionnairesPageContent() {
         itemName={duplicateModal.questionnaireName || undefined}
         itemType="questionnaire"
       />
+      </>
     </RoleBasedLayout>
   );
 }

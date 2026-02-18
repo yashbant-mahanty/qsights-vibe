@@ -129,6 +129,8 @@ class QuestionnaireController extends Controller
             'sections.*.questions.*.translations' => 'nullable|array',
             'sections.*.questions.*.is_required' => 'nullable|boolean',
             'sections.*.questions.*.is_comment_enabled' => 'nullable|boolean',
+            'sections.*.questions.*.min_selection' => 'nullable|integer|min:1',
+            'sections.*.questions.*.max_selection' => 'nullable|integer|min:1',
             'sections.*.questions.*.order' => 'nullable|integer',
             // Reference validation rules
             'sections.*.questions.*.references' => 'nullable|array',
@@ -203,6 +205,8 @@ class QuestionnaireController extends Controller
                                 'translations' => $questionData['translations'] ?? null,
                                 'is_required' => $questionData['is_required'] ?? false,
                                 'is_comment_enabled' => $questionData['is_comment_enabled'] ?? false,
+                                'min_selection' => $questionData['min_selection'] ?? null,
+                                'max_selection' => $questionData['max_selection'] ?? null,
                                 'order' => $questionData['order'] ?? 0,
                             ]);
 
@@ -316,6 +320,8 @@ class QuestionnaireController extends Controller
             'sections.*.questions.*.translations' => 'nullable|array',
             'sections.*.questions.*.is_required' => 'nullable|boolean',
             'sections.*.questions.*.is_comment_enabled' => 'nullable|boolean',
+            'sections.*.questions.*.min_selection' => 'nullable|integer|min:1',
+            'sections.*.questions.*.max_selection' => 'nullable|integer|min:1',
             'sections.*.questions.*.order' => 'nullable|integer',
             // Reference validation rules
             'sections.*.questions.*.references' => 'nullable|array',
@@ -405,6 +411,8 @@ class QuestionnaireController extends Controller
                                 'translations' => $questionData['translations'] ?? null,
                                 'is_required' => $questionData['is_required'] ?? false,
                                 'is_comment_enabled' => $questionData['is_comment_enabled'] ?? false,
+                                'min_selection' => $questionData['min_selection'] ?? null,
+                                'max_selection' => $questionData['max_selection'] ?? null,
                                 'order' => $questionData['order'] ?? 0,
                             ]);
 
@@ -640,6 +648,8 @@ class QuestionnaireController extends Controller
             'translations' => 'nullable|array',
             'is_required' => 'nullable|boolean',
             'is_comment_enabled' => 'nullable|boolean',
+            'min_selection' => 'nullable|integer|min:1',
+            'max_selection' => 'nullable|integer|min:1',
             'order' => 'nullable|integer',
         ]);
 
@@ -654,6 +664,8 @@ class QuestionnaireController extends Controller
             'translations' => $validated['translations'] ?? null,
             'is_required' => $validated['is_required'] ?? false,
             'is_comment_enabled' => $validated['is_comment_enabled'] ?? false,
+            'min_selection' => $validated['min_selection'] ?? null,
+            'max_selection' => $validated['max_selection'] ?? null,
             'order' => $validated['order'] ?? 0,
         ]);
 
@@ -684,6 +696,8 @@ class QuestionnaireController extends Controller
             'translations' => 'nullable|array',
             'is_required' => 'nullable|boolean',
             'is_comment_enabled' => 'nullable|boolean',
+            'min_selection' => 'nullable|integer|min:1',
+            'max_selection' => 'nullable|integer|min:1',
             'order' => 'nullable|integer',
         ]);
 

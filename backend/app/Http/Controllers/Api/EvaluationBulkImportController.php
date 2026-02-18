@@ -104,12 +104,14 @@ class EvaluationBulkImportController extends Controller
                         
                         if (!$departmentId) {
                             // Create new department
-                            $departmentId = DB::table('evaluation_departments')->insertGetId([
-                                'id' => (string) Str::uuid(),
+                            $departmentId = (string) Str::uuid();
+                            DB::table('evaluation_departments')->insert([
+                                'id' => $departmentId,
                                 'name' => $currentDepartment,
                                 'code' => strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $currentDepartment), 0, 10)),
                                 'program_id' => $programId,
                                 'is_active' => true,
+                                'created_by' => $user->id,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ]);
@@ -148,13 +150,14 @@ class EvaluationBulkImportController extends Controller
                     
                     if (!$roleId) {
                         // Create new role
-                        $roleId = DB::table('evaluation_roles')->insertGetId([
-                            'id' => (string) Str::uuid(),
+                        $roleId = (string) Str::uuid();
+                        DB::table('evaluation_roles')->insert([
+                            'id' => $roleId,
                             'name' => $roleName,
                             'category' => $currentDepartment,
-                            'department_id' => $currentDepartmentId,
                             'program_id' => $programId,
                             'is_active' => true,
+                            'created_by' => $user->id,
                             'created_at' => now(),
                             'updated_at' => now()
                         ]);
@@ -202,10 +205,11 @@ class EvaluationBulkImportController extends Controller
                                     'name' => $staffName,
                                     'email' => $staffEmail,
                                     'role_id' => $roleId,
-                                    'role_name' => $roleName,
                                     'department' => $currentDepartment,
                                     'program_id' => $programId,
-                                    'is_active' => true,
+                                    'status' => 'active',
+                                    'is_available_for_evaluation' => true,
+                                    'created_by' => $user->id,
                                     'created_at' => now(),
                                     'updated_at' => now()
                                 ]);

@@ -407,6 +407,83 @@ function formatDragDropResponse(answer: any, questionSettings: any): React.React
   );
 }
 
+// Helper function to format multi/checkbox response arrays
+function formatMultiResponse(answer: any, questionOptions?: string[]): React.ReactNode {
+  if (!answer || !Array.isArray(answer)) return formatAnswerForDisplay(answer);
+  
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {answer.map((item: any, idx: number) => {
+        // Try to find the option label if options are provided
+        const displayValue = typeof item === 'string' ? item : String(item);
+        return (
+          <span 
+            key={idx} 
+            className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 rounded-full text-xs font-medium border border-blue-200"
+          >
+            <CheckCircle className="w-3 h-3" />
+            {displayValue}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// Helper function to format percentage allocation responses
+function formatPercentageAllocationResponse(answer: any, questionOptions?: string[]): React.ReactNode {
+  if (!answer || typeof answer !== 'object') return formatAnswerForDisplay(answer);
+  
+  // Handle both parsed object and string
+  const response = typeof answer === 'string' ? JSON.parse(answer) : answer;
+  
+  // Check if this looks like a percentage_allocation response (has option_0, option_1, etc.)
+  const keys = Object.keys(response).filter(k => k.startsWith('option_'));
+  if (keys.length === 0) {
+    return formatAnswerForDisplay(answer);
+  }
+
+  // Sort keys by option number
+  keys.sort((a, b) => {
+    const numA = parseInt(a.replace('option_', ''));
+    const numB = parseInt(b.replace('option_', ''));
+    return numA - numB;
+  });
+
+  const total = keys.reduce((sum, key) => sum + (parseFloat(response[key]) || 0), 0);
+
+  return (
+    <div className="space-y-2">
+      {keys.map((key, idx) => {
+        const optionIndex = parseInt(key.replace('option_', ''));
+        const optionLabel = questionOptions?.[optionIndex] || `Option ${optionIndex + 1}`;
+        const value = parseFloat(response[key]) || 0;
+        
+        return (
+          <div key={key} className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700 min-w-[120px]">{optionLabel}:</span>
+            <div className="flex-1 flex items-center gap-2">
+              <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden max-w-[150px]">
+                <div 
+                  className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-full transition-all duration-300" 
+                  style={{ width: `${value}%` }}
+                />
+              </div>
+              <span className="text-sm font-bold text-emerald-600 min-w-[50px]">{value}%</span>
+            </div>
+          </div>
+        );
+      })}
+      <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
+        <span className="text-xs font-semibold text-gray-600">Total:</span>
+        <span className={`text-sm font-bold ${total === 100 ? 'text-green-600' : 'text-red-500'}`}>
+          {total}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // SCT Report Section Component
 interface SCTReportSectionProps {
   activityId: string;
@@ -2368,6 +2445,297 @@ export default function ActivityResultsPage() {
     }
   }
 
+  // Export individual question responses to Excel with matrix handling
+  async function exportQuestionResponsesAsExcel(question: any, participantResponses: any[], sectionIndex: number, qIndex: number) {
+    try {
+      const XLSX = await import('xlsx');
+      
+      if (!participantResponses || participantResponses.length === 0) {
+        toast({
+          title: "No Data",
+          description: "There are no responses for this question to export yet.",
+          variant: "warning"
+        });
+        return;
+      }
+
+      const questionNumber = `Q${sectionIndex + 1}.${qIndex + 1}`;
+      const questionTitle = (question.title || question.text || `Question ${qIndex + 1}`).replace(/<[^>]*>/g, ''); // Strip HTML
+      
+      // Prepare export data
+      const exportData: any[] = [];
+      
+      // Check if this is a matrix-style question
+      // First check question type, then check actual answer structure
+      const isMatrixType = question.type === 'matrix';
+      const configuredMatrixRows = question.settings?.rows || question.rows || [];
+      
+      // Detect if answers are in matrix format (object with multiple key-value pairs)
+      // by checking the first response
+      const firstAnswer = participantResponses.length > 0 ? participantResponses[0].answer : null;
+      const hasMatrixStructure = firstAnswer && 
+        typeof firstAnswer === 'object' && 
+        !Array.isArray(firstAnswer) && 
+        Object.keys(firstAnswer).length > 1;
+      
+      // Use configured rows if available, otherwise use keys from actual answer
+      let matrixRows: string[] = [];
+      if (isMatrixType && configuredMatrixRows.length > 0) {
+        matrixRows = configuredMatrixRows;
+      } else if (hasMatrixStructure) {
+        // Extract row names from the actual answer object
+        matrixRows = Object.keys(firstAnswer);
+      }
+      
+      const shouldFlattenAsMatrix = matrixRows.length > 0;
+      
+      participantResponses.forEach((pr, idx) => {
+        const baseRow: any = {
+          '#': idx + 1,
+          'Participant': pr.participantName || 'Anonymous',
+          'Email': pr.participantEmail || 'N/A',
+        };
+
+        if (shouldFlattenAsMatrix) {
+          // For matrix-style questions: flatten each row into separate columns
+          // Example: Q10_Increase_overall_use, Q10_Offer_alternatives, etc.
+          if (pr.answer && typeof pr.answer === 'object' && !Array.isArray(pr.answer)) {
+            matrixRows.forEach((row: string) => {
+              // Clean row name for column header (remove special chars, limit length)
+              const cleanRowName = row
+                .substring(0, 50)
+                .replace(/[^a-zA-Z0-9 ]/g, '')
+                .replace(/\s+/g, '_')
+                .replace(/^_+|_+$/g, '');
+              const columnName = `${questionNumber}_${cleanRowName}`;
+              baseRow[columnName] = pr.answer[row] || 'No response';
+            });
+          } else {
+            // If answer is not in expected format, add empty columns
+            matrixRows.forEach((row: string) => {
+              const cleanRowName = row
+                .substring(0, 50)
+                .replace(/[^a-zA-Z0-9 ]/g, '')
+                .replace(/\s+/g, '_')
+                .replace(/^_+|_+$/g, '');
+              const columnName = `${questionNumber}_${cleanRowName}`;
+              baseRow[columnName] = 'No response';
+            });
+          }
+        } else {
+          // For non-matrix questions: single column with response
+          let responseValue = 'No response';
+          
+          if (pr.answer !== null && pr.answer !== undefined) {
+            if (Array.isArray(pr.answer)) {
+              responseValue = pr.answer.join(', ');
+            } else if (typeof pr.answer === 'object') {
+              // Still show as JSON if it's an object but not matrix-like  
+              responseValue = JSON.stringify(pr.answer);
+            } else {
+              responseValue = String(pr.answer);
+            }
+          }
+          
+          baseRow[questionNumber] = responseValue;
+        }
+        
+        // Add score for SCT Likert questions
+        if (question.type === 'sct_likert' && pr.score !== null && pr.score !== undefined) {
+          baseRow['Score'] = pr.score;
+        }
+        
+        // Add comment if available
+        if (pr.commentText && pr.commentText.trim()) {
+          baseRow['Comment'] = pr.commentText.trim();
+        }
+        
+        // Add submission timestamp
+        baseRow['Submitted At'] = pr.submittedAt 
+          ? new Date(pr.submittedAt).toLocaleString()
+          : 'N/A';
+        
+        exportData.push(baseRow);
+      });
+
+      // Create worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      
+      // Set column widths
+      const columnWidths: any[] = [
+        { wch: 5 },  // #
+        { wch: 25 }, // Participant
+        { wch: 30 }, // Email
+      ];
+      
+      // Add widths for matrix columns or single response column
+      if (shouldFlattenAsMatrix) {
+        matrixRows.forEach(() => {
+          columnWidths.push({ wch: 25 }); // Each matrix row column
+        });
+      } else {
+        columnWidths.push({ wch: 40 }); // Single response column
+      }
+      
+      // Add widths for optional columns
+      if (question.type === 'sct_likert') {
+        columnWidths.push({ wch: 10 }); // Score
+      }
+      if (participantResponses.some(pr => pr.commentText)) {
+        columnWidths.push({ wch: 40 }); // Comment
+      }
+      columnWidths.push({ wch: 20 }); // Submitted At
+      
+      ws['!cols'] = columnWidths;
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `${questionNumber} Responses`);
+
+      // Generate filename
+      const safeQuestionTitle = questionTitle.substring(0, 50).replace(/[^a-z0-9]/gi, '_');
+      const filename = `${questionNumber}_${safeQuestionTitle}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      // Export file
+      XLSX.writeFile(wb, filename);
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      throw error;
+    }
+  }
+
+  // Export individual question responses to CSV with matrix handling
+  async function exportQuestionResponsesAsCSV(question: any, participantResponses: any[], sectionIndex: number, qIndex: number) {
+    try {
+      const XLSX = await import('xlsx');
+      
+      if (!participantResponses || participantResponses.length === 0) {
+        toast({
+          title: "No Data",
+          description: "There are no responses for this question to export yet.",
+          variant: "warning"
+        });
+        return;
+      }
+
+      const questionNumber = `Q${sectionIndex + 1}.${qIndex + 1}`;
+      const questionTitle = (question.title || question.text || `Question ${qIndex + 1}`).replace(/<[^>]*>/g, ''); // Strip HTML
+      
+      // Prepare export data
+      const exportData: any[] = [];
+      
+      // Check if this is a matrix-style question
+      // First check question type, then check actual answer structure
+      const isMatrixType = question.type === 'matrix';
+      const configuredMatrixRows = question.settings?.rows || question.rows || [];
+      
+      // Detect if answers are in matrix format (object with multiple key-value pairs)
+      // by checking the first response
+      const firstAnswer = participantResponses.length > 0 ? participantResponses[0].answer : null;
+      const hasMatrixStructure = firstAnswer && 
+        typeof firstAnswer === 'object' && 
+        !Array.isArray(firstAnswer) && 
+        Object.keys(firstAnswer).length > 1;
+      
+      // Use configured rows if available, otherwise use keys from actual answer
+      let matrixRows: string[] = [];
+      if (isMatrixType && configuredMatrixRows.length > 0) {
+        matrixRows = configuredMatrixRows;
+      } else if (hasMatrixStructure) {
+        // Extract row names from the actual answer object
+        matrixRows = Object.keys(firstAnswer);
+      }
+      
+      const shouldFlattenAsMatrix = matrixRows.length > 0;
+      
+      participantResponses.forEach((pr, idx) => {
+        const baseRow: any = {
+          '#': idx + 1,
+          'Participant': pr.participantName || 'Anonymous',
+          'Email': pr.participantEmail || 'N/A',
+        };
+
+        if (shouldFlattenAsMatrix) {
+          // For matrix-style questions: flatten each row into separate columns
+          // Example: Q10_Increase_overall_use, Q10_Offer_alternatives, etc.
+          if (pr.answer && typeof pr.answer === 'object' && !Array.isArray(pr.answer)) {
+            matrixRows.forEach((row: string) => {
+              // Clean row name for column header (remove special chars, limit length)
+              const cleanRowName = row
+                .substring(0, 50)
+                .replace(/[^a-zA-Z0-9 ]/g, '')
+                .replace(/\s+/g, '_')
+                .replace(/^_+|_+$/g, '');
+              const columnName = `${questionNumber}_${cleanRowName}`;
+              baseRow[columnName] = pr.answer[row] || 'No response';
+            });
+          } else {
+            // If answer is not in expected format, add empty columns
+            matrixRows.forEach((row: string) => {
+              const cleanRowName = row
+                .substring(0, 50)
+                .replace(/[^a-zA-Z0-9 ]/g, '')
+                .replace(/\s+/g, '_')
+                .replace(/^_+|_+$/g, '');
+              const columnName = `${questionNumber}_${cleanRowName}`;
+              baseRow[columnName] = 'No response';
+            });
+          }
+        } else {
+          // For non-matrix questions: single column with response
+          let responseValue = 'No response';
+          
+          if (pr.answer !== null && pr.answer !== undefined) {
+            if (Array.isArray(pr.answer)) {
+              responseValue = pr.answer.join(', ');
+            } else if (typeof pr.answer === 'object') {
+              // Still show as JSON if it's an object but not matrix-like
+              responseValue = JSON.stringify(pr.answer);
+            } else {
+              responseValue = String(pr.answer);
+            }
+          }
+          
+          baseRow[questionNumber] = responseValue;
+        }
+        
+        // Add score for SCT Likert questions
+        if (question.type === 'sct_likert' && pr.score !== null && pr.score !== undefined) {
+          baseRow['Score'] = pr.score;
+        }
+        
+        // Add comment if available
+        if (pr.commentText && pr.commentText.trim()) {
+          baseRow['Comment'] = pr.commentText.trim();
+        }
+        
+        // Add submission timestamp
+        baseRow['Submitted At'] = pr.submittedAt 
+          ? new Date(pr.submittedAt).toLocaleString()
+          : 'N/A';
+        
+        exportData.push(baseRow);
+      });
+
+      // Create worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `${questionNumber} Responses`);
+
+      // Generate filename
+      const safeQuestionTitle = questionTitle.substring(0, 50).replace(/[^a-z0-9]/gi, '_');
+      const filename = `${questionNumber}_${safeQuestionTitle}_${new Date().toISOString().split('T')[0]}.csv`;
+
+      // Export file as CSV
+      XLSX.writeFile(wb, filename, { bookType: 'csv' });
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      throw error;
+    }
+  }
+
   // Delete orphaned response
   async function deleteResponse(responseId: string, participantName: string) {
     setResponseToDelete({ id: responseId, name: participantName });
@@ -3489,6 +3857,58 @@ export default function ActivityResultsPage() {
                                     <p className="text-2xl font-bold text-blue-600">{Object.keys(stats).length}</p>
                                   </div>
                                 )}
+                                
+                                {/* Export Buttons for Individual Question */}
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await exportQuestionResponsesAsExcel(question, participantResponses, sectionIndex, qIndex);
+                                        toast({ 
+                                          title: "Success", 
+                                          description: "Question responses exported to Excel successfully!", 
+                                          variant: "success" 
+                                        });
+                                      } catch (error) {
+                                        console.error('Export error:', error);
+                                        toast({ 
+                                          title: "Error", 
+                                          description: "Failed to export question responses", 
+                                          variant: "error" 
+                                        });
+                                      }
+                                    }}
+                                    className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg text-xs font-semibold hover:from-green-700 hover:to-emerald-700 transition-all shadow-sm hover:shadow-md"
+                                    title="Export this question's responses to Excel"
+                                  >
+                                    <FileSpreadsheet className="w-4 h-4" />
+                                    Excel
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await exportQuestionResponsesAsCSV(question, participantResponses, sectionIndex, qIndex);
+                                        toast({ 
+                                          title: "Success", 
+                                          description: "Question responses exported to CSV successfully!", 
+                                          variant: "success" 
+                                        });
+                                      } catch (error) {
+                                        console.error('Export error:', error);
+                                        toast({ 
+                                          title: "Error", 
+                                          description: "Failed to export question responses", 
+                                          variant: "error" 
+                                        });
+                                      }
+                                    }}
+                                    className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-xs font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-sm hover:shadow-md"
+                                    title="Export this question's responses to CSV"
+                                  >
+                                    <FileText className="w-4 h-4" />
+                                    CSV
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </CardHeader>
@@ -3733,7 +4153,13 @@ export default function ActivityResultsPage() {
                                             <div className="text-sm text-gray-800 flex-1 break-words">
                                               {question.type === 'drag_and_drop' 
                                                 ? formatDragDropResponse(answer, question.settings)
-                                                : (typeof answer === 'object' ? JSON.stringify(answer, null, 2) : String(answer))
+                                                : question.type === 'percentage_allocation'
+                                                  ? formatPercentageAllocationResponse(answer, question.options)
+                                                  : (question.type === 'multi' || question.type === 'checkbox' || question.type === 'multiselect')
+                                                    ? formatMultiResponse(answer, question.options)
+                                                    : Array.isArray(answer)
+                                                      ? formatMultiResponse(answer, question.options)
+                                                      : (typeof answer === 'object' ? JSON.stringify(answer, null, 2) : String(answer))
                                               }
                                             </div>
                                           </div>
@@ -3843,6 +4269,8 @@ export default function ActivityResultsPage() {
                                                       </div>
                                                     ) : question.type === 'drag_and_drop' ? (
                                                       formatDragDropResponse(pr.answer, question.settings)
+                                                    ) : question.type === 'percentage_allocation' ? (
+                                                      formatPercentageAllocationResponse(pr.answer, question.options)
                                                     ) : (
                                                       <span className="font-medium">
                                                         {pr.answer === OTHER_OPTION_VALUE

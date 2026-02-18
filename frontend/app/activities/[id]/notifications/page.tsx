@@ -16,14 +16,8 @@ export default function ActivityNotificationsPage() {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [authToken, setAuthToken] = useState<string>("");
 
   useEffect(() => {
-    // Get auth token from localStorage immediately
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem("token") || "";
-      setAuthToken(token);
-    }
     loadActivity();
   }, [activityId]);
 

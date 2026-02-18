@@ -72,7 +72,21 @@ class ExportService
                 $answer = $answerMap->get($question->id);
                 if ($answer) {
                     if ($answer->value_array) {
-                        $row[] = implode(', ', json_decode($answer->value_array, true));
+                        // value_array is already cast to array by Laravel
+                        // For matrix questions (associative array), extract only the values (selected options)
+                        $valueArray = $answer->value_array;
+                        if (is_array($valueArray)) {
+                            // Check if associative array (matrix) or indexed array (multi-select/checkbox)
+                            if ($valueArray === array_values($valueArray)) {
+                                // Indexed array (checkbox/multi-select): join all values
+                                $row[] = implode(', ', $valueArray);
+                            } else {
+                                // Associative array (matrix): join only the values (answers), not keys (questions)
+                                $row[] = implode(', ', array_values($valueArray));
+                            }
+                        } else {
+                            $row[] = '';
+                        }
                     } elseif ($answer->value_text) {
                         $row[] = $answer->value_text;
                     } else {
@@ -147,7 +161,21 @@ class ExportService
                 $answer = $answerMap->get($question->id);
                 if ($answer) {
                     if ($answer->value_array) {
-                        $row[] = implode(', ', json_decode($answer->value_array, true));
+                        // value_array is already cast to array by Laravel
+                        // For matrix questions (associative array), extract only the values (selected options)
+                        $valueArray = $answer->value_array;
+                        if (is_array($valueArray)) {
+                            // Check if associative array (matrix) or indexed array (multi-select/checkbox)
+                            if ($valueArray === array_values($valueArray)) {
+                                // Indexed array (checkbox/multi-select): join all values
+                                $row[] = implode(', ', $valueArray);
+                            } else {
+                                // Associative array (matrix): join only the values (answers), not keys (questions)
+                                $row[] = implode(', ', array_values($valueArray));
+                            }
+                        } else {
+                            $row[] = '';
+                        }
                     } elseif ($answer->value_text) {
                         $row[] = $answer->value_text;
                     } else {

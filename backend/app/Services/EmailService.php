@@ -118,6 +118,8 @@ class EmailService
                 'subject' => $subject,
                 'from_email' => $this->fromEmail,
                 'from_name' => $this->fromName,
+                'cc' => $metadata['cc'] ?? null,
+                'bcc' => $metadata['bcc'] ?? null,
             ]);
             
             $email = new Mail();
@@ -125,6 +127,26 @@ class EmailService
             $email->setSubject($subject);
             $email->addTo($to);
             $email->addContent("text/html", $message);
+            
+            // Add CC recipients if provided
+            if (!empty($metadata['cc'])) {
+                $ccEmails = is_array($metadata['cc']) ? $metadata['cc'] : [$metadata['cc']];
+                foreach ($ccEmails as $ccEmail) {
+                    if (filter_var($ccEmail, FILTER_VALIDATE_EMAIL)) {
+                        $email->addCc($ccEmail);
+                    }
+                }
+            }
+            
+            // Add BCC recipients if provided
+            if (!empty($metadata['bcc'])) {
+                $bccEmails = is_array($metadata['bcc']) ? $metadata['bcc'] : [$metadata['bcc']];
+                foreach ($bccEmails as $bccEmail) {
+                    if (filter_var($bccEmail, FILTER_VALIDATE_EMAIL)) {
+                        $email->addBcc($bccEmail);
+                    }
+                }
+            }
 
             // Add custom args for webhook tracking (if metadata provided)
             // Note: SendGrid's addCustomArg requires all values to be strings

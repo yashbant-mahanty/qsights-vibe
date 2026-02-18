@@ -310,13 +310,70 @@ class EventContactMessageController extends Controller
      */
     private function notifyAdmins(EventContactMessage $contactMessage, Activity $activity)
     {
-        // Get all super admins and admins
-        $admins = User::whereIn('role', ['super-admin', 'admin'])->get();
-
-        foreach ($admins as $admin) {
-            // Create in-app notification
+        // Load activity with program relationship
+        $activity->load('program.users');
+        
+        // Get contact us settings
+        $contactUsSettings = $activity->settings['contact_us'] ?? [];
+        $recipientEmail = $contactUsSettings['recipient_email'] ?? null;
+        $ccEmails = $contactUsSettings['cc_emails'] ?? [];
+        $bccEmails = $contactUsSettings['bcc_emails'] ?? [];
+        $notifyProgramAdmin = $contactUsSettings['notify_program_admin'] ?? true;
+        $notifyManager = $contactUsSettings['notify_manager'] ?? true;
+        
+        // Default to Program Admin email if no custom recipient set
+        if (empty($recipientEmail)) {
+            // Get program admin from the program
+            $programAdmin = $activity->program->users()
+                ->where('role', 'program-admin')
+                ->first();
+            
+            if ($programAdmin) {
+                $recipientEmail = $programAdmin->communication_email ?: $programAdmin->email;
+            }
+        }
+        
+        // Send email to primary recipient
+        if ($recipientEmail && filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+            $this->sendAdminNotificationEmail($recipientEmail, $contactMessage, $activity, $ccEmails, $bccEmails);
+        }
+        
+        // Send bell notifications
+        $usersToNotify = [];
+        
+        // Add Program Admin if enabled
+        if ($notifyProgramAdmin) {
+            $programAdmin = $activity->program->users()
+                ->where('role', 'program-admin')
+                ->first();
+            if ($programAdmin) {
+                $usersToNotify[] = $programAdmin;
+            }
+        }
+        
+        // Add Manager if enabled and manager_email exists
+        if ($notifyManager && $activity->manager_email) {
+            // Find user with this email
+            $manager = User::where('email', $activity->manager_email)
+                ->orWhere('communication_email', $activity->manager_email)
+                ->first();
+            if ($manager && !in_array($manager->id, array_column($usersToNotify, 'id'))) {
+                $usersToNotify[] = $manager;
+            }
+        }
+        
+        // Always notify Super Admins and Admins (for dashboard visibility)
+        $adminUsers = User::whereIn('role', ['super-admin', 'admin'])->get();
+        foreach ($adminUsers as $admin) {
+            if (!in_array($admin->id, array_column($usersToNotify, 'id'))) {
+                $usersToNotify[] = $admin;
+            }
+        }
+        
+        // Create bell notifications
+        foreach ($usersToNotify as $user) {
             UserNotification::create([
-                'user_id' => $admin->id,
+                'user_id' => $user->id,
                 'type' => 'event_contact',
                 'title' => 'New Contact Us Message',
                 'message' => "New message from {$contactMessage->name} for Event: {$activity->name}",
@@ -325,9 +382,6 @@ class EventContactMessageController extends Controller
                 'entity_name' => $activity->name,
                 'action_url' => "/settings/event-contact-messages",
             ]);
-
-            // Send email notification
-            $this->sendAdminNotificationEmail($admin, $contactMessage, $activity);
         }
     }
 
@@ -376,10 +430,8 @@ class EventContactMessageController extends Controller
     /**
      * Send notification email to admin
      */
-    private function sendAdminNotificationEmail($admin, EventContactMessage $contactMessage, Activity $activity)
+    private function sendAdminNotificationEmail($recipientEmail, EventContactMessage $contactMessage, Activity $activity, $ccEmails = [], $bccEmails = [])
     {
-        $recipientEmail = $admin->communication_email ?: $admin->email;
-        
         $subject = "New Contact Us Message - {$activity->name}";
         
         $userTypeLabel = $contactMessage->isAnonymous() ? 'Anonymous User' : 'Participant';
@@ -415,10 +467,20 @@ class EventContactMessageController extends Controller
             $this->emailService->send($recipientEmail, $subject, $message, [
                 'event' => 'event_contact_admin_notification',
                 'contact_message_id' => $contactMessage->id,
+                'activity_id' => $activity->id,
+                'cc' => $ccEmails,
+                'bcc' => $bccEmails,
+            ]);
+            
+            \Log::info('Contact Us notification email sent', [
+                'recipient' => $recipientEmail,
+                'cc' => $ccEmails,
+                'bcc' => $bccEmails,
+                'activity_id' => $activity->id,
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to send admin notification email', [
-                'admin_email' => $recipientEmail,
+                'recipient' => $recipientEmail,
                 'error' => $e->getMessage()
             ]);
         }

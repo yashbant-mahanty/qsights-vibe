@@ -377,6 +377,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::put('/activities/{id}', [ActivityController::class, 'update']);
         Route::patch('/activities/{id}', [ActivityController::class, 'update']);
         Route::patch('/activities/{id}/toggle-reminders', [ActivityController::class, 'toggleParticipantReminders']);
+        Route::patch('/activities/{id}/notification-settings', [ActivityController::class, 'updateNotificationSettings']);
+        Route::patch('/activities/{id}/contact-us-settings', [ActivityController::class, 'updateContactUsSettings']);
         
         // Activity participant management
         Route::get('/activities/{id}/participants/available', [ActivityController::class, 'getAvailableParticipants']);
@@ -507,6 +509,7 @@ Route::prefix('public')->group(function () {
     Route::post('activities/{id}/save-progress', [App\Http\Controllers\Api\PublicActivityController::class, 'saveProgress']);
     Route::get('activities/{id}/load-progress/{participantId}', [App\Http\Controllers\Api\PublicActivityController::class, 'loadProgress']);
     Route::post('activities/{id}/submit', [App\Http\Controllers\Api\PublicActivityController::class, 'submitResponse']);
+    Route::post('activities/{id}/poll-answer', [App\Http\Controllers\Api\PublicActivityController::class, 'pollAnswer']);
     Route::get('questionnaires/{id}', [App\Http\Controllers\Api\PublicQuestionnaireController::class, 'show']);
     Route::post('activities/validate-link-token', [App\Http\Controllers\Api\ActivityController::class, 'validateLinkToken']);
     Route::get('questionnaire/{id}', [App\Http\Controllers\Api\PublicQuestionnaireController::class, 'show']); // Singular alias for compatibility

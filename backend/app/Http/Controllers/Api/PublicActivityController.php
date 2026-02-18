@@ -262,7 +262,11 @@ class PublicActivityController extends Controller
         }
 
         // Send welcome email to participant (skip for anonymous and preview) only if not already submitted
-        if (!$isPreview && !$request->input('is_anonymous', false) && $participant->email && filter_var($participant->email, FILTER_VALIDATE_EMAIL)) {
+        // Check notification settings
+        $notificationSettings = $activity->settings['notifications'] ?? [];
+        $welcomeEmailEnabled = $notificationSettings['welcome_email_enabled'] ?? false; // default disabled
+        
+        if ($welcomeEmailEnabled && !$isPreview && !$request->input('is_anonymous', false) && $participant->email && filter_var($participant->email, FILTER_VALIDATE_EMAIL)) {
             try {
                 $emailService = app(\App\Services\EmailService::class);
                 $emailService->sendActivityInvitation($participant, $activity);
@@ -874,7 +878,11 @@ class PublicActivityController extends Controller
         }
 
         // Send thank you/confirmation email to participant
-        if ($participant->email && filter_var($participant->email, FILTER_VALIDATE_EMAIL)) {
+        // Check notification settings
+        $notificationSettings = $activity->settings['notifications'] ?? [];
+        $thankYouEmailEnabled = $notificationSettings['thank_you_email_enabled'] ?? false; // default disabled
+        
+        if ($thankYouEmailEnabled && $participant->email && filter_var($participant->email, FILTER_VALIDATE_EMAIL)) {
             try {
                 // Calculate total questions for email
                 $totalQuestionsCount = 0;
@@ -1310,6 +1318,151 @@ class PublicActivityController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Token marked as used'
+        ]);
+    }
+
+    /**
+     * Submit a poll answer and return aggregated results
+     * This is for instant poll feedback - stores the answer and returns live results
+     */
+    public function pollAnswer(Request $request, $activityId)
+    {
+        $validated = $request->validate([
+            'participant_id' => 'required',
+            'question_id' => 'required',
+            'answer' => 'required',
+        ]);
+
+        $activity = Activity::with(['questionnaire.sections.questions'])->find($activityId);
+        
+        if (!$activity) {
+            return response()->json(['error' => 'Activity not found'], 404);
+        }
+
+        $participantId = $validated['participant_id'];
+        $questionId = $validated['question_id'];
+        $answer = $validated['answer'];
+
+        // Handle anonymous participants
+        $isAnonymous = is_string($participantId) && str_starts_with($participantId, 'anon_');
+        
+        if (!$isAnonymous) {
+            // Get or create response for this participant
+            $response = Response::where('activity_id', $activityId)
+                ->where('participant_id', $participantId)
+                ->first();
+
+            if (!$response) {
+                $response = Response::create([
+                    'id' => \Illuminate\Support\Str::uuid(),
+                    'activity_id' => $activityId,
+                    'participant_id' => $participantId,
+                    'status' => 'in_progress',
+                    'started_at' => now(),
+                ]);
+            }
+
+            // Upsert the answer for this question
+            try {
+                \DB::table('answers')->updateOrInsert(
+                    [
+                        'response_id' => $response->id,
+                        'question_id' => $questionId,
+                    ],
+                    [
+                        'answer_value' => is_array($answer) ? json_encode($answer) : $answer,
+                        'updated_at' => now(),
+                        'created_at' => now(),
+                    ]
+                );
+            } catch (\Exception $e) {
+                \Log::warning('Failed to save poll answer', [
+                    'error' => $e->getMessage(),
+                    'response_id' => $response->id,
+                    'question_id' => $questionId,
+                ]);
+            }
+        }
+
+        // Get the question to understand options
+        $question = null;
+        foreach ($activity->questionnaire->sections as $section) {
+            foreach ($section->questions as $q) {
+                if ($q->id == $questionId) {
+                    $question = $q;
+                    break 2;
+                }
+            }
+        }
+
+        if (!$question) {
+            return response()->json(['error' => 'Question not found'], 404);
+        }
+
+        // Aggregate all answers for this question across all responses for this activity
+        $answerCounts = \DB::table('answers')
+            ->join('responses', 'answers.response_id', '=', 'responses.id')
+            ->where('responses.activity_id', $activityId)
+            ->where('answers.question_id', $questionId)
+            ->select('answers.answer_value', \DB::raw('COUNT(*) as count'))
+            ->groupBy('answers.answer_value')
+            ->get();
+
+        // Build results based on question type
+        $results = [];
+        $totalVotes = $answerCounts->sum('count');
+
+        // Get options based on question type
+        if ($question->type === 'rating') {
+            $maxRating = $question->settings['scale'] ?? $question->max_value ?? 5;
+            $options = array_map(fn($i) => (string)$i, range(1, $maxRating));
+        } else {
+            // Multiple choice, single choice, checkbox, etc.
+            $options = collect($question->options ?? [])->map(function ($opt) {
+                return is_array($opt) ? ($opt['value'] ?? $opt['text'] ?? $opt['label'] ?? $opt) : $opt;
+            })->toArray();
+        }
+
+        // Build results for each option
+        foreach ($options as $option) {
+            $optionStr = (string)$option;
+            $count = 0;
+            
+            foreach ($answerCounts as $row) {
+                $storedValue = $row->answer_value;
+                // Handle JSON encoded arrays
+                if (str_starts_with($storedValue, '[') || str_starts_with($storedValue, '{')) {
+                    $decoded = json_decode($storedValue, true);
+                    if (is_array($decoded)) {
+                        if (in_array($optionStr, $decoded) || in_array($option, $decoded)) {
+                            $count += $row->count;
+                        }
+                    }
+                } else {
+                    if ((string)$storedValue === $optionStr) {
+                        $count += $row->count;
+                    }
+                }
+            }
+
+            $percentage = $totalVotes > 0 ? ($count / $totalVotes) * 100 : 0;
+            $results[] = [
+                'option' => $optionStr,
+                'count' => $count,
+                'percentage' => round($percentage, 1),
+            ];
+        }
+
+        // Sort by percentage descending
+        usort($results, fn($a, $b) => $b['percentage'] <=> $a['percentage']);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'results' => $results,
+                'total_votes' => $totalVotes,
+                'question_id' => $questionId,
+            ]
         ]);
     }
 }

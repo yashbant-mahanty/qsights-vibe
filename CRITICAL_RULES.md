@@ -2,7 +2,7 @@
 
 **⚠️ MANDATORY: Read this document before ANY development or deployment**
 
-**Last Updated**: 31 January 2026
+**Last Updated**: 18 February 2026
 
 ---
 
@@ -292,6 +292,86 @@ ssh -i $PEM $SERVER "sudo chown -R www-data:www-data /var/www/frontend"
 # Fix backend permissions
 ssh -i $PEM $SERVER "sudo chown -R www-data:www-data /var/www/QSightsOrg2.0/backend"
 ```
+
+### 7.5 Duplicate Top Banner / Double Layout Issue
+
+**Problem**: Page shows duplicate headers, banners, or navigation elements
+
+**Root Cause**: In Next.js App Router, if a `layout.tsx` exists in a folder AND the `page.tsx` also wraps content with `RoleBasedLayout` (or similar layout component), the layout renders TWICE causing duplicate UI elements.
+
+**Example of the bug** (18 Feb 2026 - Questionnaires page):
+```
+/var/www/frontend/app/questionnaires/layout.tsx  ← Wraps with RoleBasedLayout
+/var/www/frontend/app/questionnaires/page.tsx    ← ALSO wraps with RoleBasedLayout
+= DOUBLE HEADER/BANNER!
+```
+
+**Diagnosis**:
+```bash
+# Check if layout.tsx exists in the folder
+ssh -i $PEM $SERVER "find /var/www/frontend/app -name 'layout.tsx' -type f"
+
+# Check if page.tsx also uses RoleBasedLayout
+ssh -i $PEM $SERVER "grep -c 'RoleBasedLayout' /var/www/frontend/app/FOLDER/page.tsx"
+```
+
+**Solution**: Remove the duplicate `layout.tsx` OR remove `RoleBasedLayout` from `page.tsx` (choose ONE approach, not both):
+```bash
+# Option 1: Remove layout.tsx (if page.tsx already has RoleBasedLayout)
+ssh -i $PEM $SERVER "rm /var/www/frontend/app/FOLDER/layout.tsx"
+
+# Then rebuild and restart
+ssh -i $PEM $SERVER "cd /var/www/frontend && npm run build && pm2 restart qsights-frontend"
+```
+
+**Prevention Rule**: 
+- ⚠️ NEVER create both `layout.tsx` with RoleBasedLayout AND use RoleBasedLayout inside `page.tsx`
+- Choose ONE: Either wrap in layout.tsx OR wrap in page.tsx
+- Check other pages for consistent pattern before adding new layouts
+
+### 7.6 Adding New Question Types (MANDATORY CHECKLIST)
+
+**Problem**: When adding a new question type (e.g., `percentage_allocation`, `video`, `sct_likert`), saving the questionnaire fails with:
+```
+422 Unprocessable Content
+"The selected sections.0.questions.N.type is invalid."
+```
+
+**Root Cause**: The **backend** has a whitelist of allowed question types in validation rules. The frontend was updated but backend validation was NOT updated.
+
+**Files that need changes when adding a NEW question type:**
+
+| Layer | File | What to Add |
+|-------|------|-------------|
+| **Frontend** | `app/questionnaires/[id]/page.tsx` | Question type in `questionTypes` array, `addQuestion` function, `renderQuestionPreview` switch, builder UI rendering |
+| **Frontend** | `app/questionnaires/create/page.tsx` | Same as above + `typeMapping` object |
+| **Frontend** | `app/activities/take/[id]/page.tsx` | Participant-facing rendering case, validation in `validateCurrentAnswers` |
+| **Backend** | `QuestionnaireController.php` (lines ~116, ~307) | Add type to `'in:...'` validation rule |
+
+**Backend Validation Fix Command:**
+```bash
+# Check current allowed types (NOTE: Production backend is at /var/www/QSightsOrg2.0/backend NOT /var/www/qsights-backend!)
+ssh -i $PEM $SERVER "grep -n 'sections.\*.\questions.\*.type' /var/www/QSightsOrg2.0/backend/app/Http/Controllers/Api/QuestionnaireController.php | head -2"
+
+# Add new type (replace NEW_TYPE with actual type name)
+ssh -i $PEM $SERVER "sudo sed -i 's/video\x27/video,NEW_TYPE\x27/g' /var/www/QSightsOrg2.0/backend/app/Http/Controllers/Api/QuestionnaireController.php"
+
+# Restart PHP-FPM
+ssh -i $PEM $SERVER "sudo systemctl restart php8.4-fpm"
+```
+
+**Current Allowed Types** (as of 18 Feb 2026):
+- text, textarea, number, email, phone, url
+- radio, checkbox, select, multiselect
+- rating, scale, date, time, datetime, file
+- yesno, matrix, information, slider_scale, dial_gauge
+- likert_visual, nps, star_rating
+- **mcq, multi, video, sct_likert, information_block, percentage_allocation**
+
+**Prevention Rule**:
+- ⚠️ ALWAYS update backend validation when adding new question types to frontend
+- ⚠️ Test questionnaire SAVE after adding new type, not just the UI
+- ⚠️ Check both lines 109 AND 249 in QuestionnaireController.php
 
 ---
 
