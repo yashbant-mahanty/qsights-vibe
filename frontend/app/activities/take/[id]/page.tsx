@@ -968,9 +968,14 @@ export default function TakeActivityPage() {
           // CRITICAL: Restore participant's actual answers to prevent re-submission
           if (result.participant_answers && Object.keys(result.participant_answers).length > 0) {
             console.log('[POLL DEBUG] Restoring participant answers:', result.participant_answers);
+            // Convert string keys to numbers to match questionId type
+            const answersWithNumberKeys: Record<number, any> = {};
+            Object.entries(result.participant_answers).forEach(([qId, answer]) => {
+              answersWithNumberKeys[Number(qId)] = answer;
+            });
             setResponses(prev => ({
               ...prev,
-              ...result.participant_answers
+              ...answersWithNumberKeys
             }));
           }
           
