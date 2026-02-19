@@ -2139,7 +2139,7 @@ class ActivityController extends Controller
                 ->where('activity_id', $activity->id)
                 ->where('participant_id', $participantId)
                 ->join('answers', 'answers.response_id', '=', 'responses.id')
-                ->select('answers.question_id', 'answers.answer_text', 'answers.answer_value')
+                ->select('answers.question_id', 'answers.value', 'answers.value_array')
                 ->get();
             
             foreach ($answers as $answer) {
@@ -2148,18 +2148,15 @@ class ActivityController extends Controller
                     $answeredQuestionIds[] = $questionId;
                 }
                 
-                // Store the participant's answer (use answer_value if set, otherwise answer_text)
-                $answerData = $answer->answer_value ?? $answer->answer_text;
-                
-                // Handle multiple choice questions - they may have multiple answers
-                if (isset($participantAnswers[$questionId])) {
-                    // Already has an answer - convert to array for multiple choice
-                    if (!is_array($participantAnswers[$questionId])) {
-                        $participantAnswers[$questionId] = [$participantAnswers[$questionId]];
-                    }
-                    $participantAnswers[$questionId][] = $answerData;
+                // Store the participant's answer
+                // For multiple choice: value_array contains JSON array
+                // For single choice: value contains the answer
+                if ($answer->value_array) {
+                    // Multiple choice - parse JSON array
+                    $participantAnswers[$questionId] = json_decode($answer->value_array, true);
                 } else {
-                    $participantAnswers[$questionId] = $answerData;
+                    // Single choice or rating
+                    $participantAnswers[$questionId] = $answer->value;
                 }
             }
         }
