@@ -1381,19 +1381,29 @@ class PublicActivityController extends Controller
         }
 
         // Upsert the answer for this question
+        // CRITICAL FIX: Check if answer already exists to prevent duplicate submissions
+        $existingAnswer = \DB::table('answers')
+            ->where('response_id', $response->id)
+            ->where('question_id', $questionId)
+            ->first();
+        
+        if ($existingAnswer) {
+            // Answer already submitted - DO NOT allow resubmission
+            return response()->json([
+                'error' => 'Already Submitted',
+                'message' => 'You have already submitted your response for this question.'
+            ], 400);
+        }
+        
         try {
-            \DB::table('answers')->updateOrInsert(
-                [
-                    'response_id' => $response->id,
-                    'question_id' => $questionId,
-                ],
-                [
-                    'value' => is_array($answer) ? null : $answer,
-                    'value_array' => is_array($answer) ? json_encode($answer) : null,
-                    'updated_at' => now(),
-                    'created_at' => now(),
-                ]
-            );
+            \DB::table('answers')->insert([
+                'response_id' => $response->id,
+                'question_id' => $questionId,
+                'value' => is_array($answer) ? null : $answer,
+                'value_array' => is_array($answer) ? json_encode($answer) : null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         } catch (\Exception $e) {
             \Log::warning('Failed to save poll answer', [
                 'error' => $e->getMessage(),

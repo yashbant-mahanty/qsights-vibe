@@ -2589,6 +2589,8 @@ export async function getPollQuestions(activityId: string, participantId?: strin
   questions: PollQuestion[];
   active_question_ids: string[];
   answered_question_ids: string[];
+  participant_answers: Record<string, any>;
+  answered_question_results: Record<string, any>;
   total_questions: number;
   total_active: number;
 }> {
@@ -2606,6 +2608,8 @@ export async function getPollQuestions(activityId: string, participantId?: strin
     questions: data.data?.questions || [],
     active_question_ids: data.data?.active_question_ids || [],
     answered_question_ids: data.data?.answered_question_ids || [],
+    participant_answers: data.data?.participant_answers || {},
+    answered_question_results: data.data?.answered_question_results || {},
     total_questions: data.data?.total_questions || 0,
     total_active: data.data?.total_active || 0,
   };
