@@ -680,6 +680,19 @@ export default function TakeActivityPage() {
     // Get URL parameters
     const urlType = searchParams.get("type");
     const urlParticipantId = searchParams.get("participant_id");
+    const hasAnyToken = searchParams.get("token"); // Any token in URL (encrypted or access token)
+    
+    // CRITICAL FIX: If ANY token is in the URL, clear existing sessions first
+    // This ensures each participant link starts fresh with the correct participant
+    if (hasAnyToken) {
+      console.log('Token detected in URL - clearing all existing sessions for fresh start');
+      localStorage.removeItem(`activity_${activityId}_session`);
+      localStorage.removeItem(`activity_${activityId}_start_time`);
+      sessionStorage.removeItem(`activity_${activityId}_session`);
+      sessionStorage.removeItem(`activity_${activityId}_start_time`);
+      // Let the token validation flow handle setting up the correct participant
+      return;
+    }
     
     // For registration link: Use sessionStorage (tab-specific) instead of localStorage
     // This ensures new tabs always show login, but refresh preserves session
@@ -3191,11 +3204,14 @@ export default function TakeActivityPage() {
       case "multiple_choice_single":
         const isPoll = activity?.type === 'poll';
         const isPollSubmitted = isPoll && pollSubmittedQuestions.has(questionId);
-        // Check if timer expired for live poll mode (can't select options after timer expires)
-        const isLivePollTimerExpired = isPoll && livePollMode && liveQuestionTimer === 0 && !hasAnsweredActiveQuestion;
-        // CRITICAL FIX: Show poll results when either submitted OR timer expired
-        // This allows users to see results even if they didn't submit before timer expired
-        const showPollResults = isPollSubmitted || isLivePollTimerExpired;
+        // CRITICAL FIX: Check timer expiry using BOTH server flag AND local timer state
+        // Server's is_timer_expired is the authoritative source, also check local timer countdown
+        const currentPollQuestion = pollQuestions.find(q => q.id === questionId || String(q.id) === String(questionId));
+        const isServerTimerExpired = currentPollQuestion?.is_timer_expired === true;
+        const isLocalTimerExpired = isPoll && livePollMode && liveQuestionTimer === 0 && !hasAnsweredActiveQuestion;
+        const isTimerExpiredForQuestion = isServerTimerExpired || isLocalTimerExpired;
+        // Show poll results when either submitted OR timer expired (from server or local)
+        const showPollResults = isPollSubmitted || isTimerExpiredForQuestion;
         const questionResults = pollResults[questionId];
         const totalVotes = questionResults?.reduce((sum, r) => sum + r.count, 0) || 0;
         const translatedSingleOptions = getTranslatedText(question, 'options') as string[];
@@ -3204,7 +3220,9 @@ export default function TakeActivityPage() {
           questionId,
           isPoll,
           isPollSubmitted,
-          isLivePollTimerExpired,
+          isServerTimerExpired,
+          isLocalTimerExpired,
+          isTimerExpiredForQuestion,
           showPollResults,
           hasQuestionResults: !!questionResults,
           questionResults,
