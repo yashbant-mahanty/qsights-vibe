@@ -2163,7 +2163,6 @@ class ActivityController extends Controller
                 }
             }
         }
-        }
 
         $allQuestions = [];
         $activeQuestionIds = [];
