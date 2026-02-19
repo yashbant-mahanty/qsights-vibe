@@ -27,12 +27,14 @@ import {
   AlertCircle,
   BarChart3,
   PieChart as PieChartIcon,
+  Clock,
+  Timer,
 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { filterQuestionsByLogic } from "@/utils/conditionalLogicEvaluator";
 import EventContactModal from "@/components/EventContactModal";
 import { getFooterHtml, getFooterHyperlinksFromConfig } from "@/lib/footerUtils";
-import { generatedLinksApi } from "@/lib/api";
+import { generatedLinksApi, getActiveQuestion, getPollQuestions, PollQuestion } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   SliderScale,
@@ -510,7 +512,21 @@ export default function TakeActivityPage() {
   
   // Poll results state - stores results for each question
   const [pollResults, setPollResults] = useState<Record<string, { option: string; count: number; percentage: number }[]>>({});
-  const [pollSubmittedQuestions, setPollSubmittedQuestions] = useState<Set<string>>(new Set());
+  const [pollSubmittedQuestions, setPollSubmittedQuestions] = useState<Set<number>>(new Set());
+
+  // Live Poll Question Activation state - admin controls which questions are active
+  // IMPORTANT: Multiple questions can be active simultaneously
+  // Timer is for SUBMISSION RESTRICTION only - does NOT auto-deactivate questions
+  const [livePollMode, setLivePollMode] = useState(false);
+  const [pollQuestions, setPollQuestions] = useState<PollQuestion[]>([]); // All questions with their active status
+  const [currentPollQuestionIndex, setCurrentPollQuestionIndex] = useState(0); // Current question in navigation
+  const [activeQuestion, setActiveQuestion] = useState<any>(null); // Current question being displayed (backward compat)
+  const [liveQuestionTimer, setLiveQuestionTimer] = useState<number | null>(null);
+  const [liveQuestionTimerInitial, setLiveQuestionTimerInitial] = useState<number | null>(null); // Store initial value for progress ring
+  const [hasAnsweredActiveQuestion, setHasAnsweredActiveQuestion] = useState(false); // Track if user answered current question - timer stops when true
+  const [waitingForQuestion, setWaitingForQuestion] = useState(false);
+  const [pollTimers, setPollTimers] = useState<Record<string, { remaining: number | null; initial: number | null }>>({}); // Per-question timers
+  const pollTimersRef = useRef<Record<string, { remaining: number | null; initial: number | null }>>({}); // Ref to avoid stale closure
 
   // Timer state
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -905,6 +921,228 @@ export default function TakeActivityPage() {
   useEffect(() => {
     loadData();
   }, [activityId]);
+
+  // Set Live Poll Mode for ALL poll events (including preview) when questionnaire loads
+  useEffect(() => {
+    if (questionnaire?.type === 'poll' && started) {
+      setLivePollMode(true);
+      setWaitingForQuestion(true);
+      setActiveQuestion(null);
+    }
+  }, [questionnaire?.type, started]);
+
+  // Live Poll Question Activation - Fetch ALL questions with their active status
+  // IMPORTANT: Multiple questions can be active simultaneously
+  // Timer is for SUBMISSION RESTRICTION only - does NOT auto-deactivate questions
+  useEffect(() => {
+    if (!activity || activity.type !== 'poll' || !started || submitted) {
+      return;
+    }
+
+    const fetchPollQuestions = async () => {
+      try {
+        const result = await getPollQuestions(activityId, participantId || undefined);
+        console.log('[POLL DEBUG] Fetched poll questions:', JSON.stringify(result, null, 2));
+        setLivePollMode(true);
+        
+        // CRITICAL FIX: Initialize submitted questions from server (prevents re-submission after refresh)
+        // Convert string IDs to numbers for proper Set.has() comparison
+        if (result.answered_question_ids && result.answered_question_ids.length > 0) {
+          console.log('[POLL DEBUG] Setting already answered questions from server:', result.answered_question_ids);
+          const answeredIds = result.answered_question_ids.map(Number);
+          setPollSubmittedQuestions(new Set(answeredIds));
+          
+          // CRITICAL: Use results from API response (same concept as surveys)
+          if (result.answered_question_results && Object.keys(result.answered_question_results).length > 0) {
+            console.log('[POLL DEBUG] Setting poll results from API:', result.answered_question_results);
+            // Convert string keys to numbers and set results
+            const resultsWithNumberKeys: Record<number, any> = {};
+            Object.entries(result.answered_question_results).forEach(([qId, results]) => {
+              resultsWithNumberKeys[Number(qId)] = results;
+            });
+            setPollResults(prev => ({
+              ...prev,
+              ...resultsWithNumberKeys
+            }));
+          }
+        }
+        
+        if (result.questions && result.questions.length > 0) {
+          console.log('[POLL DEBUG] Setting pollQuestions, count:', result.questions.length);
+          console.log('[POLL DEBUG] Active questions:', result.questions.filter((q: PollQuestion) => q.is_active).map((q: PollQuestion) => ({ id: q.id, title: q.title?.substring(0, 30), is_active: q.is_active })));
+          setPollQuestions(result.questions);
+          
+          // Update per-question timers using ref to avoid stale closure
+          const newTimers: Record<string, { remaining: number | null; initial: number | null }> = {};
+          result.questions.forEach((q: PollQuestion) => {
+            // IMPORTANT: If timer is already expired (server says so), do NOT set up timer
+            // This ensures late-joining participants never see an expired timer
+            if (q.is_timer_expired) {
+              console.log('[POLL DEBUG] Timer EXPIRED for Q', q.id, '- not setting up timer');
+              newTimers[q.id] = { remaining: 0, initial: q.timer_seconds || 0 };
+              return;
+            }
+            
+            if (q.is_active && q.timer_seconds) {
+              const existingTimer = pollTimersRef.current[q.id];
+              // Only set timer from server if question just became active (no existing timer with initial value)
+              if (!existingTimer || existingTimer.initial === null) {
+                newTimers[q.id] = {
+                  remaining: q.remaining_time,
+                  initial: q.timer_seconds
+                };
+                console.log('[POLL DEBUG] New timer for Q', q.id, ':', newTimers[q.id]);
+              } else {
+                // Keep existing local countdown (don't reset from server)
+                newTimers[q.id] = existingTimer;
+                console.log('[POLL DEBUG] Keeping existing timer for Q', q.id, ':', existingTimer);
+              }
+            } else if (q.is_active) {
+              // Active but no timer configured
+              newTimers[q.id] = { remaining: null, initial: null };
+            }
+          });
+          
+          // Update ref first, then state
+          pollTimersRef.current = { ...pollTimersRef.current, ...newTimers };
+          setPollTimers(prev => ({ ...prev, ...newTimers }));
+          
+          // Set current question for display (backward compatibility)
+          const currentQ = result.questions[currentPollQuestionIndex];
+          if (currentQ) {
+            setActiveQuestion(currentQ);
+            // Use values from newTimers which we just calculated (pollTimers not yet updated)
+            const timerData = newTimers[currentQ.id];
+            setLiveQuestionTimer(timerData?.remaining ?? (currentQ.is_active && currentQ.timer_seconds ? currentQ.remaining_time : null));
+            setLiveQuestionTimerInitial(timerData?.initial ?? (currentQ.is_active ? currentQ.timer_seconds : null));
+            
+            // Determine if we're waiting (current question not active)
+            setWaitingForQuestion(!currentQ.is_active);
+            
+            // CRITICAL FIX: Fetch results for current question if timer is expired
+            // This allows users to see results even if they haven't submitted
+            if (currentQ.is_timer_expired && !pollSubmittedQuestions.has(currentQ.id)) {
+              console.log('[POLL DEBUG] Timer expired for current Q', currentQ.id, '- fetching results');
+              fetchPollResults(currentQ.id);
+            }
+          }
+        } else {
+          // No questions at all
+          setPollQuestions([]);
+          setWaitingForQuestion(true);
+        }
+      } catch (error) {
+        console.log('Live poll check failed:', error);
+      }
+    };
+
+    // Initial fetch
+    fetchPollQuestions();
+
+    // Poll every 5 seconds for status updates
+    const pollInterval = setInterval(fetchPollQuestions, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [activity?.type, activityId, started, submitted, currentPollQuestionIndex, participantId]); // Added participantId to re-fetch when it becomes available
+
+  // Live Poll Timer Countdown - Update timer every second for current question
+  // Timer is for SUBMISSION RESTRICTION only - does NOT auto-deactivate question
+  useEffect(() => {
+    // Get current question
+    const currentQ = pollQuestions[currentPollQuestionIndex];
+    if (!livePollMode || !currentQ?.is_active) {
+      return;
+    }
+    
+    const questionId = currentQ.id;
+    const timer = pollTimers[questionId];
+    
+    // Don't countdown if: no timer, timer already 0, or user has answered this question
+    if (!timer?.remaining || timer.remaining <= 0 || pollSubmittedQuestions.has(questionId)) {
+      return;
+    }
+
+    const timerInterval = setInterval(() => {
+      setPollTimers(prev => {
+        const current = prev[questionId];
+        if (!current || current.remaining === null || current.remaining <= 0) {
+          return prev;
+        }
+        const newRemaining = Math.max(0, current.remaining - 1);
+        // Update the display timer
+        setLiveQuestionTimer(newRemaining);
+        // Update ref to keep in sync (for stale closure fix)
+        pollTimersRef.current = {
+          ...pollTimersRef.current,
+          [questionId]: { ...current, remaining: newRemaining }
+        };
+        return {
+          ...prev,
+          [questionId]: { ...current, remaining: newRemaining }
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [livePollMode, currentPollQuestionIndex, pollQuestions, pollTimers, pollSubmittedQuestions]);
+
+  // Poll Navigation Handlers
+  const handlePollNext = () => {
+    if (currentPollQuestionIndex < pollQuestions.length - 1) {
+      const nextIndex = currentPollQuestionIndex + 1;
+      setCurrentPollQuestionIndex(nextIndex);
+      const nextQ = pollQuestions[nextIndex];
+      setActiveQuestion(nextQ);
+      const timer = pollTimers[nextQ?.id];
+      setLiveQuestionTimer(timer?.remaining ?? null);
+      setLiveQuestionTimerInitial(timer?.initial ?? null);
+      setWaitingForQuestion(!nextQ?.is_active);
+      setHasAnsweredActiveQuestion(pollSubmittedQuestions.has(nextQ?.id));
+      // Fetch fresh results if question is already submitted OR timer expired
+      if (pollSubmittedQuestions.has(nextQ?.id) || nextQ?.is_timer_expired) {
+        fetchPollResults(nextQ.id);
+      }
+    }
+  };
+
+  const handlePollPrevious = () => {
+    if (currentPollQuestionIndex > 0) {
+      const prevIndex = currentPollQuestionIndex - 1;
+      setCurrentPollQuestionIndex(prevIndex);
+      const prevQ = pollQuestions[prevIndex];
+      setActiveQuestion(prevQ);
+      const timer = pollTimers[prevQ?.id];
+      setLiveQuestionTimer(timer?.remaining ?? null);
+      setLiveQuestionTimerInitial(timer?.initial ?? null);
+      setWaitingForQuestion(!prevQ?.is_active);
+      setHasAnsweredActiveQuestion(pollSubmittedQuestions.has(prevQ?.id));
+      // Fetch fresh results if question is already submitted OR timer expired
+      if (pollSubmittedQuestions.has(prevQ?.id) || prevQ?.is_timer_expired) {
+        fetchPollResults(prevQ.id);
+      }
+    }
+  };
+
+  // Check if current poll question's timer is expired (submission blocked)
+  // Returns false if no timer is configured (timer_seconds = 0)
+  // CRITICAL FIX (Feb 18, 2026): Now checks server's is_timer_expired as primary source
+  // to ensure consistent state across page refreshes
+  const isCurrentPollTimerExpired = () => {
+    const currentQ = pollQuestions[currentPollQuestionIndex];
+    if (!currentQ?.is_active) return false;
+    
+    // First check server's authoritative is_timer_expired status
+    // This ensures consistency even after page refresh
+    if (currentQ.is_timer_expired) {
+      return true;
+    }
+    
+    // Fallback to local timer check for real-time countdown
+    const timer = pollTimers[currentQ.id];
+    // If no timer configured (initial is null or 0), timer never expires
+    if (!timer?.initial || timer.initial === 0) return false;
+    return timer?.remaining !== null && timer.remaining <= 0;
+  };
 
   // Handle post-submission registration redirect
   useEffect(() => {
@@ -2653,18 +2891,25 @@ export default function TakeActivityPage() {
   };
   
   // Handle poll answer submission - instant results
-  const handlePollAnswer = async (questionId: string) => {
-    if (pollSubmittedQuestions.has(questionId)) {
+  const handlePollAnswer = async (questionId: string | number) => {
+    const numericQuestionId = Number(questionId);
+    if (pollSubmittedQuestions.has(numericQuestionId)) {
       // Already submitted, just navigate
       return;
     }
     
     // Mark as submitted locally
-    setPollSubmittedQuestions(prev => new Set([...prev, questionId]));
+    setPollSubmittedQuestions(prev => new Set([...prev, numericQuestionId]));
+    
+    // For live poll mode - update timer state when user answers
+    if (livePollMode && pollQuestions[currentPollQuestionIndex]?.id === questionId) {
+      setHasAnsweredActiveQuestion(true);
+    }
     
     // Find the question to get its options
     const currentSection = questionnaire?.sections?.[currentSectionIndex];
-    const question = currentSection?.questions.find((q: any) => q.id === questionId);
+    const question = currentSection?.questions.find((q: any) => q.id === questionId) 
+      || pollQuestions.find((q: PollQuestion) => q.id === questionId);
     
     if (!question) return;
     
@@ -2684,13 +2929,24 @@ export default function TakeActivityPage() {
       
       if (response.ok) {
         const data = await response.json();
+        console.log('[POLL RESULTS DEBUG] Response from pollAnswer:', { 
+          questionId, 
+          hasData: !!data, 
+          hasDataResults: !!data.data?.results,
+          resultsCount: data.data?.results?.length,
+          totalVotes: data.data?.total_votes,
+          results: data.data?.results 
+        });
+        
         // Store results for this question
         if (data.data?.results) {
+          console.log('[POLL RESULTS DEBUG] Setting pollResults from API response');
           setPollResults(prev => ({
             ...prev,
             [questionId]: data.data.results
           }));
         } else {
+          console.log('[POLL RESULTS DEBUG] No results in response, generating empty results');
           // No results yet - generate empty results from options
           const emptyResults = generateEmptyPollResults(question, responses[questionId]);
           setPollResults(prev => ({
@@ -2699,6 +2955,7 @@ export default function TakeActivityPage() {
           }));
         }
       } else {
+        console.log('[POLL RESULTS DEBUG] API error response, generating empty results');
         // API returned error - show empty results (no fake data)
         const emptyResults = generateEmptyPollResults(question, responses[questionId]);
         setPollResults(prev => ({
@@ -2743,6 +3000,35 @@ export default function TakeActivityPage() {
     });
     
     return results;
+  };
+
+  // Fetch fresh poll results from server (for revisiting submitted questions)
+  const fetchPollResults = async (questionId: string | number) => {
+    console.log('[POLL RESULTS DEBUG] Fetching fresh results for question:', questionId);
+    try {
+      const response = await fetch(`/api/public/activities/${activityId}/poll-results/${questionId}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[POLL RESULTS DEBUG] Fetch fresh results response:', {
+          questionId,
+          hasData: !!data,
+          hasResults: !!data.data?.results,
+          resultsCount: data.data?.results?.length,
+          totalVotes: data.data?.total_votes,
+          results: data.data?.results
+        });
+        if (data.data?.results) {
+          setPollResults(prev => ({
+            ...prev,
+            [questionId]: data.data.results
+          }));
+        }
+      } else {
+        console.log('[POLL RESULTS DEBUG] Fetch failed with status:', response.status);
+      }
+    } catch (err) {
+      console.error("Failed to fetch poll results:", err);
+    }
   };
 
   // Render comment box for questions with is_comment_enabled
@@ -2905,14 +3191,31 @@ export default function TakeActivityPage() {
       case "multiple_choice_single":
         const isPoll = activity?.type === 'poll';
         const isPollSubmitted = isPoll && pollSubmittedQuestions.has(questionId);
+        // Check if timer expired for live poll mode (can't select options after timer expires)
+        const isLivePollTimerExpired = isPoll && livePollMode && liveQuestionTimer === 0 && !hasAnsweredActiveQuestion;
+        // CRITICAL FIX: Show poll results when either submitted OR timer expired
+        // This allows users to see results even if they didn't submit before timer expired
+        const showPollResults = isPollSubmitted || isLivePollTimerExpired;
         const questionResults = pollResults[questionId];
         const totalVotes = questionResults?.reduce((sum, r) => sum + r.count, 0) || 0;
         const translatedSingleOptions = getTranslatedText(question, 'options') as string[];
         
+        console.log('[POLL RESULTS DEBUG] Rendering single choice - Poll Results:', {
+          questionId,
+          isPoll,
+          isPollSubmitted,
+          isLivePollTimerExpired,
+          showPollResults,
+          hasQuestionResults: !!questionResults,
+          questionResults,
+          totalVotes,
+          currentPollResults: pollResults
+        });
+        
         return (
           <div className="space-y-3">
-            {/* Show total votes count for polls after submission */}
-            {isPollSubmitted && questionResults && totalVotes > 0 && (
+            {/* Show total votes count for polls after submission OR timer expiry */}
+            {showPollResults && questionResults && totalVotes > 0 && (
               <div className="flex items-center justify-between px-2 pb-2 border-b border-gray-200">
                 <span className="text-xs text-gray-500">Total responses</span>
                 <span className="text-xs font-semibold text-gray-700">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
@@ -2932,9 +3235,9 @@ export default function TakeActivityPage() {
               return (
                 <div
                   key={index}
-                  onClick={() => !isSubmitted && !isPollSubmitted && handleResponseChange(questionId, optionValue)}
+                  onClick={() => !isSubmitted && !showPollResults && handleResponseChange(questionId, optionValue)}
                   className={`relative overflow-hidden flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
-                    (isSubmitted || isPollSubmitted) ? 'cursor-not-allowed' : 'cursor-pointer'
+                    (isSubmitted || showPollResults) ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
                   } ${
                     isSelected && isPollSubmitted
                       ? "border-blue-500 bg-blue-50"
@@ -2943,8 +3246,8 @@ export default function TakeActivityPage() {
                       : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
-                  {/* Poll results background bar */}
-                  {isPollSubmitted && optionResult && (
+                  {/* Poll results background bar - show when results available */}
+                  {showPollResults && optionResult && (
                     <div 
                       className="absolute left-0 top-0 bottom-0 transition-all duration-700 ease-out"
                       style={{ 
@@ -2975,8 +3278,8 @@ export default function TakeActivityPage() {
                     </span>
                   </div>
                   
-                  {/* Show percentage and vote count for polls after submission */}
-                  {isPollSubmitted && optionResult && (
+                  {/* Show percentage and vote count for polls after submission OR timer expiry */}
+                  {showPollResults && optionResult && (
                     <div className="flex items-center gap-2 relative z-10">
                       <span className="text-xs text-gray-500">{voteCount} vote{voteCount !== 1 ? 's' : ''}</span>
                       <span className={`text-sm font-bold min-w-[45px] text-right ${
@@ -2995,7 +3298,7 @@ export default function TakeActivityPage() {
               );
             })}
             
-            {/* Show your vote indicator for polls */}
+            {/* Show your vote indicator for polls - only when actually submitted */}
             {isPollSubmitted && (
               <div className="flex items-center gap-2 px-2 pt-2 text-xs text-gray-500">
                 <CheckCircle className="w-4 h-4 text-blue-600" />
@@ -3003,8 +3306,8 @@ export default function TakeActivityPage() {
               </div>
             )}
             
-            {/* Graphical Poll Results Chart */}
-            {isPollSubmitted && questionResults && questionResults.length > 0 && (
+            {/* Graphical Poll Results Chart - show when results available (submitted OR timer expired) */}
+            {showPollResults && questionResults && questionResults.length > 0 && (
               <div className="mt-6 pt-4 border-t border-gray-200">
                 <div className="flex items-center gap-2 mb-3">
                   <BarChart3 className="w-4 h-4 text-gray-500" />
@@ -3154,6 +3457,8 @@ export default function TakeActivityPage() {
         const maxRating = question.settings?.scale || question.max_value || 5;
         const isPoll_rating = activity?.type === 'poll';
         const isPollSubmitted_rating = isPoll_rating && pollSubmittedQuestions.has(questionId);
+        // Check if timer expired for live poll mode (can't select ratings after timer expires)
+        const isLivePollTimerExpired_rating = isPoll_rating && livePollMode && liveQuestionTimer === 0 && !hasAnsweredActiveQuestion;
         const ratingResults = pollResults[questionId] || [];
         
         // Calculate total votes for ratings
@@ -3171,8 +3476,8 @@ export default function TakeActivityPage() {
                 return (
                   <button
                     key={rating}
-                    onClick={() => !isSubmitted && !isPollSubmitted_rating && handleResponseChange(questionId, rating)}
-                    disabled={isSubmitted || isPollSubmitted_rating}
+                    onClick={() => !isSubmitted && !isPollSubmitted_rating && !isLivePollTimerExpired_rating && handleResponseChange(questionId, rating)}
+                    disabled={isSubmitted || isPollSubmitted_rating || isLivePollTimerExpired_rating}
                     className={`w-12 h-12 rounded-lg border-2 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
                       responses[questionId] === rating
                         ? "border-qsights-blue bg-qsights-dark text-white"
@@ -6096,7 +6401,256 @@ export default function TakeActivityPage() {
                 </CardHeader>
               )}
               <CardContent className="p-6 space-y-6 overflow-x-auto">
-                {displayMode === 'single' ? (
+                {/* Live Poll Mode - Admin controls which questions are active */}
+                {/* Multiple questions can be active simultaneously */}
+                {livePollMode && activity?.type === 'poll' ? (
+                  pollQuestions.length === 0 ? (
+                    // No questions loaded yet
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
+                        <Timer className="w-8 h-8 text-blue-600 animate-pulse" />
+                      </div>
+                      <h3 className="text-xl font-semibold text-gray-700 mb-2">Loading questions...</h3>
+                      <p className="text-gray-500 max-w-md">
+                        Please wait while questions are being loaded.
+                      </p>
+                    </div>
+                  ) : (
+                    // Show questions - Navigation buttons are at bottom (original location)
+                    <div className="space-y-4 relative">
+                      {/* Poll Status Header - No navigation buttons here (they're at bottom) */}
+                      <div className="flex items-center justify-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-600">
+                            Question {currentPollQuestionIndex + 1} of {pollQuestions.length}
+                          </span>
+                          {pollQuestions[currentPollQuestionIndex]?.is_active ? (
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                              ACTIVE
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full">
+                              WAITING
+                            </span>
+                          )}
+                          {pollSubmittedQuestions.has(pollQuestions[currentPollQuestionIndex]?.id) && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" /> ANSWERED
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Current Question Display */}
+                      {!pollQuestions[currentPollQuestionIndex]?.is_active ? (
+                        // Question NOT active - show waiting message
+                        <div className="flex flex-col items-center justify-center py-12 text-center bg-yellow-50 border border-yellow-200 rounded-xl">
+                          <div className="w-14 h-14 rounded-full bg-yellow-100 flex items-center justify-center mb-4">
+                            <Timer className="w-7 h-7 text-yellow-600 animate-pulse" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-yellow-800 mb-2">
+                            Waiting for this question to be activated
+                          </h3>
+                          <p className="text-yellow-700 text-sm max-w-md">
+                            The moderator has not yet activated Question {currentPollQuestionIndex + 1}. 
+                            You can use the navigation buttons to check other questions.
+                          </p>
+                          <div className="mt-4 text-xs text-yellow-600">
+                            This will update automatically when the question becomes active.
+                          </div>
+                        </div>
+                      ) : (
+                        // Question IS active - show question with timer
+                        <>
+                          {/* Modern Inline Poll Timer - Positioned Above Question */}
+                          {(() => {
+                            const currentQ = pollQuestions[currentPollQuestionIndex];
+                            const timer = pollTimers[currentQ?.id];
+                            const timerRemaining = timer?.remaining;
+                            const timerInitial = timer?.initial;
+                            const isAnswered = pollSubmittedQuestions.has(currentQ?.id);
+                            
+                            // Hide timer if: no timer configured, user already answered, or timer expired
+                            // Timer expired check: server says expired OR local timer reached 0
+                            const isTimerExpired = currentQ?.is_timer_expired || (timerRemaining !== null && timerRemaining <= 0);
+                            
+                            if (timerRemaining === null || timerInitial === null || timerInitial === 0 || isAnswered || isTimerExpired) {
+                              return null;
+                            }
+                            
+                            const timerSeconds = Math.floor(timerRemaining);
+                            const hours = Math.floor(timerSeconds / 3600);
+                            const minutes = Math.floor((timerSeconds % 3600) / 60);
+                            const seconds = timerSeconds % 60;
+                            const isUrgent = timerSeconds <= 10 && timerSeconds > 0;
+                            const isCritical = timerSeconds <= 5 && timerSeconds > 0;
+                            
+                            const percentageRemaining = timerInitial > 0 
+                              ? (timerSeconds / timerInitial) * 100 
+                              : 0;
+                            
+                            return (
+                              <div className="mb-4">
+                                <div className={`relative overflow-hidden rounded-2xl shadow-lg border-2 transition-all duration-300 ${
+                                  isCritical 
+                                    ? 'bg-gradient-to-r from-red-50 to-red-100 border-red-400' 
+                                    : isUrgent 
+                                    ? 'bg-gradient-to-r from-yellow-50 to-orange-100 border-yellow-400' 
+                                    : 'bg-gradient-to-r from-blue-50 to-indigo-100 border-blue-400'
+                                }`}>
+                                  {/* Animated Progress Bar at Top */}
+                                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gray-200/50">
+                                    <div 
+                                      className={`h-full transition-all duration-1000 ease-linear ${
+                                        isCritical 
+                                          ? 'bg-gradient-to-r from-red-500 to-red-600' 
+                                          : isUrgent 
+                                          ? 'bg-gradient-to-r from-yellow-500 to-orange-500' 
+                                          : 'bg-gradient-to-r from-blue-500 to-indigo-600'
+                                      }`}
+                                      style={{ width: `${percentageRemaining}%` }}
+                                    />
+                                  </div>
+                                  
+                                  {/* Timer Content */}
+                                  <div className="px-6 py-4 pt-5 flex items-center justify-between">
+                                    {/* Left: Icon and Label */}
+                                    <div className="flex items-center gap-3">
+                                      {/* Circular Progress Ring */}
+                                      <div className="relative flex items-center justify-center">
+                                        <svg className="w-14 h-14 transform -rotate-90">
+                                          <circle
+                                            cx="28"
+                                            cy="28"
+                                            r="22"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                            fill="none"
+                                            className={isCritical ? 'text-red-200' : isUrgent ? 'text-yellow-200' : 'text-blue-200'}
+                                          />
+                                          <circle
+                                            cx="28"
+                                            cy="28"
+                                            r="22"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                            fill="none"
+                                            strokeDasharray={2 * Math.PI * 22}
+                                            strokeDashoffset={2 * Math.PI * 22 * (1 - percentageRemaining / 100)}
+                                            strokeLinecap="round"
+                                            className={`transition-all duration-1000 ${
+                                              isCritical ? 'text-red-600' : isUrgent ? 'text-yellow-600' : 'text-blue-600'
+                                            }`}
+                                          />
+                                        </svg>
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                          {isCritical || isUrgent ? (
+                                            <AlertCircle className={`w-5 h-5 ${isCritical ? 'text-red-600 animate-pulse' : 'text-yellow-600'}`} />
+                                          ) : (
+                                            <Timer className="w-5 h-5 text-blue-600" />
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex flex-col">
+                                        <span className={`text-xs font-bold uppercase tracking-wider ${
+                                          isCritical ? 'text-red-700' : isUrgent ? 'text-yellow-700' : 'text-blue-700'
+                                        }`}>
+                                          Answer Within
+                                        </span>
+                                        <span className="text-sm text-gray-600">
+                                          Submit before time runs out
+                                        </span>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Right: Digital Timer */}
+                                    <div className="flex items-center gap-3">
+                                      {isCritical && (
+                                        <span className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-full animate-pulse">
+                                          HURRY!
+                                        </span>
+                                      )}
+                                      <div className={`flex items-center gap-1 px-4 py-2 rounded-xl ${
+                                        isCritical 
+                                          ? 'bg-red-600 text-white' 
+                                          : isUrgent 
+                                          ? 'bg-yellow-500 text-white' 
+                                          : 'bg-blue-600 text-white'
+                                      }`}>
+                                        <Clock className="w-5 h-5" />
+                                        <span className="text-2xl font-bold font-mono tracking-tight tabular-nums">
+                                          {String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          
+                          {/* Time Up Message (only show if NOT answered and timer expired) */}
+                          {isCurrentPollTimerExpired() && !pollSubmittedQuestions.has(pollQuestions[currentPollQuestionIndex]?.id) && (
+                            <div className="flex items-center justify-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                              <AlertCircle className="w-5 h-5 text-gray-600" />
+                              <span className="text-gray-700 font-medium">Time is over. You can view results below.</span>
+                            </div>
+                          )}
+                          
+                          {/* Answered Confirmation (show when user has answered) */}
+                          {pollSubmittedQuestions.has(pollQuestions[currentPollQuestionIndex]?.id) && (
+                            <div className="flex items-center justify-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                              <CheckCircle className="w-5 h-5 text-green-600" />
+                              <span className="text-green-700 font-medium">Answer submitted successfully!</span>
+                            </div>
+                          )}
+                          
+                          {/* Active Question */}
+                          <div className="space-y-3">
+                            <div className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-yellow-500 text-white rounded-full text-sm font-semibold">
+                                {pollQuestions[currentPollQuestionIndex]?.question_number || currentPollQuestionIndex + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div 
+                                  className="text-base font-medium text-gray-900 prose prose-sm max-w-none"
+                                  dangerouslySetInnerHTML={{ 
+                                    __html: pollQuestions[currentPollQuestionIndex]?.title || '' 
+                                  }}
+                                />
+                                {pollQuestions[currentPollQuestionIndex]?.description && (
+                                  <p className="text-sm text-gray-500 mt-1">{pollQuestions[currentPollQuestionIndex].description}</p>
+                                )}
+                                {/* Question Image */}
+                                {pollQuestions[currentPollQuestionIndex]?.image_url && (
+                                  <div className="mt-3 mb-4">
+                                    <img
+                                      src={pollQuestions[currentPollQuestionIndex].image_url}
+                                      alt="Question"
+                                      className="w-full h-auto object-contain rounded-lg border border-gray-200"
+                                      style={{ maxHeight: '300px' }}
+                                    />
+                                  </div>
+                                )}
+                                {/* Render question based on type */}
+                                <div className="mt-4 w-full max-w-full">
+                                  {renderQuestion({
+                                    ...pollQuestions[currentPollQuestionIndex],
+                                    // Map fields for compatibility with renderQuestion
+                                    id: pollQuestions[currentPollQuestionIndex]?.id,
+                                    question: pollQuestions[currentPollQuestionIndex]?.title,
+                                    formattedQuestion: pollQuestions[currentPollQuestionIndex]?.title,
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                ) : displayMode === 'single' ? (
                   // Single Question Mode - show one question at a time
                   currentSectionFiltered && currentSectionFiltered.length > 0 ? (
                     (() => {
@@ -6377,7 +6931,126 @@ export default function TakeActivityPage() {
             {/* Navigation */}
             {displayMode === 'single' ? (
               // Single Question Mode - show Previous/Next navigation
-              <div className="flex items-center justify-between">
+              // For Live Poll Mode, render complete navigation row
+              activity?.type === 'poll' && livePollMode && pollQuestions.length > 0 ? (
+                (() => {
+                  const currentQ = pollQuestions[currentPollQuestionIndex];
+                  if (!currentQ) return null;
+                  
+                  const isQuestionSubmitted = pollSubmittedQuestions.has(currentQ.id);
+                  const isTimerExpired = isCurrentPollTimerExpired();
+                  const isLastQuestion = currentPollQuestionIndex >= pollQuestions.length - 1;
+                  
+                  // If question is NOT active, show waiting message with navigation
+                  // Next is always enabled so user can see waiting message on next question too
+                  if (!currentQ.is_active) {
+                    return (
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={handlePollPrevious}
+                          disabled={currentPollQuestionIndex === 0}
+                          className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                          Previous
+                        </button>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <Timer className="w-4 h-4 text-yellow-600 animate-pulse" />
+                          <span className="text-yellow-700 text-sm font-medium">Not yet activated</span>
+                        </div>
+                        <button
+                          onClick={handlePollNext}
+                          disabled={isLastQuestion}
+                          className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  }
+                  
+                  // Already submitted - show Previous and Next buttons
+                  // Next is always enabled (user can view waiting message on next question)
+                  if (isQuestionSubmitted) {
+                    return (
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={handlePollPrevious}
+                          disabled={currentPollQuestionIndex === 0}
+                          className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                          Previous
+                        </button>
+                        <button
+                          onClick={handlePollNext}
+                          disabled={isLastQuestion}
+                          className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  }
+                  
+                  // Timer expired - show Previous and Next (no submit)
+                  // Next is always enabled (user can view waiting message on next question)
+                  if (isTimerExpired) {
+                    return (
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={handlePollPrevious}
+                          disabled={currentPollQuestionIndex === 0}
+                          className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-500">Time Expired</span>
+                        <button
+                          onClick={handlePollNext}
+                          disabled={isLastQuestion}
+                          className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  }
+                  
+                  // Not submitted yet, timer running - show Previous and Submit (NO Next until submitted)
+                  return (
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={handlePollPrevious}
+                        disabled={currentPollQuestionIndex === 0}
+                        className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        Previous
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!responses[currentQ.id]) {
+                            alert('Please select an answer before submitting');
+                            return;
+                          }
+                          await handlePollAnswer(currentQ.id);
+                        }}
+                        disabled={!responses[currentQ.id]}
+                        className="px-6 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Send className="w-4 h-4" />
+                        Submit Answer
+                      </button>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="flex items-center justify-between">
                 <button
                   onClick={() => {
                     if (currentQuestionIndex > 0) {
@@ -6402,8 +7075,9 @@ export default function TakeActivityPage() {
                   const isAssessment = questionnaire?.type === 'assessment';
                   const isPoll = activity?.type === 'poll';
 
-                  // For polls
-                  if (isPoll) {
+                  // For polls (non-live mode only - live mode handled above)
+                  if (isPoll && !livePollMode) {
+                    // Regular Poll Mode (non-live) - standard navigation
                     const currentSection = questionnaire.sections?.[currentSectionIndex];
                     const currentQuestion = currentSection?.questions[currentQuestionIndex];
                     const isPollAnswered = currentQuestion && pollSubmittedQuestions.has(currentQuestion.id);
@@ -6563,6 +7237,7 @@ export default function TakeActivityPage() {
                   );
                 })()}
               </div>
+              )
             ) : displayMode === 'section' ? (
               // Section-wise Mode - show Previous/Next section navigation
               <div className="flex items-center justify-between">
