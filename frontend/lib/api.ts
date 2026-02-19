@@ -1045,6 +1045,98 @@ export const activitiesApi = {
     const data = await response.json();
     return data;
   },
+
+  // Live Question Activation (Poll events only)
+  async getLiveQuestions(activityId: string): Promise<{
+    activity_id: string;
+    activity_name: string;
+    activity_type: string;
+    questions: Array<{
+      id: string;
+      title: string;
+      type: string;
+      order: number;
+      section_name: string;
+      is_live_active: boolean;
+      live_timer_seconds: number | null;
+      live_activated_at: string | null;
+    }>;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/live-questions`);
+    return data.data || data;
+  },
+
+  async activateLiveQuestion(activityId: string, questionId: string, options?: { 
+    timer_seconds?: number; 
+    deactivate_others?: boolean;
+  }): Promise<{
+    question_id: string;
+    is_live_active: boolean;
+    live_timer_seconds: number | null;
+    live_activated_at: string;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/live-questions/${questionId}/activate`, {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
+    });
+    return data.data || data;
+  },
+
+  async deactivateLiveQuestion(activityId: string, questionId: string): Promise<{
+    question_id: string;
+    is_live_active: boolean;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/live-questions/${questionId}/deactivate`, {
+      method: 'POST',
+    });
+    return data.data || data;
+  },
+
+  async updateLiveQuestionTimer(activityId: string, questionId: string, timerSeconds: number | null): Promise<{
+    question_id: string;
+    live_timer_seconds: number | null;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/live-questions/${questionId}/timer`, {
+      method: 'PATCH',
+      body: JSON.stringify({ timer_seconds: timerSeconds }),
+    });
+    return data.data || data;
+  },
+
+  async deactivateAllLiveQuestions(activityId: string): Promise<{
+    deactivated_count: number;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/live-questions/deactivate-all`, {
+      method: 'POST',
+    });
+    return data.data || data;
+  },
+
+  async getActiveQuestion(activityId: string): Promise<{
+    activity_id: string;
+    activity_name: string;
+    active_question: {
+      id: string;
+      title: string;
+      description: string;
+      type: string;
+      options: any;
+      settings: any;
+      is_required: boolean;
+      order: number;
+      section_id: string;
+      section_name: string;
+      live_timer_seconds: number | null;
+      live_activated_at: string | null;
+      remaining_time: number | null;
+      is_expired: boolean;
+      min_selection: number | null;
+      max_selection: number | null;
+    } | null;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/active-question`);
+    return data.data || data;
+  },
 };
 
 // Responses API
@@ -2455,3 +2547,106 @@ export const aiAgentApi = {
     return data;
   },
 };
+
+/**
+ * Poll Question interface for live poll events
+ */
+export interface PollQuestion {
+  id: string;
+  question_number: number;
+  title: string;
+  description?: string;
+  type: string;
+  options: any;
+  settings: any;
+  is_required: boolean;
+  order: number;
+  section_id: string;
+  section_name: string;
+  image_url?: string;
+  // Active status - admin controlled, multiple can be active
+  is_active: boolean;
+  activated_at: string | null;
+  // Timer is for SUBMISSION RESTRICTION only
+  timer_seconds: number | null;
+  remaining_time: number | null;
+  is_timer_expired: boolean; // Submission blocked, NOT deactivated
+  min_selection?: number;
+  max_selection?: number;
+}
+
+/**
+ * Get ALL questions with their active status for a poll event.
+ * 
+ * IMPORTANT: Multiple questions can be active simultaneously.
+ * Timer is for SUBMISSION RESTRICTION only - does NOT auto-deactivate questions.
+ * Participants navigate through all questions with Next/Previous.
+ * 
+ * CRITICAL FIX (Feb 18, 2026): Now accepts participant_id and returns answered_question_ids
+ * to prevent duplicate submissions after page refresh.
+ */
+export async function getPollQuestions(activityId: string, participantId?: string): Promise<{
+  questions: PollQuestion[];
+  active_question_ids: string[];
+  answered_question_ids: string[];
+  total_questions: number;
+  total_active: number;
+}> {
+  const url = new URL(`${process.env.NEXT_PUBLIC_API_URL || ''}/activities/${activityId}/active-question`);
+  if (participantId) {
+    url.searchParams.append('participant_id', participantId);
+  }
+  
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw new Error('Failed to fetch poll questions');
+  }
+  const data = await response.json();
+  return {
+    questions: data.data?.questions || [],
+    active_question_ids: data.data?.active_question_ids || [],
+    answered_question_ids: data.data?.answered_question_ids || [],
+    total_questions: data.data?.total_questions || 0,
+    total_active: data.data?.total_active || 0,
+  };
+}
+
+/**
+ * Public function to get the currently active live question for a poll event.
+ * This is a public endpoint (no auth required) for participants.
+ * 
+ * DEPRECATED: Use getPollQuestions() instead for full multi-question support.
+ * Kept for backward compatibility.
+ */
+export async function getActiveQuestion(activityId: string): Promise<{
+  has_active: boolean;
+  question: {
+    id: string;
+    title: string;
+    formattedQuestion?: string;
+    description?: string;
+    type: string;
+    options: any;
+    settings: any;
+    is_required: boolean;
+    order: number;
+    question_number: number;
+    section_id: string;
+    section_name: string;
+    imageUrl?: string;
+  } | null;
+  remaining_time: number | null;
+  is_expired: boolean;
+}> {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/activities/${activityId}/active-question`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch active question');
+  }
+  const data = await response.json();
+  return {
+    has_active: !!data.data?.active_question,
+    question: data.data?.active_question || null,
+    remaining_time: data.data?.active_question?.remaining_time || null,
+    is_expired: data.data?.active_question?.is_timer_expired || false,
+  };
+}

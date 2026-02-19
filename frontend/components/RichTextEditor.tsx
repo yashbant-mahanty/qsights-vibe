@@ -30,6 +30,10 @@ export default function RichTextEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [localContent, setLocalContent] = useState(value);
+  // Use ref to store onChange to prevent stale closures and unnecessary re-renders
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  
   const [linkModal, setLinkModal] = useState<LinkModalData>({
     isOpen: false,
     url: '',
@@ -48,37 +52,58 @@ export default function RichTextEditor({
   }, [value, isFocused]);
 
   const execCommand = useCallback((command: string, cmdValue: string | undefined = undefined) => {
+    // Save cursor position before command
+    const selection = window.getSelection();
+    const savedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+    
     document.execCommand(command, false, cmdValue);
+    
     if (editorRef.current) {
       const newContent = editorRef.current.innerHTML;
       setLocalContent(newContent);
-      // Update immediately for toolbar commands
-      onChange(newContent);
+      // Update immediately for toolbar commands using ref to avoid stale closure
+      onChangeRef.current(newContent);
+      
+      // Restore focus if lost
+      if (savedRange) {
+        editorRef.current.focus();
+        try {
+          selection?.removeAllRanges();
+          selection?.addRange(savedRange);
+        } catch (e) {
+          // If range restoration fails, just place cursor at end
+        }
+      }
     }
-  }, [onChange]);
+  }, []);
 
   const handleInput = useCallback(() => {
     if (editorRef.current) {
       const newContent = editorRef.current.innerHTML;
       setLocalContent(newContent);
-      // Call onChange on every input to ensure state is synchronized
-      // This is important for save operations that don't trigger blur
-      onChange(newContent);
+      // DON'T call onChange on every input - this prevents the anchoring/cursor jump issue
+      // The content will be synced to parent on blur instead
     }
-  }, [onChange]);
+  }, []);
 
   const handleBlur = useCallback((e: React.FocusEvent) => {
     // Don't blur if link modal is open
     if (linkModal.isOpen) return;
     
+    // Check if we're blurring to somewhere within the editor or toolbar
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (relatedTarget && editorRef.current?.parentElement?.contains(relatedTarget)) {
+      return;
+    }
+    
     setIsFocused(false);
     if (editorRef.current) {
       const content = editorRef.current.innerHTML;
       if (content !== value) {
-        onChange(content);
+        onChangeRef.current(content);
       }
     }
-  }, [onChange, value, linkModal.isOpen]);
+  }, [value, linkModal.isOpen]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);

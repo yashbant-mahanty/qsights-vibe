@@ -1827,6 +1827,441 @@ class ActivityController extends Controller
     }
 
     /**
+     * Get all questions for live activation panel (Poll events only)
+     */
+    public function getLiveQuestions(Request $request, string $id)
+    {
+        $activity = Activity::with(['questionnaire.sections.questions' => function($query) {
+            $query->orderBy('order', 'asc');
+        }])->findOrFail($id);
+
+        // Only allow for poll type events
+        if ($activity->type !== 'poll') {
+            return response()->json([
+                'message' => 'Live question activation is only available for Poll type events'
+            ], 400);
+        }
+
+        $questions = [];
+        $questionNumber = 0; // Overall question number matching participant view
+        if ($activity->questionnaire) {
+            foreach ($activity->questionnaire->sections as $section) {
+                foreach ($section->questions as $question) {
+                    $questionNumber++;
+                    $questions[] = [
+                        'id' => $question->id,
+                        'question_number' => $questionNumber, // Added: Global question number for participant view matching
+                        'title' => $question->title,
+                        'type' => $question->type,
+                        'order' => $question->order,
+                        'section_id' => $section->id,
+                        'section_name' => $section->name,
+                        'is_live_active' => (bool)$question->is_live_active,
+                        'live_timer_seconds' => $question->live_timer_seconds,
+                        'live_activated_at' => $question->live_activated_at 
+                            ? \Carbon\Carbon::parse($question->live_activated_at)->toIso8601String() 
+                            : null,
+                    ];
+                }
+            }
+        }
+
+        // Questions are already in correct order (section order, then order within section)
+        // Do NOT sort by order alone as it would mix sections together!
+
+        return response()->json([
+            'data' => [
+                'activity_id' => $activity->id,
+                'activity_name' => $activity->name,
+                'activity_type' => $activity->type,
+                'questions' => $questions
+            ]
+        ]);
+    }
+
+    /**
+     * Activate a question for live poll display
+     */
+    public function activateLiveQuestion(Request $request, string $activityId, string $questionId)
+    {
+        $activity = Activity::with(['questionnaire.sections.questions'])->findOrFail($activityId);
+
+        // Only allow for poll type events
+        if ($activity->type !== 'poll') {
+            return response()->json([
+                'message' => 'Live question activation is only available for Poll type events'
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'timer_seconds' => 'nullable|integer|min:0|max:3600',
+            'deactivate_others' => 'nullable|boolean'
+        ]);
+
+        $timerSeconds = $validated['timer_seconds'] ?? null;
+        $deactivateOthers = $validated['deactivate_others'] ?? false; // Default: Multiple active questions allowed
+
+        // Cast questionId to integer for comparison
+        $questionIdInt = (int) $questionId;
+
+        // Find the question
+        $targetQuestion = null;
+        foreach ($activity->questionnaire->sections as $section) {
+            foreach ($section->questions as $question) {
+                if ($question->id === $questionIdInt) {
+                    $targetQuestion = $question;
+                    break 2;
+                }
+            }
+        }
+
+        if (!$targetQuestion) {
+            return response()->json([
+                'message' => 'Question not found in this activity'
+            ], 404);
+        }
+
+        // Deactivate other questions only if explicitly requested (rarely used)
+        if ($deactivateOthers) {
+            foreach ($activity->questionnaire->sections as $section) {
+                foreach ($section->questions as $question) {
+                    if ($question->id !== $questionIdInt && $question->is_live_active) {
+                        $question->is_live_active = false;
+                        $question->live_activated_at = null;
+                        $question->save();
+                    }
+                }
+            }
+        }
+
+        // Activate the target question
+        $targetQuestion->is_live_active = true;
+        $targetQuestion->live_timer_seconds = $timerSeconds;
+        $targetQuestion->live_activated_at = now();
+        $targetQuestion->save();
+
+        \Log::info('Live question activated', [
+            'activity_id' => $activityId,
+            'question_id' => $questionId,
+            'timer_seconds' => $timerSeconds,
+            'user_id' => $request->user()->id ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Question activated successfully',
+            'data' => [
+                'question_id' => $targetQuestion->id,
+                'is_live_active' => true,
+                'live_timer_seconds' => $timerSeconds,
+                'live_activated_at' => $targetQuestion->live_activated_at->toIso8601String(),
+            ]
+        ]);
+    }
+
+    /**
+     * Deactivate a question for live poll display
+     */
+    public function deactivateLiveQuestion(Request $request, string $activityId, string $questionId)
+    {
+        $activity = Activity::with(['questionnaire.sections.questions'])->findOrFail($activityId);
+
+        // Only allow for poll type events
+        if ($activity->type !== 'poll') {
+            return response()->json([
+                'message' => 'Live question activation is only available for Poll type events'
+            ], 400);
+        }
+
+        // Cast questionId to integer for comparison
+        $questionIdInt = (int) $questionId;
+
+        // Find the question
+        $targetQuestion = null;
+        foreach ($activity->questionnaire->sections as $section) {
+            foreach ($section->questions as $question) {
+                if ($question->id === $questionIdInt) {
+                    $targetQuestion = $question;
+                    break 2;
+                }
+            }
+        }
+
+        if (!$targetQuestion) {
+            return response()->json([
+                'message' => 'Question not found in this activity'
+            ], 404);
+        }
+
+        // Deactivate the question
+        $targetQuestion->is_live_active = false;
+        $targetQuestion->live_activated_at = null;
+        $targetQuestion->save();
+
+        \Log::info('Live question deactivated', [
+            'activity_id' => $activityId,
+            'question_id' => $questionId,
+            'user_id' => $request->user()->id ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Question deactivated successfully',
+            'data' => [
+                'question_id' => $targetQuestion->id,
+                'is_live_active' => false,
+            ]
+        ]);
+    }
+
+    /**
+     * Update timer for a live question
+     */
+    public function updateLiveQuestionTimer(Request $request, string $activityId, string $questionId)
+    {
+        $activity = Activity::with(['questionnaire.sections.questions'])->findOrFail($activityId);
+
+        // Only allow for poll type events
+        if ($activity->type !== 'poll') {
+            return response()->json([
+                'message' => 'Live question activation is only available for Poll type events'
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'timer_seconds' => 'nullable|integer|min:0|max:3600'
+        ]);
+
+        // Cast questionId to integer for comparison
+        $questionIdInt = (int) $questionId;
+
+        // Find the question
+        $targetQuestion = null;
+        foreach ($activity->questionnaire->sections as $section) {
+            foreach ($section->questions as $question) {
+                if ($question->id === $questionIdInt) {
+                    $targetQuestion = $question;
+                    break 2;
+                }
+            }
+        }
+
+        if (!$targetQuestion) {
+            return response()->json([
+                'message' => 'Question not found in this activity'
+            ], 404);
+        }
+
+        $targetQuestion->live_timer_seconds = $validated['timer_seconds'] ?? null;
+        $targetQuestion->save();
+
+        return response()->json([
+            'message' => 'Timer updated successfully',
+            'data' => [
+                'question_id' => $targetQuestion->id,
+                'live_timer_seconds' => $targetQuestion->live_timer_seconds,
+            ]
+        ]);
+    }
+
+    /**
+     * Deactivate all live questions for an activity
+     */
+    public function deactivateAllLiveQuestions(Request $request, string $activityId)
+    {
+        $activity = Activity::with(['questionnaire.sections.questions'])->findOrFail($activityId);
+
+        // Only allow for poll type events
+        if ($activity->type !== 'poll') {
+            return response()->json([
+                'message' => 'Live question activation is only available for Poll type events'
+            ], 400);
+        }
+
+        $deactivatedCount = 0;
+        foreach ($activity->questionnaire->sections as $section) {
+            foreach ($section->questions as $question) {
+                if ($question->is_live_active) {
+                    $question->is_live_active = false;
+                    $question->live_activated_at = null;
+                    $question->save();
+                    $deactivatedCount++;
+                }
+            }
+        }
+
+        \Log::info('All live questions deactivated', [
+            'activity_id' => $activityId,
+            'deactivated_count' => $deactivatedCount,
+            'user_id' => $request->user()->id ?? null,
+        ]);
+
+        return response()->json([
+            'message' => "Deactivated {$deactivatedCount} questions",
+            'data' => [
+                'deactivated_count' => $deactivatedCount
+            ]
+        ]);
+    }
+
+    /**
+     * Get ALL questions with their active status for participants (Poll events only)
+     * 
+     * IMPORTANT: Multiple questions can be active simultaneously.
+     * Timer is for SUBMISSION RESTRICTION only - does NOT auto-deactivate questions.
+     * Participants navigate through all questions with Next/Previous.
+     * - Active questions: show question + timer
+     * - Inactive questions: show "Waiting for activation" message
+     * 
+     * CRITICAL FIX (Feb 18, 2026): Now returns answered_question_ids to prevent
+     * duplicate submissions after page refresh.
+     */
+    public function getActiveQuestion(Request $request, string $id)
+    {
+        $activity = Activity::with(['questionnaire.sections.questions' => function($query) {
+            $query->orderBy('order', 'asc');
+        }])->findOrFail($id);
+
+        // Only allow for poll type events
+        if ($activity->type !== 'poll') {
+            return response()->json([
+                'message' => 'This endpoint is only available for Poll type events'
+            ], 400);
+        }
+
+        // Get participant_id from query parameter to determine which questions they've answered
+        $participantId = $request->query('participant_id');
+        
+        // Find answered question IDs and participant's answers for this participant
+        $answeredQuestionIds = [];
+        $participantAnswers = []; // Map of question_id => answer_value
+        if ($participantId && is_numeric($participantId)) {
+            // Query: Find all responses for this activity+participant, then get their question_ids and answers
+            $answers = \DB::table('responses')
+                ->where('activity_id', $activity->id)
+                ->where('participant_id', $participantId)
+                ->join('answers', 'answers.response_id', '=', 'responses.id')
+                ->select('answers.question_id', 'answers.answer_text', 'answers.answer_value')
+                ->get();
+            
+            foreach ($answers as $answer) {
+                $questionId = (string) $answer->question_id;
+                if (!in_array($questionId, $answeredQuestionIds)) {
+                    $answeredQuestionIds[] = $questionId;
+                }
+                
+                // Store the participant's answer (use answer_value if set, otherwise answer_text)
+                $answerData = $answer->answer_value ?? $answer->answer_text;
+                
+                // Handle multiple choice questions - they may have multiple answers
+                if (isset($participantAnswers[$questionId])) {
+                    // Already has an answer - convert to array for multiple choice
+                    if (!is_array($participantAnswers[$questionId])) {
+                        $participantAnswers[$questionId] = [$participantAnswers[$questionId]];
+                    }
+                    $participantAnswers[$questionId][] = $answerData;
+                } else {
+                    $participantAnswers[$questionId] = $answerData;
+                }
+            }
+        }
+        }
+
+        $allQuestions = [];
+        $activeQuestionIds = [];
+        $questionNumber = 0;
+        
+        if ($activity->questionnaire) {
+            foreach ($activity->questionnaire->sections as $section) {
+                foreach ($section->questions as $question) {
+                    $questionNumber++;
+                    
+                    // Calculate remaining time for active questions
+                    $remainingTime = null;
+                    $isTimerExpired = false;
+                    
+                    if ($question->is_live_active && $question->live_timer_seconds && $question->live_activated_at) {
+                        $activatedAt = $question->live_activated_at instanceof \Carbon\Carbon 
+                            ? $question->live_activated_at 
+                            : \Carbon\Carbon::parse($question->live_activated_at);
+                        
+                        // FIX: Use Unix timestamps to avoid timezone issues with diffInSeconds
+                        // This ensures correct calculation regardless of server timezone
+                        $nowTimestamp = now()->timestamp;
+                        $activatedTimestamp = $activatedAt->timestamp;
+                        $elapsedSeconds = max(0, $nowTimestamp - $activatedTimestamp);
+                        
+                        $remainingTime = max(0, $question->live_timer_seconds - $elapsedSeconds);
+                        // Timer expired = submission blocked, but question is STILL ACTIVE
+                        $isTimerExpired = $remainingTime <= 0;
+                    }
+
+                    // Format live_activated_at safely
+                    $liveActivatedAtFormatted = null;
+                    if ($question->live_activated_at) {
+                        $liveActivatedAtFormatted = $question->live_activated_at instanceof \Carbon\Carbon
+                            ? $question->live_activated_at->toIso8601String()
+                            : (string) $question->live_activated_at;
+                    }
+
+                    $questionData = [
+                        'id' => $question->id,
+                        'question_number' => $questionNumber,
+                        'title' => $question->title,
+                        'description' => $question->description,
+                        'type' => $question->type,
+                        'options' => $question->options,
+                        'settings' => $question->settings,
+                        'is_required' => $question->is_required,
+                        'order' => $question->order,
+                        'section_id' => $section->id,
+                        'section_name' => $section->name,
+                        'image_url' => $question->image_url,
+                        // Active status - admin controlled
+                        'is_active' => (bool) $question->is_live_active,
+                        'activated_at' => $liveActivatedAtFormatted,
+                        // Timer is for submission restriction only
+                        'timer_seconds' => $question->live_timer_seconds,
+                        'remaining_time' => $remainingTime,
+                        'is_timer_expired' => $isTimerExpired, // Submission blocked, not deactivated
+                        'min_selection' => $question->min_selection,
+                        'max_selection' => $question->max_selection,
+                    ];
+                    
+                    $allQuestions[] = $questionData;
+                    
+                    if ($question->is_live_active) {
+                        $activeQuestionIds[] = $question->id;
+                    }
+                }
+            }
+        }
+
+        // For backward compatibility, also return single active_question (first active)
+        $firstActiveQuestion = null;
+        foreach ($allQuestions as $q) {
+            if ($q['is_active']) {
+                $firstActiveQuestion = $q;
+                break;
+            }
+        }
+
+        return response()->json([
+            'data' => [
+                'activity_id' => $activity->id,
+                'activity_name' => $activity->name,
+                // All questions with their active status
+                'questions' => $allQuestions,
+                'active_question_ids' => $activeQuestionIds,
+                'answered_question_ids' => $answeredQuestionIds, // Which questions participant has already answered
+                'participant_answers' => $participantAnswers, // CRITICAL: Participant's actual answers (prevents re-submission)
+                'total_questions' => count($allQuestions),
+                'total_active' => count($activeQuestionIds),
+                // Backward compatibility
+                'active_question' => $firstActiveQuestion
+            ]
+        ]);
+    }
+
+    /**
      * Notify Super Admins when an Activity/Event is created by Program Admin
      */
     protected function notifyActivityCreated(Activity $activity, User $creator)

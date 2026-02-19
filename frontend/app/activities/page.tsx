@@ -33,11 +33,13 @@ import {
   BellRing,
   X,
   QrCode,
+  Zap,
 } from "lucide-react";
 import { activitiesApi, activityApprovalsApi, type Activity, fetchWithAuth } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import DuplicateConfirmationModal from "@/components/duplicate-confirmation-modal";
 import ResendApprovalModal from "@/components/resend-approval-modal";
+import QuestionActivationPanel from "@/components/question-activation-panel";
 import { toast } from "@/components/ui/toast";
 import { QRCodeModal } from "@/components/ui/qr-code-modal";
 
@@ -60,6 +62,7 @@ export default function ActivitiesPage() {
   const [linksDropdown, setLinksDropdown] = useState<{ activityId: string | null; links: any | null; loading: boolean }>({ activityId: null, links: null, loading: false });
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{ isOpen: boolean; url: string; title: string; subtitle: string; color: string }>({ isOpen: false, url: '', title: '', subtitle: '', color: 'blue' });
+  const [questionActivationPanel, setQuestionActivationPanel] = useState<{ isOpen: boolean; activityId: string; activityName: string }>({ isOpen: false, activityId: '', activityName: '' });
 
   useEffect(() => {
     loadActivities();
@@ -1282,6 +1285,19 @@ export default function ActivitiesPage() {
                           >
                             <BarChart3 className="w-4 h-4" />
                           </button>
+                          {/* Live Poll Questions Control - Only for Poll type events */}
+                          {activity.type === 'poll' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setQuestionActivationPanel({ isOpen: true, activityId: activity.id.toString(), activityName: activity.title });
+                              }}
+                              className="p-1.5 text-yellow-600 hover:bg-yellow-50 rounded transition-colors"
+                              title="Live Poll Questions"
+                            >
+                              <Zap className="w-4 h-4" />
+                            </button>
+                          )}
                           {currentUser?.role !== 'program-moderator' && (
                             <>
                               <button
@@ -1455,6 +1471,14 @@ export default function ActivitiesPage() {
         title={qrModal.title}
         subtitle={qrModal.subtitle}
         color={qrModal.color}
+      />
+
+      {/* Question Activation Panel for Live Polls */}
+      <QuestionActivationPanel
+        isOpen={questionActivationPanel.isOpen}
+        onClose={() => setQuestionActivationPanel({ isOpen: false, activityId: '', activityName: '' })}
+        activityId={questionActivationPanel.activityId}
+        activityName={questionActivationPanel.activityName}
       />
     </AppLayout>
   );

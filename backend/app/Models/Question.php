@@ -55,6 +55,10 @@ class Question extends Model
         // Video-specific casts
         'is_mandatory_watch' => 'boolean',
         'video_duration_seconds' => 'integer',
+        // Live question activation casts
+        'is_live_active' => 'boolean',
+        'live_activated_at' => 'datetime',
+        'live_timer_seconds' => 'integer',
     ];
     
     protected $appends = [];

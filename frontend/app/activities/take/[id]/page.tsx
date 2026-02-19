@@ -965,6 +965,15 @@ export default function TakeActivityPage() {
           const answeredIds = result.answered_question_ids.map(Number);
           setPollSubmittedQuestions(new Set(answeredIds));
           
+          // CRITICAL: Restore participant's actual answers to prevent re-submission
+          if (result.participant_answers && Object.keys(result.participant_answers).length > 0) {
+            console.log('[POLL DEBUG] Restoring participant answers:', result.participant_answers);
+            setResponses(prev => ({
+              ...prev,
+              ...result.participant_answers
+            }));
+          }
+          
           // CRITICAL: Use results from API response (same concept as surveys)
           if (result.answered_question_results && Object.keys(result.answered_question_results).length > 0) {
             console.log('[POLL DEBUG] Setting poll results from API:', result.answered_question_results);
@@ -3421,10 +3430,29 @@ export default function TakeActivityPage() {
         const hasMinSelection = question.min_selection && question.min_selection > 0;
         const hasMaxSelection = question.max_selection && question.max_selection > 0;
         
+        // POLL RESULTS SUPPORT for multiselect
+        const isPoll_multi = activity?.type === 'poll';
+        const isPollSubmitted_multi = isPoll_multi && pollSubmittedQuestions.has(questionId);
+        const currentPollQuestion_multi = pollQuestions.find(q => q.id === questionId || String(q.id) === String(questionId));
+        const isServerTimerExpired_multi = currentPollQuestion_multi?.is_timer_expired === true;
+        const isLocalTimerExpired_multi = isPoll_multi && livePollMode && liveQuestionTimer === 0 && !hasAnsweredActiveQuestion;
+        const isTimerExpiredForQuestion_multi = isServerTimerExpired_multi || isLocalTimerExpired_multi;
+        const showPollResults_multi = isPollSubmitted_multi || isTimerExpiredForQuestion_multi;
+        const questionResults_multi = pollResults[questionId];
+        const totalVotes_multi = questionResults_multi?.reduce((sum, r) => sum + r.count, 0) || 0;
+        
         return (
           <div className="space-y-3">
+            {/* Show total votes for poll after submission OR timer expiry */}
+            {showPollResults_multi && questionResults_multi && totalVotes_multi > 0 && (
+              <div className="flex items-center justify-between px-2 pb-2 border-b border-gray-200">
+                <span className="text-xs text-gray-500">Total responses</span>
+                <span className="text-xs font-semibold text-gray-700">{totalVotes_multi} vote{totalVotes_multi !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+            
             {/* Selection limit indicator */}
-            {(hasMinSelection || hasMaxSelection) && !isSubmitted && (
+            {(hasMinSelection || hasMaxSelection) && !isSubmitted && !showPollResults_multi && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center gap-2 text-sm">
                   <AlertCircle className="w-4 h-4 text-blue-600" />
@@ -3445,29 +3473,113 @@ export default function TakeActivityPage() {
               const isSelected = (responses[questionId] || []).includes(optionValue);
               const isMaxReached = hasMaxSelection && selectedCount >= question.max_selection && !isSelected;
               
+              // Poll results for this option
+              const optionResult_multi = questionResults_multi?.find(r => r.option === optionValue);
+              const percentage_multi = optionResult_multi?.percentage || 0;
+              const voteCount_multi = optionResult_multi?.count || 0;
+              
               return (
                 <div
                   key={index}
-                  onClick={() => !isSubmitted && !isMaxReached && handleMultipleChoiceToggle(questionId, optionValue)}
-                  className={`flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
-                    isSubmitted || isMaxReached ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                  onClick={() => !isSubmitted && !isMaxReached && !showPollResults_multi && handleMultipleChoiceToggle(questionId, optionValue)}
+                  className={`relative overflow-hidden flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
+                    isSubmitted || isMaxReached || showPollResults_multi ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
                   } ${
                     isSelected ? "border-qsights-blue bg-blue-50" : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
-                  <Square
-                    className={`w-5 h-5 ${isSelected ? "text-qsights-blue fill-qsights-blue" : "text-gray-400"}`}
-                  />
-                  <span className="text-sm text-gray-700">{optionLabel}</span>
-                  {isSubmitted && isSelected && (
-                    <span className="ml-auto text-xs text-gray-500">(Submitted)</span>
+                  {/* Poll results background bar */}
+                  {showPollResults_multi && optionResult_multi && (
+                    <div 
+                      className="absolute left-0 top-0 bottom-0 transition-all duration-700 ease-out"
+                      style={{ 
+                        width: `${percentage_multi}%`,
+                        background: isSelected 
+                          ? 'linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 197, 253, 0.1) 100%)'
+                          : 'linear-gradient(90deg, rgba(229, 231, 235, 0.5) 0%, rgba(243, 244, 246, 0.3) 100%)'
+                      }}
+                    />
                   )}
-                  {isMaxReached && (
+                  
+                  <Square
+                    className={`w-5 h-5 relative z-10 ${isSelected ? "text-qsights-blue fill-qsights-blue" : "text-gray-400"}`}
+                  />
+                  <span className="text-sm text-gray-700 flex-1 relative z-10">{optionLabel}</span>
+                  
+                  {/* Show percentage for poll results */}
+                  {showPollResults_multi && optionResult_multi && (
+                    <div className="flex items-center gap-2 relative z-10">
+                      <span className="text-xs text-gray-500">{voteCount_multi} vote{voteCount_multi !== 1 ? 's' : ''}</span>
+                      <span className={`text-sm font-bold min-w-[45px] text-right ${
+                        isSelected ? 'text-blue-600' : 'text-gray-600'
+                      }`}>
+                        {percentage_multi.toFixed(1)}%
+                      </span>
+                    </div>
+                  )}
+                  
+                  {isSubmitted && isSelected && !isPoll_multi && (
+                    <span className="ml-auto text-xs text-gray-500 relative z-10">(Submitted)</span>
+                  )}
+                  {isMaxReached && !showPollResults_multi && (
                     <span className="ml-auto text-xs text-gray-400">(Limit reached)</span>
                   )}
                 </div>
               );
             })}
+            
+            {/* Show your vote indicator for polls */}
+            {isPollSubmitted_multi && (
+              <div className="flex items-center gap-2 px-2 pt-2 text-xs text-gray-500">
+                <CheckCircle className="w-4 h-4 text-blue-600" />
+                <span>Your vote has been recorded</span>
+              </div>
+            )}
+            
+            {/* Graphical Poll Results Chart for multiselect */}
+            {showPollResults_multi && questionResults_multi && questionResults_multi.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <BarChart3 className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Results Visualization</span>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-4" style={{ minHeight: '200px' }}>
+                  <ResponsiveContainer width="100%" height={Math.max(200, questionResults_multi.length * 50)}>
+                    <BarChart
+                      data={questionResults_multi}
+                      layout="vertical"
+                      margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                    >
+                      <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                      <YAxis 
+                        type="category" 
+                        dataKey="option" 
+                        width={120}
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(value) => value.length > 18 ? value.substring(0, 18) + '...' : value}
+                      />
+                      <Tooltip
+                        formatter={(value: any, name: string) => [`${parseFloat(value).toFixed(1)}%`, 'Percentage']}
+                        labelFormatter={(label) => `Option: ${label}`}
+                      />
+                      <Bar dataKey="percentage" radius={[0, 4, 4, 0]}>
+                        {questionResults_multi.map((entry: any, idx: number) => {
+                          const userSelection = responses[questionId] || [];
+                          const isUserSelected = Array.isArray(userSelection) && userSelection.includes(String(entry.option));
+                          return (
+                            <Cell 
+                              key={`cell-${idx}`}
+                              fill={isUserSelected ? '#3B82F6' : '#94A3B8'}
+                            />
+                          );
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
           </div>
         );
 
@@ -3475,8 +3587,12 @@ export default function TakeActivityPage() {
         const maxRating = question.settings?.scale || question.max_value || 5;
         const isPoll_rating = activity?.type === 'poll';
         const isPollSubmitted_rating = isPoll_rating && pollSubmittedQuestions.has(questionId);
-        // Check if timer expired for live poll mode (can't select ratings after timer expires)
-        const isLivePollTimerExpired_rating = isPoll_rating && livePollMode && liveQuestionTimer === 0 && !hasAnsweredActiveQuestion;
+        // CRITICAL FIX: Check timer expiry using BOTH server flag AND local timer state
+        const currentPollQuestion_rating = pollQuestions.find(q => q.id === questionId || String(q.id) === String(questionId));
+        const isServerTimerExpired_rating = currentPollQuestion_rating?.is_timer_expired === true;
+        const isLocalTimerExpired_rating = isPoll_rating && livePollMode && liveQuestionTimer === 0 && !hasAnsweredActiveQuestion;
+        const isTimerExpiredForQuestion_rating = isServerTimerExpired_rating || isLocalTimerExpired_rating;
+        const showPollResults_rating = isPollSubmitted_rating || isTimerExpiredForQuestion_rating;
         const ratingResults = pollResults[questionId] || [];
         
         // Calculate total votes for ratings
@@ -3494,8 +3610,8 @@ export default function TakeActivityPage() {
                 return (
                   <button
                     key={rating}
-                    onClick={() => !isSubmitted && !isPollSubmitted_rating && !isLivePollTimerExpired_rating && handleResponseChange(questionId, rating)}
-                    disabled={isSubmitted || isPollSubmitted_rating || isLivePollTimerExpired_rating}
+                    onClick={() => !isSubmitted && !showPollResults_rating && handleResponseChange(questionId, rating)}
+                    disabled={isSubmitted || showPollResults_rating}
                     className={`w-12 h-12 rounded-lg border-2 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
                       responses[questionId] === rating
                         ? "border-qsights-blue bg-qsights-dark text-white"
@@ -3508,12 +3624,12 @@ export default function TakeActivityPage() {
               })}
             </div>
             
-            {/* Show poll results with percentage bars for ratings */}
-            {isPollSubmitted_rating && (
+            {/* Show poll results with percentage bars for ratings - AFTER SUBMISSION OR TIMER EXPIRY */}
+            {showPollResults_rating && totalRatingVotes > 0 && (
               <div className="space-y-2 mt-4">
                 <div className="text-xs text-gray-500 mb-3">
-                  <CheckCircle className="w-4 h-4 text-blue-600 inline mr-1" />
-                  Your vote has been recorded • {totalRatingVotes} total vote{totalRatingVotes !== 1 ? 's' : ''}
+                  {isPollSubmitted_rating && <CheckCircle className="w-4 h-4 text-blue-600 inline mr-1" />}
+                  {isPollSubmitted_rating && 'Your vote has been recorded • '}{totalRatingVotes} total vote{totalRatingVotes !== 1 ? 's' : ''}
                 </div>
                 {Array.from({ length: maxRating }, (_, i) => i + 1).map((rating) => {
                   const isSelected = responses[questionId] === rating;

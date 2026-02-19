@@ -6442,71 +6442,82 @@ export default function ViewQuestionnairePage() {
                           )}
                         </div>
                       ) : (
-                        /* Regular textarea for other question types */
-                        <textarea
-                          value={
-                            activeLanguage === "EN"
-                              ? selectedQuestionForTranslation.question
-                              : (translationData[activeLanguage]?.question || selectedQuestionForTranslation.translations?.[activeLanguage]?.question || "")
-                          }
-                          onChange={(e) => {
-                            if (activeLanguage !== "EN") {
-                              setTranslationData({
-                                ...translationData,
-                                [activeLanguage]: {
-                                  ...translationData[activeLanguage],
-                                  question: e.target.value
-                                }
-                              });
+                        /* Rich Text Editor for Question Text */
+                        <div className={activeLanguage === "EN" ? "opacity-60 pointer-events-none" : ""}>
+                          <RichTextEditor
+                            value={
+                              activeLanguage === "EN"
+                                ? (selectedQuestionForTranslation.formattedQuestion || selectedQuestionForTranslation.question || "")
+                                : (translationData[activeLanguage]?.formattedQuestion || selectedQuestionForTranslation.translations?.[activeLanguage]?.formattedQuestion || translationData[activeLanguage]?.question || selectedQuestionForTranslation.translations?.[activeLanguage]?.question || "")
                             }
-                          }}
-                          rows={3}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
-                          placeholder={`Enter question in ${activeLanguage}...`}
-                          disabled={activeLanguage === "EN"}
-                        />
+                            onChange={(value) => {
+                              if (activeLanguage !== "EN") {
+                                setTranslationData({
+                                  ...translationData,
+                                  [activeLanguage]: {
+                                    ...translationData[activeLanguage],
+                                    formattedQuestion: value,
+                                    question: value.replace(/<[^>]*>/g, '').substring(0, 255)
+                                  }
+                                });
+                              }
+                            }}
+                            placeholder={`Enter question in ${activeLanguage}...`}
+                            minHeight="100px"
+                          />
+                          {activeLanguage === "EN" && (
+                            <p className="text-xs text-gray-500 mt-1">English content is edited in the main builder</p>
+                          )}
+                        </div>
                       )}
                     </div>
 
                     {/* Options for MCQ/Multi */}
                     {(selectedQuestionForTranslation.type === "mcq" ||
                       selectedQuestionForTranslation.type === "multi") && selectedQuestionForTranslation.options && (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <Label className="text-sm font-medium text-gray-700">
-                          Options ({activeLanguage})
+                          Options ({activeLanguage}) - Rich Text Enabled
                         </Label>
-                        <div className="space-y-2">
+                        <p className="text-xs text-gray-500">
+                          Use the toolbar to add bold, italic, hyperlinks and more to your options.
+                        </p>
+                        <div className="space-y-3">
                           {selectedQuestionForTranslation.options.map(
                             (option: string, idx: number) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <span className="text-sm text-gray-500 w-8">
+                              <div key={idx} className="flex items-start gap-2">
+                                <span className="text-sm text-gray-500 w-8 pt-3">
                                   {idx + 1}.
                                 </span>
-                                <input
-                                  type="text"
-                                  value={
-                                    activeLanguage === "EN" 
-                                      ? option 
-                                      : (translationData[activeLanguage]?.options?.[idx] || selectedQuestionForTranslation.translations?.[activeLanguage]?.options?.[idx] || "")
-                                  }
-                                  onChange={(e) => {
-                                    if (activeLanguage !== "EN") {
-                                      const currentOptions = translationData[activeLanguage]?.options || [];
-                                      const newOptions = [...currentOptions];
-                                      newOptions[idx] = e.target.value;
-                                      setTranslationData({
-                                        ...translationData,
-                                        [activeLanguage]: {
-                                          ...translationData[activeLanguage],
-                                          options: newOptions
-                                        }
-                                      });
-                                    }
-                                  }}
-                                  placeholder={`Option ${idx + 1} in ${activeLanguage}...`}
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue"
-                                  disabled={activeLanguage === "EN"}
-                                />
+                                <div className="flex-1">
+                                  {activeLanguage === "EN" ? (
+                                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                                      <div 
+                                        className="text-sm text-gray-700 prose prose-sm max-w-none"
+                                        dangerouslySetInnerHTML={{ __html: selectedQuestionForTranslation.formattedOptions?.[idx] || option }}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <RichTextEditor
+                                      value={translationData[activeLanguage]?.options?.[idx] || selectedQuestionForTranslation.translations?.[activeLanguage]?.options?.[idx] || ""}
+                                      onChange={(value) => {
+                                        const currentOptions = translationData[activeLanguage]?.options || [];
+                                        const newOptions = [...currentOptions];
+                                        newOptions[idx] = value;
+                                        setTranslationData({
+                                          ...translationData,
+                                          [activeLanguage]: {
+                                            ...translationData[activeLanguage],
+                                            options: newOptions
+                                          }
+                                        });
+                                      }}
+                                      placeholder={`Option ${idx + 1} in ${activeLanguage}... (supports bold, italic, links)`}
+                                      minHeight="50px"
+                                      showToolbar={true}
+                                    />
+                                  )}
+                                </div>
                               </div>
                             )
                           )}
@@ -6633,29 +6644,33 @@ export default function ViewQuestionnairePage() {
                               )}
                             </div>
                           ) : (
-                            /* Regular textarea for other question types */
-                            <textarea
-                              value={
-                                lang === "EN" 
-                                  ? selectedQuestionForTranslation.question 
-                                  : (translationData[lang]?.question || selectedQuestionForTranslation.translations?.[lang]?.question || "")
-                              }
-                              onChange={(e) => {
-                                if (lang !== "EN") {
-                                  setTranslationData({
-                                    ...translationData,
-                                    [lang]: {
-                                      ...translationData[lang],
-                                      question: e.target.value
-                                    }
-                                  });
+                            /* Rich Text Editor for Question Text */
+                            <div className={lang === "EN" ? "opacity-60 pointer-events-none" : ""}>
+                              <RichTextEditor
+                                value={
+                                  lang === "EN"
+                                    ? (selectedQuestionForTranslation.formattedQuestion || selectedQuestionForTranslation.question || "")
+                                    : (translationData[lang]?.formattedQuestion || selectedQuestionForTranslation.translations?.[lang]?.formattedQuestion || translationData[lang]?.question || selectedQuestionForTranslation.translations?.[lang]?.question || "")
                                 }
-                              }}
-                              rows={3}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent bg-white"
-                              placeholder={`Enter question in ${lang}...`}
-                              disabled={lang === "EN"}
-                            />
+                                onChange={(value) => {
+                                  if (lang !== "EN") {
+                                    setTranslationData({
+                                      ...translationData,
+                                      [lang]: {
+                                        ...translationData[lang],
+                                        formattedQuestion: value,
+                                        question: value.replace(/<[^>]*>/g, '').substring(0, 255)
+                                      }
+                                    });
+                                  }
+                                }}
+                                placeholder={`Enter question in ${lang}...`}
+                                minHeight="100px"
+                              />
+                              {lang === "EN" && (
+                                <p className="text-xs text-gray-500 mt-1">Edit in main builder</p>
+                              )}
+                            </div>
                           )}
                         </div>
 

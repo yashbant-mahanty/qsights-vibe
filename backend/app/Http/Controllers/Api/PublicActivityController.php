@@ -1343,15 +1343,32 @@ class PublicActivityController extends Controller
         $questionId = $validated['question_id'];
         $answer = $validated['answer'];
 
-        // Handle anonymous participants
+        // Handle anonymous participants - still save their answers for aggregation
         $isAnonymous = is_string($participantId) && str_starts_with($participantId, 'anon_');
         
-        if (!$isAnonymous) {
-            // Get or create response for this participant
+        // Get or create response for this participant (including anonymous)
+        if ($isAnonymous) {
+            // For anonymous users, look up by guest_identifier
+            $response = Response::where('activity_id', $activityId)
+                ->where('guest_identifier', $participantId)
+                ->first();
+            
+            if (!$response) {
+                $response = Response::create([
+                    'id' => \Illuminate\Support\Str::uuid(),
+                    'activity_id' => $activityId,
+                    'participant_id' => null,
+                    'guest_identifier' => $participantId,
+                    'status' => 'in_progress',
+                    'started_at' => now(),
+                ]);
+            }
+        } else {
+            // For registered users, look up by participant_id
             $response = Response::where('activity_id', $activityId)
                 ->where('participant_id', $participantId)
                 ->first();
-
+            
             if (!$response) {
                 $response = Response::create([
                     'id' => \Illuminate\Support\Str::uuid(),
@@ -1361,27 +1378,28 @@ class PublicActivityController extends Controller
                     'started_at' => now(),
                 ]);
             }
+        }
 
-            // Upsert the answer for this question
-            try {
-                \DB::table('answers')->updateOrInsert(
-                    [
-                        'response_id' => $response->id,
-                        'question_id' => $questionId,
-                    ],
-                    [
-                        'answer_value' => is_array($answer) ? json_encode($answer) : $answer,
-                        'updated_at' => now(),
-                        'created_at' => now(),
-                    ]
-                );
-            } catch (\Exception $e) {
-                \Log::warning('Failed to save poll answer', [
-                    'error' => $e->getMessage(),
+        // Upsert the answer for this question
+        try {
+            \DB::table('answers')->updateOrInsert(
+                [
                     'response_id' => $response->id,
                     'question_id' => $questionId,
-                ]);
-            }
+                ],
+                [
+                    'value' => is_array($answer) ? null : $answer,
+                    'value_array' => is_array($answer) ? json_encode($answer) : null,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+        } catch (\Exception $e) {
+            \Log::warning('Failed to save poll answer', [
+                'error' => $e->getMessage(),
+                'response_id' => $response->id,
+                'question_id' => $questionId,
+            ]);
         }
 
         // Get the question to understand options
@@ -1404,8 +1422,11 @@ class PublicActivityController extends Controller
             ->join('responses', 'answers.response_id', '=', 'responses.id')
             ->where('responses.activity_id', $activityId)
             ->where('answers.question_id', $questionId)
-            ->select('answers.answer_value', \DB::raw('COUNT(*) as count'))
-            ->groupBy('answers.answer_value')
+            ->select(
+                \DB::raw('COALESCE(answers.value, answers.value_array::text) as answer_value'),
+                \DB::raw('COUNT(*) as count')
+            )
+            ->groupBy(\DB::raw('COALESCE(answers.value, answers.value_array::text)'))
             ->get();
 
         // Build results based on question type
@@ -1464,5 +1485,119 @@ class PublicActivityController extends Controller
                 'question_id' => $questionId,
             ]
         ]);
+    }
+
+    /**
+     * Get current poll results without submitting
+     * Used when user revisits a submitted poll question
+     */
+    public function getPollResults(Request $request, $activityId, $questionId)
+    {
+        try {
+            // Validate UUID format
+            if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $activityId)) {
+                return response()->json(['error' => 'Activity not found'], 404);
+            }
+            
+            $activity = Activity::with(['questionnaire.sections.questions'])->find($activityId);
+        
+        if (!$activity) {
+            return response()->json(['error' => 'Activity not found'], 404);
+        }
+
+        // Get the question to understand options
+        $question = null;
+        foreach ($activity->questionnaire->sections as $section) {
+            foreach ($section->questions as $q) {
+                if ($q->id == $questionId) {
+                    $question = $q;
+                    break 2;
+                }
+            }
+        }
+
+        if (!$question) {
+            return response()->json(['error' => 'Question not found'], 404);
+        }
+
+        // Aggregate all answers for this question across all responses for this activity
+        $answerCounts = \DB::table('answers')
+            ->join('responses', 'answers.response_id', '=', 'responses.id')
+            ->where('responses.activity_id', $activityId)
+            ->where('answers.question_id', $questionId)
+            ->select(
+                \DB::raw('COALESCE(answers.value, answers.value_array::text) as answer_value'),
+                \DB::raw('COUNT(*) as count')
+            )
+            ->groupBy(\DB::raw('COALESCE(answers.value, answers.value_array::text)'))
+            ->get();
+
+        // Build results based on question type
+        $results = [];
+        $totalVotes = $answerCounts->sum('count');
+
+        // Get options based on question type
+        if ($question->type === 'rating') {
+            $maxRating = $question->settings['scale'] ?? $question->max_value ?? 5;
+            $options = array_map(fn($i) => (string)$i, range(1, $maxRating));
+        } else {
+            // Multiple choice, single choice, checkbox, etc.
+            $options = collect($question->options ?? [])->map(function ($opt) {
+                return is_array($opt) ? ($opt['value'] ?? $opt['text'] ?? $opt['label'] ?? $opt) : $opt;
+            })->toArray();
+        }
+
+        // Build results for each option
+        foreach ($options as $option) {
+            $optionStr = (string)$option;
+            $count = 0;
+            
+            foreach ($answerCounts as $row) {
+                $storedValue = $row->answer_value;
+                // Handle JSON encoded arrays
+                if (str_starts_with($storedValue, '[') || str_starts_with($storedValue, '{')) {
+                    $decoded = json_decode($storedValue, true);
+                    if (is_array($decoded)) {
+                        if (in_array($optionStr, $decoded) || in_array($option, $decoded)) {
+                            $count += $row->count;
+                        }
+                    }
+                } else {
+                    if ((string)$storedValue === $optionStr) {
+                        $count += $row->count;
+                    }
+                }
+            }
+
+            $percentage = $totalVotes > 0 ? ($count / $totalVotes) * 100 : 0;
+            $results[] = [
+                'option' => $optionStr,
+                'count' => $count,
+                'percentage' => round($percentage, 1),
+            ];
+        }
+
+        // Sort by percentage descending
+        usort($results, fn($a, $b) => $b['percentage'] <=> $a['percentage']);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'results' => $results,
+                'total_votes' => $totalVotes,
+                'question_id' => $questionId,
+            ]
+        ]);
+        } catch (\Exception $e) {
+            \Log::error('getPollResults error: ' . $e->getMessage(), [
+                'activityId' => $activityId,
+                'questionId' => $questionId,
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to fetch poll results: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

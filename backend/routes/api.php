@@ -400,6 +400,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/activities/{id}/export', [App\Http\Controllers\Api\ExportController::class, 'exportActivityResults']);
     });
     
+    // Live Question Activation (Poll events only) - Super Admin, Program Admin, Manager, Moderator
+    Route::middleware(['role:super-admin,admin,program-admin,program-manager,program-moderator'])->group(function () {
+        Route::get('/activities/{id}/live-questions', [ActivityController::class, 'getLiveQuestions']);
+        Route::post('/activities/{id}/live-questions/{questionId}/activate', [ActivityController::class, 'activateLiveQuestion']);
+        Route::post('/activities/{id}/live-questions/{questionId}/deactivate', [ActivityController::class, 'deactivateLiveQuestion']);
+        Route::patch('/activities/{id}/live-questions/{questionId}/timer', [ActivityController::class, 'updateLiveQuestionTimer']);
+        Route::post('/activities/{id}/live-questions/deactivate-all', [ActivityController::class, 'deactivateAllLiveQuestions']);
+    });
+    
     // Activity delete - program-manager CANNOT delete (only super-admin, admin, group-head, program-admin)
     Route::middleware(['role:super-admin,admin,group-head,program-admin'])->group(function () {
         Route::delete('/activities/{id}', [ActivityController::class, 'destroy']);
@@ -510,6 +519,7 @@ Route::prefix('public')->group(function () {
     Route::get('activities/{id}/load-progress/{participantId}', [App\Http\Controllers\Api\PublicActivityController::class, 'loadProgress']);
     Route::post('activities/{id}/submit', [App\Http\Controllers\Api\PublicActivityController::class, 'submitResponse']);
     Route::post('activities/{id}/poll-answer', [App\Http\Controllers\Api\PublicActivityController::class, 'pollAnswer']);
+    Route::get('activities/{id}/poll-results/{questionId}', [App\Http\Controllers\Api\PublicActivityController::class, 'getPollResults']);
     Route::get('questionnaires/{id}', [App\Http\Controllers\Api\PublicQuestionnaireController::class, 'show']);
     Route::post('activities/validate-link-token', [App\Http\Controllers\Api\ActivityController::class, 'validateLinkToken']);
     Route::get('questionnaire/{id}', [App\Http\Controllers\Api\PublicQuestionnaireController::class, 'show']); // Singular alias for compatibility
@@ -523,6 +533,9 @@ Route::prefix('public')->group(function () {
     Route::get('access-tokens/{token}/validate', [App\Http\Controllers\Api\PublicActivityController::class, 'validateAccessToken']);
     Route::post('access-tokens/{token}/mark-used', [App\Http\Controllers\Api\PublicActivityController::class, 'markTokenAsUsed']);
 });
+
+// Public endpoint for participants to get active question (for live polling) - NO AUTH REQUIRED
+Route::get('/activities/{id}/active-question', [App\Http\Controllers\Api\ActivityController::class, 'getActiveQuestion']);
 
 // Email Notification routes
 Route::middleware('auth:sanctum')->group(function () {
