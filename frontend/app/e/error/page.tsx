@@ -6,7 +6,38 @@ import { Suspense } from 'react';
 
 function ErrorContent() {
   const searchParams = useSearchParams();
-  const message = searchParams.get('message') || 'Something went wrong. Please try again.';
+  const message = searchParams.get('message');
+  const reason = searchParams.get('reason');
+
+  // Get appropriate message based on reason code
+  const getErrorMessage = () => {
+    if (message) return decodeURIComponent(message);
+    
+    switch (reason) {
+      case 'link_not_found':
+        return 'The link you are trying to access does not exist or has been deactivated.';
+      case 'invalid_link':
+        return 'This link appears to be invalid. Please check the URL and try again.';
+      case 'redirect_failed':
+        return 'We were unable to redirect you to the destination. Please try again later.';
+      case 'invalid_response':
+        return 'Received an unexpected response from the server. Please try again.';
+      default:
+        return 'Something went wrong. Please try again.';
+    }
+  };
+
+  // Get appropriate title based on reason
+  const getErrorTitle = () => {
+    switch (reason) {
+      case 'link_not_found':
+        return 'Link Not Found';
+      case 'invalid_link':
+        return 'Invalid Link';
+      default:
+        return 'Oops!';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 flex items-center justify-center p-4">
@@ -21,12 +52,12 @@ function ErrorContent() {
 
           {/* Title */}
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Oops!
+            {getErrorTitle()}
           </h1>
 
           {/* Message */}
           <p className="text-lg text-gray-600 mb-6">
-            {decodeURIComponent(message)}
+            {getErrorMessage()}
           </p>
 
           {/* Common Issues */}
@@ -35,7 +66,8 @@ function ErrorContent() {
               Common reasons:
             </p>
             <ul className="text-sm text-orange-700 space-y-1 list-disc list-inside">
-              <li>The survey link has expired</li>
+              <li>The link has expired or been deactivated</li>
+              <li>The short URL does not exist</li>
               <li>You've already submitted this survey</li>
               <li>The survey is no longer active</li>
             </ul>

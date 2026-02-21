@@ -186,6 +186,16 @@ export interface Questionnaire {
   guest_responses_count?: number;
 }
 
+export interface ShortLinkData {
+  id: string;
+  slug: string;
+  short_url: string;
+  original_url: string;
+  is_active: boolean;
+  click_count: number;
+  created_at: string;
+}
+
 export interface Activity {
   id: string;
   organization_id: string;
@@ -1043,6 +1053,74 @@ export const activitiesApi = {
     }
 
     const data = await response.json();
+    return data;
+  },
+
+  // Short Links API
+  async getShortLinks(activityId: string): Promise<{
+    data: {
+      registration: ShortLinkData | null;
+      preview: ShortLinkData | null;
+      anonymous: ShortLinkData | null;
+    };
+    base_url: string;
+    max_length: number;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/short-links`);
+    return data;
+  },
+
+  async createOrUpdateShortLink(activityId: string, payload: {
+    link_type: 'registration' | 'preview' | 'anonymous';
+    slug?: string;
+    original_url: string;
+    auto_generate?: boolean;
+  }): Promise<{
+    status: string;
+    message: string;
+    data: ShortLinkData;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/short-links`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return data;
+  },
+
+  async checkSlugAvailability(slug: string, excludeId?: string): Promise<{
+    available: boolean;
+    valid: boolean;
+    message: string;
+    sanitized_slug: string;
+    short_url?: string;
+    current_length?: number;
+    max_length?: number;
+  }> {
+    const data = await fetchWithAuth('/short-links/check-availability', {
+      method: 'POST',
+      body: JSON.stringify({ slug, exclude_id: excludeId }),
+    });
+    return data;
+  },
+
+  async deleteShortLink(activityId: string, linkType: 'registration' | 'preview' | 'anonymous'): Promise<{
+    status: string;
+    message: string;
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/short-links/${linkType}`, {
+      method: 'DELETE',
+    });
+    return data;
+  },
+
+  async suggestSlug(activityId: string): Promise<{
+    status: string;
+    data: {
+      suggested_slug: string;
+      short_url: string;
+    };
+  }> {
+    const data = await fetchWithAuth(`/activities/${activityId}/short-links/suggest-slug`);
     return data;
   },
 

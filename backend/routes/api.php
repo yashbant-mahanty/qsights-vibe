@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\QuestionnaireImportController;
 use App\Http\Controllers\Api\SendGridWebhookController;
 use App\Http\Controllers\Api\HierarchyController;
+use App\Http\Controllers\Api\ShortLinkController;
 
 // Public Authentication Routes
 Route::post('/auth/validate-email', [AuthController::class, 'validateEmail']);
@@ -33,6 +34,9 @@ Route::get('/public/email-response', [App\Http\Controllers\Api\Public\EmailRespo
 // Generated Link Validation (Public - No Auth Required for participants)
 Route::get('/public/generated-link/validate/{token}', [App\Http\Controllers\Api\Public\GeneratedLinkValidationController::class, 'validate']);
 Route::post('/public/generated-link/mark-used', [App\Http\Controllers\Api\Public\GeneratedLinkValidationController::class, 'markAsUsed']);
+
+// Short Link Redirect (Public - No Auth Required)
+Route::get('/public/short-link/{slug}', [ShortLinkController::class, 'redirectApi']);
 
 // Manager Review Public Routes (No Auth Required - Token-based access)
 Route::prefix('manager/review')->group(function () {
@@ -370,6 +374,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::delete('/{linkId}', [App\Http\Controllers\Api\GeneratedEventLinkController::class, 'destroy']);
         });
     });
+
+    // Short Links (Custom URL slugs for event links)
+    Route::prefix('activities/{id}/short-links')->group(function () {
+        Route::get('/', [ShortLinkController::class, 'getActivityShortLinks']);
+        Route::get('/suggest-slug', [ShortLinkController::class, 'suggestSlug']);
+        Route::post('/', [ShortLinkController::class, 'createOrUpdate']);
+        Route::delete('/{linkType}', [ShortLinkController::class, 'delete']);
+    });
+    Route::post('/short-links/check-availability', [ShortLinkController::class, 'checkSlugAvailability']);
     
     // Admin and Program roles can manage activities
     Route::middleware(['role:super-admin,admin,group-head,program-admin,program-manager'])->group(function () {

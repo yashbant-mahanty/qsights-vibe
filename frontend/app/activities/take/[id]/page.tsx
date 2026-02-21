@@ -3136,6 +3136,19 @@ export default function TakeActivityPage() {
           });
           return false;
         }
+        
+        // Validate comment questions with minLength
+        if (question.type === 'comment' && question.settings?.minLength && answer) {
+          const answerLength = String(answer).length;
+          if (answerLength < question.settings.minLength) {
+            toast({
+              title: "Response Too Short",
+              description: `Please enter at least ${question.settings.minLength} characters (${question.settings.minLength - answerLength} more needed).`,
+              variant: "warning"
+            });
+            return false;
+          }
+        }
       }
       
       return true;
@@ -3195,6 +3208,20 @@ export default function TakeActivityPage() {
             variant: "warning"
           });
           return false;
+        }
+        
+        // Validate comment questions with minLength
+        if (question.type === 'comment' && question.settings?.minLength && answer) {
+          const answerLength = String(answer).length;
+          if (answerLength < question.settings.minLength) {
+            scrollToAndHighlightQuestion(question.id);
+            toast({
+              title: "Response Too Short",
+              description: `Please enter at least ${question.settings.minLength} characters for "${question.title}".`,
+              variant: "warning"
+            });
+            return false;
+          }
         }
         
         // Validate percentage_allocation questions - total must equal 100%
@@ -3266,6 +3293,20 @@ export default function TakeActivityPage() {
               variant: "warning"
             });
             return false;
+          }
+          
+          // Validate comment questions with minLength
+          if (question.type === 'comment' && question.settings?.minLength && answer) {
+            const answerLength = String(answer).length;
+            if (answerLength < question.settings.minLength) {
+              scrollToAndHighlightQuestion(question.id);
+              toast({
+                title: "Response Too Short",
+                description: `Please enter at least ${question.settings.minLength} characters for "${question.title}" before submitting.`,
+                variant: "warning"
+              });
+              return false;
+            }
           }
           
           // Validate percentage_allocation questions - total must equal 100%
@@ -3746,6 +3787,63 @@ export default function TakeActivityPage() {
           />
         );
 
+      case "comment": {
+        // Comment Box - Multi-line text with character limits and configurable rows
+        const commentSettings = question.settings || {};
+        const translatedCommentPlaceholder = getTranslatedText(question, 'placeholder') as string;
+        const commentPlaceholder = translatedCommentPlaceholder || commentSettings.placeholder || "Enter your detailed response...";
+        const commentRows = commentSettings.rows || 4;
+        const commentMinLength = commentSettings.minLength;
+        const commentMaxLength = commentSettings.maxLength;
+        const currentLength = (responses[questionId] || '').length;
+        
+        // Validation state
+        const isTooShort = commentMinLength && currentLength > 0 && currentLength < commentMinLength;
+        const isTooLong = commentMaxLength && currentLength > commentMaxLength;
+        
+        return (
+          <div className="space-y-2">
+            <textarea
+              rows={commentRows}
+              placeholder={commentPlaceholder}
+              value={responses[questionId] || ""}
+              onChange={(e) => {
+                const value = e.target.value;
+                // If max length set, prevent typing beyond it
+                if (commentMaxLength && value.length > commentMaxLength) {
+                  return;
+                }
+                handleResponseChange(questionId, value);
+              }}
+              className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed resize-y ${
+                isTooShort || isTooLong ? 'border-red-300' : 'border-gray-300'
+              }`}
+              disabled={isSubmitted}
+            />
+            {/* Character count and limits info */}
+            <div className="flex justify-between text-xs">
+              <span className={`${isTooShort ? 'text-red-500' : 'text-gray-500'}`}>
+                {commentMinLength && commentMaxLength
+                  ? `${commentMinLength} - ${commentMaxLength} characters required`
+                  : commentMinLength
+                  ? `Minimum ${commentMinLength} characters required`
+                  : commentMaxLength
+                  ? `Maximum ${commentMaxLength} characters`
+                  : ''}
+              </span>
+              <span className={`${isTooShort || isTooLong ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
+                {currentLength}{commentMaxLength ? ` / ${commentMaxLength}` : ''} characters
+              </span>
+            </div>
+            {isTooShort && (
+              <p className="text-xs text-red-500">
+                Please enter at least {commentMinLength} characters ({commentMinLength - currentLength} more needed)
+              </p>
+            )}
+          </div>
+        );
+      }
+
       case "single_choice":
       case "radio":
       case "multiple_choice_single":
@@ -3761,6 +3859,10 @@ export default function TakeActivityPage() {
         const showPollResults = isPollSubmitted || isTimerExpiredForQuestion;
         const questionResults = pollResults[questionId];
         const totalVotes = questionResults?.reduce((sum, r) => sum + r.count, 0) || 0;
+        
+        // CRITICAL FIX: Get original English options for storing responses (for conditional logic to work)
+        // Translations are ONLY for display - we always store the English/original value
+        const originalSingleOptions = question.options || [];
         const translatedSingleOptions = getTranslatedText(question, 'options') as string[];
         
         console.log('[POLL RESULTS DEBUG] Rendering single choice - Poll Results:', {
@@ -3788,19 +3890,30 @@ export default function TakeActivityPage() {
             )}
             
             {translatedSingleOptions?.map((option: any, index: number) => {
-              const optionValue = typeof option === 'string' ? option : (option.value || option.text || option.label || option);
-              const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
-              const isSelected = responses[questionId] === optionValue;
+              // CRITICAL FIX: Use original (English) option value for storing response
+              // This ensures conditional logic works regardless of display language
+              const originalOptionAtIndex = originalSingleOptions[index];
+              const optionValueToStore = originalOptionAtIndex 
+                ? (typeof originalOptionAtIndex === 'string' 
+                    ? originalOptionAtIndex 
+                    : (originalOptionAtIndex.value || originalOptionAtIndex.text || originalOptionAtIndex.label || originalOptionAtIndex))
+                : (typeof option === 'string' ? option : (option.value || option.text || option.label || option)); // Fallback to translated if no original
               
-              // Find result for this option if poll results available
-              const optionResult = questionResults?.find(r => r.option === optionValue);
+              // Use translated option text for display only
+              const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
+              
+              // Check selection using the stored original value
+              const isSelected = responses[questionId] === optionValueToStore;
+              
+              // Find result for this option if poll results available (use original value)
+              const optionResult = questionResults?.find(r => r.option === optionValueToStore);
               const percentage = optionResult?.percentage || 0;
               const voteCount = optionResult?.count || 0;
               
               return (
                 <div
                   key={index}
-                  onClick={() => !isSubmitted && !showPollResults && handleResponseChange(questionId, optionValue)}
+                  onClick={() => !isSubmitted && !showPollResults && handleResponseChange(questionId, optionValueToStore)}
                   className={`relative overflow-hidden flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
                     (isSubmitted || showPollResults) ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
                   } ${
@@ -4006,6 +4119,8 @@ export default function TakeActivityPage() {
       case "checkbox":
       case "multiselect":
       case "multiple_choice_multiple":
+        // CRITICAL FIX: Get original English options for storing responses (for conditional logic to work)
+        const originalMultiOptions = question.options || [];
         const translatedMultiOptions = getTranslatedText(question, 'options') as string[];
         const selectedCount = (responses[questionId] || []).length;
         const hasMinSelection = question.min_selection && question.min_selection > 0;
@@ -4049,20 +4164,30 @@ export default function TakeActivityPage() {
             )}
             
             {translatedMultiOptions?.map((option: any, index: number) => {
-              const optionValue = typeof option === 'string' ? option : (option.value || option.text || option.label || option);
+              // CRITICAL FIX: Use original (English) option value for storing response
+              const originalOptionAtIndex = originalMultiOptions[index];
+              const optionValueToStore = originalOptionAtIndex 
+                ? (typeof originalOptionAtIndex === 'string' 
+                    ? originalOptionAtIndex 
+                    : (originalOptionAtIndex.value || originalOptionAtIndex.text || originalOptionAtIndex.label || originalOptionAtIndex))
+                : (typeof option === 'string' ? option : (option.value || option.text || option.label || option));
+              
+              // Use translated option text for display only
               const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
-              const isSelected = (responses[questionId] || []).includes(optionValue);
+              
+              // Check selection using stored original values
+              const isSelected = (responses[questionId] || []).includes(optionValueToStore);
               const isMaxReached = hasMaxSelection && selectedCount >= question.max_selection && !isSelected;
               
-              // Poll results for this option
-              const optionResult_multi = questionResults_multi?.find(r => r.option === optionValue);
+              // Poll results for this option (use original value)
+              const optionResult_multi = questionResults_multi?.find(r => r.option === optionValueToStore);
               const percentage_multi = optionResult_multi?.percentage || 0;
               const voteCount_multi = optionResult_multi?.count || 0;
               
               return (
                 <div
                   key={index}
-                  onClick={() => !isSubmitted && !isMaxReached && !showPollResults_multi && handleMultipleChoiceToggle(questionId, optionValue)}
+                  onClick={() => !isSubmitted && !isMaxReached && !showPollResults_multi && handleMultipleChoiceToggle(questionId, optionValueToStore)}
                   className={`relative overflow-hidden flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
                     isSubmitted || isMaxReached || showPollResults_multi ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
                   } ${
@@ -4370,6 +4495,8 @@ export default function TakeActivityPage() {
 
       case "dropdown":
       case "select":
+        // CRITICAL FIX: Get original English options for storing responses (for conditional logic)
+        const originalDropdownOptions = question.options || [];
         const translatedDropdownOptions = getTranslatedText(question, 'options') as string[];
         return (
           <select
@@ -4380,10 +4507,16 @@ export default function TakeActivityPage() {
           >
             <option value="">Select an option...</option>
             {translatedDropdownOptions?.map((option: any, index: number) => {
-              const optionValue = typeof option === 'string' ? option : (option.value || option.text);
+              // Use original option value for storing, translated for display
+              const originalOptionAtIndex = originalDropdownOptions[index];
+              const optionValueToStore = originalOptionAtIndex
+                ? (typeof originalOptionAtIndex === 'string' 
+                    ? originalOptionAtIndex 
+                    : (originalOptionAtIndex.value || originalOptionAtIndex.text))
+                : (typeof option === 'string' ? option : (option.value || option.text));
               const optionLabel = typeof option === 'string' ? option : (option.text || option.label);
               return (
-                <option key={index} value={optionValue}>
+                <option key={index} value={optionValueToStore}>
                   {optionLabel}
                 </option>
               );
@@ -4622,18 +4755,26 @@ export default function TakeActivityPage() {
         
         if (sctChoiceType === 'multi') {
           // Multi-select: render as checkboxes
+          // CRITICAL FIX: Get original options for storing
+          const originalSCTOptions = question.options || sctOptions;
           const rawOptions = getTranslatedText(question, 'options') as string[];
           const translatedSCTOptions = (rawOptions && rawOptions.length > 0) ? rawOptions : sctOptions;
           return (
             <div className="space-y-3">
                {translatedSCTOptions?.map((option: any, index: number) => {
-                const optionValue = typeof option === 'string' ? option : (option.value || option.text || option.label || option);
+                // Use original option value for storing
+                const originalOptionAtIndex = originalSCTOptions[index];
+                const optionValueToStore = originalOptionAtIndex
+                  ? (typeof originalOptionAtIndex === 'string' 
+                      ? originalOptionAtIndex 
+                      : (originalOptionAtIndex.value || originalOptionAtIndex.text || originalOptionAtIndex.label || originalOptionAtIndex))
+                  : (typeof option === 'string' ? option : (option.value || option.text || option.label || option));
                 const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
-                const isSelected = (responses[questionId] || []).includes(optionValue);
+                const isSelected = (responses[questionId] || []).includes(optionValueToStore);
                 return (
                   <div
                     key={index}
-                    onClick={() => !isSubmitted && handleMultipleChoiceToggle(questionId, optionValue)}
+                    onClick={() => !isSubmitted && handleMultipleChoiceToggle(questionId, optionValueToStore)}
                     className={`flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
                       isSubmitted ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
                     } ${
@@ -4654,19 +4795,27 @@ export default function TakeActivityPage() {
           );
         } else {
           // Single choice: render as radio buttons
+          // CRITICAL FIX: Get original options for storing
+          const originalSCTSingleOptions = question.options || sctOptions;
           const rawOptions = getTranslatedText(question, 'options') as string[];
           const translatedSCTOptions = (rawOptions && rawOptions.length > 0) ? rawOptions : sctOptions;
           return (
             <div className="space-y-3">
               {translatedSCTOptions?.map((option: any, index: number) => {
-                const optionValue = typeof option === 'string' ? option : (option.value || option.text || option.label || option);
+                // Use original option value for storing
+                const originalOptionAtIndex = originalSCTSingleOptions[index];
+                const optionValueToStore = originalOptionAtIndex
+                  ? (typeof originalOptionAtIndex === 'string' 
+                      ? originalOptionAtIndex 
+                      : (originalOptionAtIndex.value || originalOptionAtIndex.text || originalOptionAtIndex.label || originalOptionAtIndex))
+                  : (typeof option === 'string' ? option : (option.value || option.text || option.label || option));
                 const optionLabel = typeof option === 'string' ? option : (option.label || option.text || option.value || option);
-                const isSelected = responses[questionId] === optionValue;
+                const isSelected = responses[questionId] === optionValueToStore;
                 
                 return (
                   <div
                     key={index}
-                    onClick={() => !isSubmitted && handleResponseChange(questionId, optionValue)}
+                    onClick={() => !isSubmitted && handleResponseChange(questionId, optionValueToStore)}
                     className={`flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
                       isSubmitted ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
                     } ${

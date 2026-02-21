@@ -52,6 +52,7 @@ import {
   BookOpen,
   ExternalLink,
   PieChart,
+  MessageSquare,
 } from "lucide-react";
 import { questionnairesApi, programsApi, type Program, fetchWithAuth } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -199,6 +200,7 @@ export default function ViewQuestionnairePage() {
     { id: "mcq", label: "Multiple Choice", icon: CheckSquare, color: "text-blue-600" },
     { id: "multi", label: "Multi-Select", icon: List, color: "text-qsights-cyan" },
     { id: "text", label: "Text Input", icon: Type, color: "text-green-600" },
+    { id: "comment", label: "Comment Box", icon: MessageSquare, color: "text-indigo-600" },
     { id: "slider", label: "Slider", icon: Sliders, color: "text-orange-600" },
     { id: "rating", label: "Rating", icon: Star, color: "text-yellow-600" },
     { id: "matrix", label: "Matrix", icon: LayoutGrid, color: "text-pink-600" },
@@ -606,6 +608,7 @@ export default function ViewQuestionnairePage() {
         ...(type === "star_rating" ? { settings: { ...DEFAULT_SETTINGS.star_rating } } : {}),
         ...(type === "drag_and_drop" ? { settings: { ...DEFAULT_SETTINGS.drag_and_drop } } : {}),
         ...(type === "video" ? { settings: { videoUrl: "", videoThumbnailUrl: "", videoDurationSeconds: 0, isMandatoryWatch: false, videoPlayMode: "inline" } } : {}),
+        ...(type === "comment" ? { settings: { placeholder: "Enter your detailed response...", minLength: null, maxLength: null, rows: 4 } } : {}),
       };
 
       setSections(prevSections =>
@@ -5646,6 +5649,175 @@ export default function ViewQuestionnairePage() {
                 <span>Participants must allocate percentages that total exactly 100%.</span>
               </p>
             </div>
+          </div>
+        );
+      case "comment":
+        return (
+          <div className="py-4 space-y-4">
+            {!showPreview ? (
+              <div className="space-y-4">
+                {/* Placeholder Text */}
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-2">Placeholder Text</label>
+                  <IsolatedTextInput
+                    value={question.settings?.placeholder || ''}
+                    onValueChange={(newValue: string) => {
+                      setSections((prevSections: any) =>
+                        prevSections.map((s: any) =>
+                          s.id === sectionId
+                            ? {
+                                ...s,
+                                questions: s.questions.map((q: any) =>
+                                  q.id === question.id ? { 
+                                    ...q, 
+                                    settings: { 
+                                      ...q.settings, 
+                                      placeholder: newValue 
+                                    } 
+                                  } : q
+                                )
+                              }
+                            : s
+                        )
+                      );
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter placeholder text for respondents..."
+                  />
+                </div>
+
+                {/* Character Limits */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-2">Min Characters</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10000"
+                      value={question.settings?.minLength || ''}
+                      onChange={(e) => {
+                        setSections((prevSections: any) =>
+                          prevSections.map((s: any) =>
+                            s.id === sectionId
+                              ? {
+                                  ...s,
+                                  questions: s.questions.map((q: any) =>
+                                    q.id === question.id ? { 
+                                      ...q, 
+                                      settings: { 
+                                        ...q.settings, 
+                                        minLength: e.target.value ? parseInt(e.target.value) : null 
+                                      } 
+                                    } : q
+                                  )
+                                }
+                              : s
+                          )
+                        );
+                      }}
+                      placeholder="No minimum"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 block mb-2">Max Characters</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={question.settings?.maxLength || ''}
+                      onChange={(e) => {
+                        setSections((prevSections: any) =>
+                          prevSections.map((s: any) =>
+                            s.id === sectionId
+                              ? {
+                                  ...s,
+                                  questions: s.questions.map((q: any) =>
+                                    q.id === question.id ? { 
+                                      ...q, 
+                                      settings: { 
+                                        ...q.settings, 
+                                        maxLength: e.target.value ? parseInt(e.target.value) : null 
+                                      } 
+                                    } : q
+                                  )
+                                }
+                              : s
+                          )
+                        );
+                      }}
+                      placeholder="No maximum"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Rows Configuration */}
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-2">Textarea Height (rows)</label>
+                  <input
+                    type="number"
+                    min="2"
+                    max="20"
+                    value={question.settings?.rows || 4}
+                    onChange={(e) => {
+                      setSections((prevSections: any) =>
+                        prevSections.map((s: any) =>
+                          s.id === sectionId
+                            ? {
+                                ...s,
+                                questions: s.questions.map((q: any) =>
+                                  q.id === question.id ? { 
+                                    ...q, 
+                                    settings: { 
+                                      ...q.settings, 
+                                      rows: e.target.value ? parseInt(e.target.value) : 4 
+                                    } 
+                                  } : q
+                                )
+                              }
+                            : s
+                        )
+                      );
+                    }}
+                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Number of visible text lines (default: 4)</p>
+                </div>
+
+                {/* Info Panel */}
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <MessageSquare className="w-4 h-4 text-indigo-600 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-indigo-900">Comment Box Question</p>
+                      <p className="text-xs text-indigo-700 mt-1">
+                        Allows respondents to enter multi-line text responses. Ideal for detailed feedback, explanations, or open-ended comments.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <textarea
+                  rows={question.settings?.rows || 4}
+                  placeholder={question.settings?.placeholder || "Enter your detailed response..."}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                  disabled
+                />
+                {(question.settings?.minLength || question.settings?.maxLength) && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {question.settings?.minLength && question.settings?.maxLength
+                      ? `${question.settings.minLength} - ${question.settings.maxLength} characters`
+                      : question.settings?.minLength
+                      ? `Minimum ${question.settings.minLength} characters`
+                      : `Maximum ${question.settings.maxLength} characters`
+                    }
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         );
       default:

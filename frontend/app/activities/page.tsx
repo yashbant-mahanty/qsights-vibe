@@ -40,6 +40,7 @@ import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import DuplicateConfirmationModal from "@/components/duplicate-confirmation-modal";
 import ResendApprovalModal from "@/components/resend-approval-modal";
 import QuestionActivationPanel from "@/components/question-activation-panel";
+import CopyEventLinksModal from "@/components/copy-event-links-modal";
 import { toast } from "@/components/ui/toast";
 import { QRCodeModal } from "@/components/ui/qr-code-modal";
 
@@ -62,6 +63,7 @@ export default function ActivitiesPage() {
   const [duplicateModal, setDuplicateModal] = useState<{ isOpen: boolean; activityId: string | null; activityName: string | null }>({ isOpen: false, activityId: null, activityName: null });
   const [resendModal, setResendModal] = useState<{ isOpen: boolean; approvalId: string | null; activityName: string | null; hasManagerReview: boolean }>({ isOpen: false, approvalId: null, activityName: null, hasManagerReview: false });
   const [linksDropdown, setLinksDropdown] = useState<{ activityId: string | null; links: any | null; loading: boolean }>({ activityId: null, links: null, loading: false });
+  const [copyLinksModal, setCopyLinksModal] = useState<{ isOpen: boolean; activityId: string; activityName: string; allowGuests: boolean; enableGeneratedLinks: boolean }>({ isOpen: false, activityId: '', activityName: '', allowGuests: false, enableGeneratedLinks: false });
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{ isOpen: boolean; url: string; title: string; subtitle: string; color: string }>({ isOpen: false, url: '', title: '', subtitle: '', color: 'blue' });
   const [questionActivationPanel, setQuestionActivationPanel] = useState<{ isOpen: boolean; activityId: string; activityName: string }>({ isOpen: false, activityId: '', activityName: '' });
@@ -291,20 +293,34 @@ export default function ActivitiesPage() {
     }
   };
 
-  const handleShowLinks = async (activityId: string) => {
-    if (linksDropdown.activityId === activityId) {
-      setLinksDropdown({ activityId: null, links: null, loading: false });
-      return;
-    }
+  const handleShowLinks = async (activityId: string, activityData?: any) => {
+    // Find the activity data if not passed
+    const activity = activityData || activities.find(a => a.id.toString() === activityId);
     
-    setLinksDropdown({ activityId, links: null, loading: true });
-    try {
-      const data = await activitiesApi.getActivityLinks(activityId);
-      setLinksDropdown({ activityId, links: data.links, loading: false });
-    } catch (err) {
-      console.error('Failed to fetch links:', err);
-      toast({ title: "Error", description: "Failed to fetch activity links", variant: "error" });
-      setLinksDropdown({ activityId: null, links: null, loading: false });
+    if (activity) {
+      setCopyLinksModal({
+        isOpen: true,
+        activityId: activityId,
+        activityName: activity.name || activity.title || '',
+        allowGuests: activity.allow_guests || activity.allowGuests || false,
+        enableGeneratedLinks: activity.enable_generated_links === true || activity.enable_generated_links === 'true' || activity.enable_generated_links === 1,
+      });
+    } else {
+      // Fallback to old behavior if activity not found
+      if (linksDropdown.activityId === activityId) {
+        setLinksDropdown({ activityId: null, links: null, loading: false });
+        return;
+      }
+      
+      setLinksDropdown({ activityId, links: null, loading: true });
+      try {
+        const data = await activitiesApi.getActivityLinks(activityId);
+        setLinksDropdown({ activityId, links: data.links, loading: false });
+      } catch (err) {
+        console.error('Failed to fetch links:', err);
+        toast({ title: "Error", description: "Failed to fetch activity links", variant: "error" });
+        setLinksDropdown({ activityId: null, links: null, loading: false });
+      }
     }
   };
 
@@ -1071,13 +1087,13 @@ export default function ActivitiesPage() {
                               onClick={(e) => { 
                                 e.stopPropagation(); 
                                 if (activity.status !== 'draft' && activity.status !== 'pending-approval') {
-                                  handleShowLinks(activity.id.toString()); 
+                                  handleShowLinks(activity.id.toString(), activity); 
                                 }
                               }}
                               className={`p-1.5 rounded transition-colors ${
                                 activity.status === 'draft' || activity.status === 'pending-approval'
                                   ? 'text-gray-300 cursor-not-allowed' 
-                                  : linksDropdown.activityId === activity.id.toString() 
+                                  : copyLinksModal.activityId === activity.id.toString() 
                                     ? 'bg-green-100 text-green-600' 
                                     : 'text-green-600 hover:bg-green-50'
                               }`}
@@ -1086,185 +1102,6 @@ export default function ActivitiesPage() {
                             >
                               <Link2 className="w-4 h-4" />
                             </button>
-                            {linksDropdown.activityId === activity.id.toString() && (
-                              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={(e) => { e.stopPropagation(); setLinksDropdown({ activityId: null, links: null, loading: false }); }}>
-                                <div className="bg-white rounded-xl shadow-2xl w-[420px] max-w-[90vw] links-dropdown-container" onClick={(e) => e.stopPropagation()}>
-                                  <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <Link2 className="w-5 h-5 text-qsights-blue" />
-                                      <p className="text-base font-semibold text-gray-900">Copy Event Links</p>
-                                    </div>
-                                    <button onClick={() => setLinksDropdown({ activityId: null, links: null, loading: false })} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
-                                      <XCircle className="w-5 h-5 text-gray-400" />
-                                    </button>
-                                  </div>
-                                {linksDropdown.loading ? (
-                                  <div className="p-8 text-center">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-qsights-blue mx-auto"></div>
-                                    <p className="mt-2 text-sm text-gray-500">Loading links...</p>
-                                  </div>
-                                ) : linksDropdown.links ? (
-                                  <div className="p-4 space-y-3">
-                                    {/* Registration Link */}
-                                    <div className="border border-gray-200 rounded-lg p-3 hover:border-blue-300 hover:bg-blue-50/50 transition-all">
-                                      <div className="flex items-start gap-3">
-                                        <div className="p-2 bg-blue-100 rounded-lg">
-                                          <UserPlus className="w-5 h-5 text-blue-600" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-semibold text-gray-900">Registration Link</p>
-                                          <p className="text-xs text-gray-500 mt-0.5">Participants must register before taking survey</p>
-                                          <div className="mt-2 flex items-center gap-2">
-                                            <input 
-                                              type="text" 
-                                              readOnly 
-                                              value={linksDropdown.links.registration.url} 
-                                              className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-gray-600 truncate"
-                                            />
-                                            <button
-                                              onClick={() => setQrModal({ isOpen: true, url: linksDropdown.links.registration.url, title: 'Registration QR', subtitle: 'Scan to register & take survey', color: 'blue' })}
-                                              className="p-1.5 rounded text-blue-600 hover:bg-blue-100 transition-colors"
-                                              title="View QR Code"
-                                            >
-                                              <QrCode className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                              onClick={() => copyToClipboard(linksDropdown.links.registration.url, 'Registration Link')}
-                                              className={`px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 ${
-                                                copiedLink === 'Registration Link' 
-                                                  ? 'bg-green-500 text-white' 
-                                                  : 'bg-blue-600 text-white hover:bg-blue-700'
-                                              }`}
-                                            >
-                                              {copiedLink === 'Registration Link' ? (
-                                                <><CheckCircle className="w-3.5 h-3.5" /> Copied!</>
-                                              ) : (
-                                                <><Copy className="w-3.5 h-3.5" /> Copy</>
-                                              )}
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {/* Preview Link */}
-                                    <div className="border border-gray-200 rounded-lg p-3 hover:border-purple-300 hover:bg-qsights-light/50 transition-all">
-                                      <div className="flex items-start gap-3">
-                                        <div className="p-2 bg-cyan-50 rounded-lg">
-                                          <Eye className="w-5 h-5 text-qsights-cyan" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-semibold text-gray-900">Preview Link</p>
-                                          <p className="text-xs text-gray-500 mt-0.5">For testing only - responses not saved</p>
-                                          <div className="mt-2 flex items-center gap-2">
-                                            <input 
-                                              type="text" 
-                                              readOnly 
-                                              value={linksDropdown.links.preview.url} 
-                                              className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-gray-600 truncate"
-                                            />
-                                            <button
-                                              onClick={() => setQrModal({ isOpen: true, url: linksDropdown.links.preview.url, title: 'Preview QR', subtitle: 'For testing only - responses not saved', color: 'purple' })}
-                                              className="p-1.5 rounded text-qsights-cyan hover:bg-cyan-50 transition-colors"
-                                              title="View QR Code"
-                                            >
-                                              <QrCode className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                              onClick={() => copyToClipboard(linksDropdown.links.preview.url, 'Preview Link')}
-                                              className={`px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 ${
-                                                copiedLink === 'Preview Link' 
-                                                  ? 'bg-green-500 text-white' 
-                                                  : 'bg-qsights-dark text-white hover:bg-qsights-dark/90'
-                                              }`}
-                                            >
-                                              {copiedLink === 'Preview Link' ? (
-                                                <><CheckCircle className="w-3.5 h-3.5" /> Copied!</>
-                                              ) : (
-                                                <><Copy className="w-3.5 h-3.5" /> Copy</>
-                                              )}
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {/* Anonymous Link - Only show if Allow Anonymous Access is enabled */}
-                                    {activity.allowGuests && (
-                                      <div className="border border-gray-200 rounded-lg p-3 hover:border-orange-300 hover:bg-orange-50/50 transition-all">
-                                        <div className="flex items-start gap-3">
-                                          <div className="p-2 bg-orange-100 rounded-lg">
-                                            <Users className="w-5 h-5 text-orange-600" />
-                                          </div>
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-semibold text-gray-900">Anonymous Link</p>
-                                            <p className="text-xs text-gray-500 mt-0.5">No registration required - anonymous responses</p>
-                                            <div className="mt-2 flex items-center gap-2">
-                                              <input 
-                                                type="text" 
-                                                readOnly 
-                                                value={linksDropdown.links.anonymous.url} 
-                                                className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-gray-600 truncate"
-                                              />
-                                              <button
-                                                onClick={() => setQrModal({ isOpen: true, url: linksDropdown.links.anonymous.url, title: 'Anonymous QR', subtitle: 'No registration required', color: 'orange' })}
-                                                className="p-1.5 rounded text-orange-600 hover:bg-orange-100 transition-colors"
-                                                title="View QR Code"
-                                              >
-                                                <QrCode className="w-4 h-4" />
-                                              </button>
-                                              <button
-                                                onClick={() => copyToClipboard(linksDropdown.links.anonymous.url, 'Anonymous Link')}
-                                                className={`px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 ${
-                                                  copiedLink === 'Anonymous Link' 
-                                                    ? 'bg-green-500 text-white' 
-                                                    : 'bg-orange-600 text-white hover:bg-orange-700'
-                                                }`}
-                                              >
-                                                {copiedLink === 'Anonymous Link' ? (
-                                                  <><CheckCircle className="w-3.5 h-3.5" /> Copied!</>
-                                                ) : (
-                                                  <><Copy className="w-3.5 h-3.5" /> Copy</>
-                                                )}
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {/* Generated Links Section */}
-                                    {activity.enable_generated_links === true && (
-                                      <div className="border border-purple-200 rounded-lg p-3 hover:border-purple-400 hover:bg-purple-50/50 transition-all">
-                                        <div className="flex items-start gap-3">
-                                          <div className="p-2 bg-purple-100 rounded-lg">
-                                            <ExternalLink className="w-5 h-5 text-purple-600" />
-                                          </div>
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-semibold text-gray-900">Generated Links</p>
-                                            <p className="text-xs text-gray-500 mt-0.5">Manage unique, trackable links for participants</p>
-                                            <div className="mt-2">
-                                              <button
-                                                onClick={() => {
-                                                  setLinksDropdown({ activityId: null, links: null, loading: false });
-                                                  router.push(`/activities/${activity.id}/generated-links`);
-                                                }}
-                                                className="px-3 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-1 bg-purple-600 text-white hover:bg-purple-700"
-                                              >
-                                                <ExternalLink className="w-3.5 h-3.5" /> Manage Generated Links
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="p-8 text-center">
-                                    <XCircle className="w-8 h-8 text-red-400 mx-auto" />
-                                    <p className="mt-2 text-sm text-red-500">Failed to load links</p>
-                                  </div>
-                                )}
-                                </div>
-                              </div>
-                            )}
                           </div>
                           {/* Generated Links Button - Always visible: grey=disabled, purple=enabled */}
                           <button
@@ -1510,6 +1347,18 @@ export default function ActivitiesPage() {
         onClose={() => setQuestionActivationPanel({ isOpen: false, activityId: '', activityName: '' })}
         activityId={questionActivationPanel.activityId}
         activityName={questionActivationPanel.activityName}
+      />
+
+      {/* Copy Event Links Modal with Short URL Support */}
+      <CopyEventLinksModal
+        isOpen={copyLinksModal.isOpen}
+        onClose={() => setCopyLinksModal({ isOpen: false, activityId: '', activityName: '', allowGuests: false, enableGeneratedLinks: false })}
+        activityId={copyLinksModal.activityId}
+        activityName={copyLinksModal.activityName}
+        allowGuests={copyLinksModal.allowGuests}
+        enableGeneratedLinks={copyLinksModal.enableGeneratedLinks}
+        onNavigateToGeneratedLinks={() => router.push(`/activities/${copyLinksModal.activityId}/generated-links`)}
+        onOpenQrModal={(url, title, subtitle, color) => setQrModal({ isOpen: true, url, title, subtitle, color })}
       />
     </AppLayout>
   );
