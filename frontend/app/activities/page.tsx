@@ -35,7 +35,7 @@ import {
   QrCode,
   Zap,
 } from "lucide-react";
-import { activitiesApi, activityApprovalsApi, type Activity, fetchWithAuth } from "@/lib/api";
+import { activitiesApi, activityApprovalsApi, programsApi, type Activity, type Program, fetchWithAuth } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import DuplicateConfirmationModal from "@/components/duplicate-confirmation-modal";
 import ResendApprovalModal from "@/components/resend-approval-modal";
@@ -50,6 +50,8 @@ export default function ActivitiesPage() {
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [selectedTab, setSelectedTab] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [selectedProgram, setSelectedProgram] = useState("");
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
   const [rejectedApprovals, setRejectedApprovals] = useState<any[]>([]);
@@ -66,6 +68,7 @@ export default function ActivitiesPage() {
 
   useEffect(() => {
     loadActivities();
+    loadPrograms();
 
     // Listen for global search events
     const handleGlobalSearch = (e: CustomEvent) => {
@@ -107,6 +110,16 @@ export default function ActivitiesPage() {
       }
     } catch (error) {
       console.error('Failed to load user:', error);
+    }
+  }
+
+  async function loadPrograms() {
+    try {
+      const data = await programsApi.getAll();
+      setPrograms(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load programs:', error);
+      setPrograms([]);
     }
   }
 
@@ -550,19 +563,21 @@ export default function ActivitiesPage() {
       const statusToMatch = selectedStatus === "active" ? "live" : selectedStatus;
       const matchesStatus =
         selectedStatus === "all" || activity.status === statusToMatch;
+      const matchesProgram =
+        selectedProgram === "" || activity.programId === selectedProgram;
       const matchesSearch =
         searchQuery === "" ||
         activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         activity.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         activity.program.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesTab && matchesStatus && matchesSearch;
+      return matchesTab && matchesStatus && matchesProgram && matchesSearch;
     });
-  }, [allActivitiesDisplay, selectedTab, selectedStatus, searchQuery]);
+  }, [allActivitiesDisplay, selectedTab, selectedStatus, selectedProgram, searchQuery]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTab, selectedStatus, searchQuery]);
+  }, [selectedTab, selectedStatus, selectedProgram, searchQuery]);
 
   const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
   
@@ -800,6 +815,22 @@ export default function ActivitiesPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
                   />
+                </div>
+
+                {/* Program Filter */}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <select
+                    value={selectedProgram}
+                    onChange={(e) => setSelectedProgram(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
+                  >
+                    <option value="">All Programs</option>
+                    {programs.map((program) => (
+                      <option key={program.id} value={program.id}>
+                        {program.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Status Filter */}

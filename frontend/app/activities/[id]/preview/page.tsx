@@ -24,6 +24,9 @@ import { activitiesApi, questionnairesApi, type Activity, type Questionnaire } f
 import { toast } from "@/components/ui/toast";
 import { filterQuestionsByLogic } from "@/utils/conditionalLogicEvaluator";
 
+// Constant for "Other" option value - must match backend
+const OTHER_OPTION_VALUE = '__other__';
+
 export default function ActivityPreviewPage() {
   const router = useRouter();
   const params = useParams();
@@ -35,6 +38,7 @@ export default function ActivityPreviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, any>>({});
+  const [otherTexts, setOtherTexts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadData();
@@ -133,6 +137,40 @@ export default function ActivityPreviewPage() {
                 <span className="text-base font-medium text-gray-900">{option.text || option.label || option.value || `Option ${index + 1}`}</span>
               </div>
             ))}
+            
+            {/* Other (Please Specify) option for single choice */}
+            {question.settings?.allow_other && (
+              <>
+                <div
+                  onClick={() => handleResponseChange(questionId, OTHER_OPTION_VALUE)}
+                  className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    responses[questionId] === OTHER_OPTION_VALUE
+                      ? "border-qsights-blue bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <Circle
+                    className={`w-5 h-5 flex-shrink-0 ${
+                      responses[questionId] === OTHER_OPTION_VALUE
+                        ? "text-qsights-blue fill-qsights-blue"
+                        : "text-gray-400"
+                    }`}
+                  />
+                  <span className="text-base font-medium text-gray-900">Other (Please Specify)</span>
+                </div>
+                {responses[questionId] === OTHER_OPTION_VALUE && (
+                  <div className="ml-8 mt-2">
+                    <Input
+                      type="text"
+                      placeholder="Please specify..."
+                      value={otherTexts[questionId] || ""}
+                      onChange={(e) => setOtherTexts(prev => ({ ...prev, [questionId]: e.target.value }))}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </div>
         );
 
@@ -159,6 +197,37 @@ export default function ActivityPreviewPage() {
                 </div>
               );
             })}
+            
+            {/* Other (Please Specify) option for multiselect */}
+            {question.settings?.allow_other && (() => {
+              const isOtherSelected = (responses[questionId] || []).includes(OTHER_OPTION_VALUE);
+              return (
+                <>
+                  <div
+                    onClick={() => handleMultipleChoiceToggle(questionId, OTHER_OPTION_VALUE)}
+                    className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      isOtherSelected ? "border-qsights-blue bg-blue-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <Square
+                      className={`w-5 h-5 flex-shrink-0 ${isOtherSelected ? "text-qsights-blue fill-qsights-blue" : "text-gray-400"}`}
+                    />
+                    <span className="text-base font-medium text-gray-900">Other (Please Specify)</span>
+                  </div>
+                  {isOtherSelected && (
+                    <div className="ml-8 mt-2">
+                      <Input
+                        type="text"
+                        placeholder="Please specify..."
+                        value={otherTexts[questionId] || ""}
+                        onChange={(e) => setOtherTexts(prev => ({ ...prev, [questionId]: e.target.value }))}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         );
 

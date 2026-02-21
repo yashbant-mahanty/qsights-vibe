@@ -2604,6 +2604,7 @@ export async function getPollQuestions(activityId: string, participantId?: strin
     throw new Error('Failed to fetch poll questions');
   }
   const data = await response.json();
+  console.log('[API DEBUG] getPollQuestions raw response:', JSON.stringify(data.data, null, 2));
   return {
     questions: data.data?.questions || [],
     active_question_ids: data.data?.active_question_ids || [],

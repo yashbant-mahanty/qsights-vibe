@@ -15,6 +15,10 @@ import NPSScale from "@/components/questions/NPSScale";
 import StarRating from "@/components/questions/StarRating";
 import SliderScale from "@/components/questions/SliderScale";
 import DialGauge from "@/components/questions/DialGauge";
+import { Input } from "@/components/ui/input";
+
+// Constant for "Other" option value - must match backend
+const OTHER_OPTION_VALUE = '__other__';
 
 export default function PreviewQuestionnairePage() {
   const router = useRouter();
@@ -27,6 +31,7 @@ export default function PreviewQuestionnairePage() {
   
   // Preview mode state for interactive testing
   const [responses, setResponses] = useState<Record<string, any>>({});
+  const [otherTexts, setOtherTexts] = useState<Record<string, string>>({});
   const [interactiveMode, setInteractiveMode] = useState(true);
   const originalResponsesRef = React.useRef<Record<string,any>>({});
 
@@ -140,6 +145,45 @@ export default function PreviewQuestionnairePage() {
                 </label>
               );
             })}
+            
+            {/* Other (Please Specify) option */}
+            {question.settings?.allow_other && (
+              <>
+                <label
+                  className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    String(response) === OTHER_OPTION_VALUE
+                      ? "border-qsights-cyan bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300 bg-white"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                    String(response) === OTHER_OPTION_VALUE ? "border-qsights-cyan bg-qsights-cyan" : "border-gray-300"
+                  }`}>
+                    {String(response) === OTHER_OPTION_VALUE && <Circle className="w-3 h-3 fill-white text-white" />}
+                  </div>
+                  <input
+                    type="radio"
+                    name={`question-${questionId}`}
+                    value={OTHER_OPTION_VALUE}
+                    checked={String(response) === OTHER_OPTION_VALUE}
+                    onChange={() => handleResponseChange(questionId, OTHER_OPTION_VALUE)}
+                    className="hidden"
+                  />
+                  <span className="text-sm text-gray-700 flex-1">Other (Please Specify)</span>
+                </label>
+                {String(response) === OTHER_OPTION_VALUE && (
+                  <div className="ml-8 mt-2">
+                    <Input
+                      type="text"
+                      placeholder="Please specify..."
+                      value={otherTexts[questionId] || ""}
+                      onChange={(e) => setOtherTexts(prev => ({ ...prev, [questionId]: e.target.value }))}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </div>
         );
       
@@ -178,6 +222,50 @@ export default function PreviewQuestionnairePage() {
                 </label>
               );
             })}
+            
+            {/* Other (Please Specify) option for multiselect */}
+            {question.settings?.allow_other && (
+              <>
+                {(() => {
+                  const isOtherChecked = selectedValues.includes(OTHER_OPTION_VALUE);
+                  return (
+                    <>
+                      <label
+                        className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          isOtherChecked
+                            ? "border-qsights-cyan bg-blue-50"
+                            : "border-gray-200 hover:border-gray-300 bg-white"
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                          isOtherChecked ? "border-qsights-cyan bg-qsights-cyan" : "border-gray-300"
+                        }`}>
+                          {isOtherChecked && <CheckCircle className="w-3 h-3 text-white" strokeWidth={3} />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={isOtherChecked}
+                          onChange={() => handleMultipleChoiceToggle(questionId, OTHER_OPTION_VALUE)}
+                          className="hidden"
+                        />
+                        <span className="text-sm text-gray-700 flex-1">Other (Please Specify)</span>
+                      </label>
+                      {isOtherChecked && (
+                        <div className="ml-8 mt-2">
+                          <Input
+                            type="text"
+                            placeholder="Please specify..."
+                            value={otherTexts[questionId] || ""}
+                            onChange={(e) => setOtherTexts(prev => ({ ...prev, [questionId]: e.target.value }))}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
+            )}
           </div>
         );
       

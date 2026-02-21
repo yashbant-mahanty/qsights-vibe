@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { Bold, Italic, Underline, List, ListOrdered, Superscript, Subscript, Type, Link2, X, ExternalLink } from 'lucide-react';
+import { Bold, Italic, Underline, List, ListOrdered, Superscript, Subscript, Type, Link2, X, ExternalLink, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 
 interface RichTextEditorProps {
   value: string;
@@ -209,6 +209,12 @@ export default function RichTextEditor({
     { command: 'subscript', icon: Subscript, label: 'Subscript' },
   ];
 
+  const alignmentButtons = [
+    { command: 'justifyLeft', icon: AlignLeft, label: 'Align Left' },
+    { command: 'justifyCenter', icon: AlignCenter, label: 'Align Center' },
+    { command: 'justifyRight', icon: AlignRight, label: 'Align Right' },
+  ];
+
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">
       {showToolbar && (
@@ -228,6 +234,25 @@ export default function RichTextEditor({
               </span>
             </button>
           ))}
+
+          {/* Text Alignment Buttons */}
+          <div className="border-l border-gray-300 pl-1 ml-1 flex gap-1">
+            {alignmentButtons.map(({ command, icon: Icon, label }) => (
+              <button
+                key={command}
+                type="button"
+                onClick={() => execCommand(command)}
+                className="p-2 hover:bg-gray-200 rounded transition-colors group relative"
+                title={label}
+                aria-label={label}
+              >
+                <Icon className="w-4 h-4 text-gray-700" />
+                <span className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-900 rounded whitespace-nowrap z-10">
+                  {label}
+                </span>
+              </button>
+            ))}
+          </div>
           
           {/* Insert Link Button */}
           <button
@@ -442,6 +467,14 @@ export default function RichTextEditor({
         }
         [contentEditable=true] a:hover {
           color: #1d4ed8;
+        }
+        /* Text alignment support */
+        [contentEditable=true] p,
+        [contentEditable=true] div {
+          text-align: inherit;
+        }
+        [contentEditable=true] [style*="text-align"] {
+          text-align: inherit;
         }
       `}</style>
     </div>

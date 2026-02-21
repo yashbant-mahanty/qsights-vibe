@@ -519,6 +519,7 @@ Route::prefix('public')->group(function () {
     Route::get('activities/{id}/load-progress/{participantId}', [App\Http\Controllers\Api\PublicActivityController::class, 'loadProgress']);
     Route::post('activities/{id}/submit', [App\Http\Controllers\Api\PublicActivityController::class, 'submitResponse']);
     Route::post('activities/{id}/poll-answer', [App\Http\Controllers\Api\PublicActivityController::class, 'pollAnswer']);
+    Route::post('activities/{id}/finalize-poll', [App\Http\Controllers\Api\PublicActivityController::class, 'finalizePoll']);
     Route::get('activities/{id}/poll-results/{questionId}', [App\Http\Controllers\Api\PublicActivityController::class, 'getPollResults']);
     Route::get('questionnaires/{id}', [App\Http\Controllers\Api\PublicQuestionnaireController::class, 'show']);
     Route::post('activities/validate-link-token', [App\Http\Controllers\Api\ActivityController::class, 'validateLinkToken']);

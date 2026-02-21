@@ -125,3 +125,46 @@ nextjs-portal {
   border-bottom-left-radius: 0.5rem;
   border-bottom-right-radius: 0.5rem;
 }
+
+/* ========================================
+   SHAKE ANIMATION FOR VALIDATION ERRORS
+   Used to draw attention to unanswered mandatory questions
+   ======================================== */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* ========================================
+   RICH TEXT ALIGNMENT SUPPORT
+   Ensure text alignment from rich text editor is preserved
+   when rendering on Take Activity and other pages
+   ======================================== */
+.question-content p,
+.question-content div,
+.option-content p,
+.option-content div,
+.prose p,
+.prose div,
+[data-question-content] p,
+[data-question-content] div {
+  text-align: inherit;
+}
+
+/* Preserve inline text-align styles from rich text editor */
+[style*="text-align: left"] {
+  text-align: left !important;
+}
+
+[style*="text-align: center"] {
+  text-align: center !important;
+}
+
+[style*="text-align: right"] {
+  text-align: right !important;
+}

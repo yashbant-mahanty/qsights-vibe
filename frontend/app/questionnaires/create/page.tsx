@@ -869,6 +869,25 @@ function QuestionnaireBuilderPageContent() {
     );
   };
 
+  // Move question up/down handler
+  const moveQuestion = (sectionId: number, fromIndex: number, toIndex: number) => {
+    setSections(prevSections =>
+      prevSections.map((section) => {
+        if (section.id === sectionId) {
+          const questions = [...section.questions];
+          if (toIndex < 0 || toIndex >= questions.length) return section;
+          const [removed] = questions.splice(fromIndex, 1);
+          questions.splice(toIndex, 0, removed);
+          return {
+            ...section,
+            questions,
+          };
+        }
+        return section;
+      })
+    );
+  };
+
   const handleSave = async () => {
     if (!questionnaireName.trim()) {
       toast({ title: "Validation Error", description: "Please enter a questionnaire name", variant: "warning" });
@@ -1165,7 +1184,7 @@ function QuestionnaireBuilderPageContent() {
   };
 
   // Sortable Question Component - Memoized to prevent unnecessary re-renders
-  const SortableQuestion = React.memo(({ question, sectionId, updateQuestionProperty, getQuestionIcon, deleteQuestion, duplicateQuestion, updateQuestionOption, addQuestionOption, removeQuestionOption, toggleCorrectAnswer, questionnaireType, renderQuestionPreview, setSelectedQuestionForTranslation, setShowMultilingualEditor, setTranslationData, setSelectedQuestion, setShowConditionalLogic, updateMatrixRow, updateMatrixColumn }: any) => {
+  const SortableQuestion = React.memo(({ question, sectionId, updateQuestionProperty, getQuestionIcon, deleteQuestion, duplicateQuestion, updateQuestionOption, addQuestionOption, removeQuestionOption, toggleCorrectAnswer, questionnaireType, renderQuestionPreview, setSelectedQuestionForTranslation, setShowMultilingualEditor, setTranslationData, setSelectedQuestion, setShowConditionalLogic, updateMatrixRow, updateMatrixColumn, questionIdx, totalQuestions, moveQuestion }: any) => {
     const {
       attributes,
       listeners,
@@ -1179,6 +1198,19 @@ function QuestionnaireBuilderPageContent() {
       transition,
     };
 
+    // Move up/down handlers
+    const handleMoveUp = () => {
+      if (questionIdx > 0) {
+        moveQuestion(sectionId, questionIdx, questionIdx - 1);
+      }
+    };
+
+    const handleMoveDown = () => {
+      if (questionIdx < totalQuestions - 1) {
+        moveQuestion(sectionId, questionIdx, questionIdx + 1);
+      }
+    };
+
     return (
       <div
         ref={setNodeRef}
@@ -1186,8 +1218,36 @@ function QuestionnaireBuilderPageContent() {
         className="p-4 border-2 border-gray-200 rounded-lg bg-white hover:border-qsights-blue/50 transition-all"
       >
         <div className="flex items-start gap-3">
-          <div {...attributes} {...listeners} className="cursor-move mt-1">
-            <GripVertical className="w-5 h-5 text-gray-400" />
+          <div className="flex flex-col items-center gap-0.5 mt-1">
+            <div {...attributes} {...listeners} className="cursor-move">
+              <GripVertical className="w-5 h-5 text-gray-400" />
+            </div>
+            <button
+              type="button"
+              onClick={handleMoveUp}
+              disabled={questionIdx === 0}
+              className={`p-0.5 rounded transition-colors ${
+                questionIdx === 0
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+              title="Move Up"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleMoveDown}
+              disabled={questionIdx === totalQuestions - 1}
+              className={`p-0.5 rounded transition-colors ${
+                questionIdx === totalQuestions - 1
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+              title="Move Down"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
           </div>
           <div className="flex-1 space-y-3">
             {/* Question Header */}
@@ -1650,6 +1710,9 @@ function QuestionnaireBuilderPageContent() {
                         setShowConditionalLogic={setShowConditionalLogic}
                         updateMatrixRow={updateMatrixRow}
                         updateMatrixColumn={updateMatrixColumn}
+                        questionIdx={questionIdx}
+                        totalQuestions={section.questions.length}
+                        moveQuestion={moveQuestion}
                       />
                     ))}
                   </div>

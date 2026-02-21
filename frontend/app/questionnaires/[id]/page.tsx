@@ -1016,7 +1016,7 @@ export default function ViewQuestionnairePage() {
   };
 
   // Sortable Question Component for Edit Page
-  function SortableQuestionEdit({ question, sectionId, sectionIdx, questionIdx, sections, setSections }: any) {
+  function SortableQuestionEdit({ question, sectionId, sectionIdx, questionIdx, sections, setSections, totalQuestions }: any) {
     const {
       attributes,
       listeners,
@@ -1024,6 +1024,44 @@ export default function ViewQuestionnairePage() {
       transform,
       transition,
     } = useSortable({ id: question.id });
+
+    // Move question up handler
+    const handleMoveUp = () => {
+      if (questionIdx === 0) return;
+      setSections((prevSections: any) =>
+        prevSections.map((section: any, idx: number) =>
+          idx === sectionIdx
+            ? {
+                ...section,
+                questions: section.questions.map((q: any, i: number) => {
+                  if (i === questionIdx - 1) return section.questions[questionIdx];
+                  if (i === questionIdx) return section.questions[questionIdx - 1];
+                  return q;
+                })
+              }
+            : section
+        )
+      );
+    };
+
+    // Move question down handler
+    const handleMoveDown = () => {
+      if (questionIdx === totalQuestions - 1) return;
+      setSections((prevSections: any) =>
+        prevSections.map((section: any, idx: number) =>
+          idx === sectionIdx
+            ? {
+                ...section,
+                questions: section.questions.map((q: any, i: number) => {
+                  if (i === questionIdx) return section.questions[questionIdx + 1];
+                  if (i === questionIdx + 1) return section.questions[questionIdx];
+                  return q;
+                })
+              }
+            : section
+        )
+      );
+    };
 
     const style = {
       transform: CSS.Transform.toString(transform),
@@ -1050,8 +1088,36 @@ export default function ViewQuestionnairePage() {
         className="p-4 border-2 border-gray-200 rounded-lg bg-white hover:border-qsights-blue/50 transition-all"
       >
         <div className="flex items-start gap-3">
-          <div {...attributes} {...listeners} className="cursor-move mt-1">
-            <GripVertical className="w-5 h-5 text-gray-400" />
+          <div className="flex flex-col items-center gap-0.5 mt-1">
+            <div {...attributes} {...listeners} className="cursor-move">
+              <GripVertical className="w-5 h-5 text-gray-400" />
+            </div>
+            <button
+              type="button"
+              onClick={handleMoveUp}
+              disabled={questionIdx === 0}
+              className={`p-0.5 rounded transition-colors ${
+                questionIdx === 0
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+              title="Move Up"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleMoveDown}
+              disabled={questionIdx === totalQuestions - 1}
+              className={`p-0.5 rounded transition-colors ${
+                questionIdx === totalQuestions - 1
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+              title="Move Down"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
           </div>
           <div className="flex-1 space-y-3">
             {/* Question Header */}
@@ -1556,6 +1622,7 @@ export default function ViewQuestionnairePage() {
                       questionIdx={questionIdx}
                       sections={sections}
                       setSections={setSections}
+                      totalQuestions={section.questions.length}
                     />
                   ))}
                 </div>

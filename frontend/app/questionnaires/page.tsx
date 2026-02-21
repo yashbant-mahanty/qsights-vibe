@@ -26,7 +26,7 @@ import {
   ArrowLeft,
   CheckSquare,
 } from "lucide-react";
-import { questionnairesApi, type Questionnaire } from "@/lib/api";
+import { questionnairesApi, programsApi, type Questionnaire, type Program } from "@/lib/api";
 import DeleteConfirmationModal from "@/components/delete-confirmation-modal";
 import DuplicateConfirmationModal from "@/components/duplicate-confirmation-modal";
 import { toast } from "@/components/ui/toast";
@@ -41,6 +41,8 @@ function QuestionnairesPageContent() {
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedType, setSelectedType] = useState("all");
+  const [selectedProgram, setSelectedProgram] = useState("");
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [showActionMenu, setShowActionMenu] = useState<string | null>(null);
   const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +64,7 @@ function QuestionnairesPageContent() {
 
   useEffect(() => {
     loadQuestionnaires();
+    loadPrograms();
 
     // Listen for global search events
     const handleGlobalSearch = (e: CustomEvent) => {
@@ -117,6 +120,16 @@ function QuestionnairesPageContent() {
       setQuestionnaires([]); // Ensure we set to empty array on error
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadPrograms() {
+    try {
+      const data = await programsApi.getAll();
+      setPrograms(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load programs:', error);
+      setPrograms([]);
     }
   }
 
@@ -210,6 +223,7 @@ function QuestionnairesPageContent() {
       type: displayType,
       questions: totalQuestions,
       programs: q.program ? [q.program.name] : [],
+      programId: q.program_id || null,
       responses: q.responses_count || 0,
       authenticatedResponses: q.authenticated_responses_count || 0,
       guestResponses: q.guest_responses_count || 0,
@@ -282,19 +296,21 @@ function QuestionnairesPageContent() {
         selectedStatus === "all" || questionnaire.status === selectedStatus;
       const matchesType =
         selectedType === "all" || questionnaire.type === selectedType;
-      return matchesSearch && matchesStatus && matchesType;
+      const matchesProgram =
+        selectedProgram === "" || questionnaire.programId === selectedProgram;
+      return matchesSearch && matchesStatus && matchesType && matchesProgram;
     }).sort((a, b) => {
       // Sort by latest first (createdDate)
       const dateA = new Date(a.createdDate || 0).getTime();
       const dateB = new Date(b.createdDate || 0).getTime();
       return dateB - dateA;
     });
-  }, [displayQuestionnaires, searchQuery, selectedStatus, selectedType]);
+  }, [displayQuestionnaires, searchQuery, selectedStatus, selectedType, selectedProgram]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedStatus, selectedType]);
+  }, [searchQuery, selectedStatus, selectedType, selectedProgram]);
 
   const totalPages = Math.ceil(filteredQuestionnaires.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -498,6 +514,19 @@ function QuestionnairesPageContent() {
 
               {/* Filters */}
               <div className="flex items-center gap-2 w-full sm:w-auto">
+                <select
+                  value={selectedProgram}
+                  onChange={(e) => setSelectedProgram(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-qsights-blue focus:border-transparent"
+                >
+                  <option value="">All Programs</option>
+                  {programs.map((program) => (
+                    <option key={program.id} value={program.id}>
+                      {program.name}
+                    </option>
+                  ))}
+                </select>
+
                 <select
                   value={selectedType}
                   onChange={(e) => setSelectedType(e.target.value)}

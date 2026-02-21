@@ -788,6 +788,18 @@ class PublicActivityController extends Controller
             }
         }
 
+        // Calculate total questions and answered questions for completion tracking
+        $totalQuestionsForCompletion = 0;
+        if ($activity->questionnaire) {
+            foreach ($activity->questionnaire->sections as $section) {
+                $totalQuestionsForCompletion += $section->questions->count();
+            }
+        }
+        $answeredQuestionsCount = count($legacyAnswers);
+        $completionPercentage = $totalQuestionsForCompletion > 0 
+            ? round(($answeredQuestionsCount / $totalQuestionsForCompletion) * 100, 2) 
+            : 100.00;
+
         // Update response to submitted status (preserves started_at from first save)
         $response->fill([
             'activity_id' => $activityId,
@@ -798,6 +810,9 @@ class PublicActivityController extends Controller
             'score' => $score,
             'assessment_result' => $assessmentResult,
             'correct_answers_count' => $correctAnswersCount,
+            'total_questions' => $totalQuestionsForCompletion,
+            'answered_questions' => $answeredQuestionsCount,
+            'completion_percentage' => $completionPercentage,
             'started_at' => $request->started_at ? \Carbon\Carbon::parse($request->started_at) : ($response->started_at ?? now()),
             'completed_at' => now(),
             'submitted_at' => now(),
@@ -809,6 +824,16 @@ class PublicActivityController extends Controller
         // CRITICAL: SAVE response BEFORE creating Answer records
         // Without this, $response->id will be NULL and Answer inserts will fail
         $response->save();
+        
+        // CRITICAL: Update activity_participant status to 'completed'
+        // This ensures the participant status shows correctly in Event Results
+        \DB::table('activity_participant')
+            ->where('activity_id', $activityId)
+            ->where('participant_id', $participant->id)
+            ->update([
+                'status' => 'completed',
+                'updated_at' => now(),
+            ]);
         
         // CRITICAL: Upsert Answer records (merges with incremental saves)
         // If answer exists from saveProgress → UPDATE with final value
@@ -1322,6 +1347,107 @@ class PublicActivityController extends Controller
     }
 
     /**
+     * Finalize a poll submission - marks the response as submitted with 100% completion
+     * This should be called when the participant completes all poll questions
+     */
+    public function finalizePoll(Request $request, $activityId)
+    {
+        $validated = $request->validate([
+            'participant_id' => 'required',
+        ]);
+
+        $activity = Activity::find($activityId);
+        
+        if (!$activity) {
+            return response()->json(['error' => 'Activity not found'], 404);
+        }
+
+        // Verify this is a poll activity
+        if ($activity->type !== 'poll') {
+            return response()->json(['error' => 'This endpoint is only for poll activities'], 400);
+        }
+
+        $participantId = $validated['participant_id'];
+        $isAnonymous = is_string($participantId) && str_starts_with($participantId, 'anon_');
+
+        // Find the response record
+        if ($isAnonymous) {
+            $response = Response::where('activity_id', $activityId)
+                ->where('guest_identifier', $participantId)
+                ->first();
+        } else {
+            $response = Response::where('activity_id', $activityId)
+                ->where('participant_id', $participantId)
+                ->first();
+        }
+
+        if (!$response) {
+            return response()->json([
+                'error' => 'No response found for this participant'
+            ], 404);
+        }
+
+        // Check if already submitted
+        if ($response->status === 'submitted') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Poll already submitted',
+                'already_submitted' => true,
+                'data' => [
+                    'response_id' => $response->id,
+                    'status' => $response->status,
+                    'completion_percentage' => $response->completion_percentage,
+                    'completed_at' => $response->completed_at,
+                ]
+            ]);
+        }
+
+        // Count total questions in the poll
+        $questionnaire = $activity->questionnaire;
+        $totalQuestions = 0;
+        if ($questionnaire && $questionnaire->sections) {
+            foreach ($questionnaire->sections as $section) {
+                $totalQuestions += count($section->questions ?? []);
+            }
+        }
+
+        // Count answered questions
+        $answeredQuestions = \DB::table('answers')
+            ->where('response_id', $response->id)
+            ->count();
+
+        // Update response status to submitted
+        $response->update([
+            'status' => 'submitted',
+            'completed_at' => now(),
+            'submitted_at' => now(),
+            'total_questions' => $totalQuestions,
+            'answered_questions' => $answeredQuestions,
+            'completion_percentage' => 100.00,
+        ]);
+
+        \Log::info('[finalizePoll] Poll finalized successfully', [
+            'activity_id' => $activityId,
+            'participant_id' => $participantId,
+            'response_id' => $response->id,
+            'total_questions' => $totalQuestions,
+            'answered_questions' => $answeredQuestions,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Poll submitted successfully',
+            'data' => [
+                'response_id' => $response->id,
+                'status' => 'submitted',
+                'completion_percentage' => 100,
+                'total_questions' => $totalQuestions,
+                'answered_questions' => $answeredQuestions,
+            ]
+        ]);
+    }
+
+    /**
      * Submit a poll answer and return aggregated results
      * This is for instant poll feedback - stores the answer and returns live results
      */
@@ -1389,9 +1515,92 @@ class PublicActivityController extends Controller
         
         if ($existingAnswer) {
             // Answer already submitted - DO NOT allow resubmission
+            // IMPORTANT: Return the existing answer and poll results so frontend can display them
+            
+            // Get the question to understand options
+            $question = null;
+            foreach ($activity->questionnaire->sections as $section) {
+                foreach ($section->questions as $q) {
+                    if ($q->id == $questionId) {
+                        $question = $q;
+                        break 2;
+                    }
+                }
+            }
+            
+            // Get aggregated poll results
+            $results = [];
+            $totalVotes = 0;
+            
+            if ($question) {
+                $answerCounts = \DB::table('answers')
+                    ->join('responses', 'answers.response_id', '=', 'responses.id')
+                    ->where('responses.activity_id', $activityId)
+                    ->where('answers.question_id', $questionId)
+                    ->select(
+                        \DB::raw('COALESCE(answers.value, answers.value_array::text) as answer_value'),
+                        \DB::raw('COUNT(*) as count')
+                    )
+                    ->groupBy(\DB::raw('COALESCE(answers.value, answers.value_array::text)'))
+                    ->get();
+                
+                $totalVotes = $answerCounts->sum('count');
+                
+                // Get options based on question type
+                if ($question->type === 'rating') {
+                    $maxRating = $question->settings['scale'] ?? $question->max_value ?? 5;
+                    $options = array_map(fn($i) => (string)$i, range(1, $maxRating));
+                } else {
+                    $options = collect($question->options ?? [])->map(function ($opt) {
+                        return is_array($opt) ? ($opt['value'] ?? $opt['text'] ?? $opt['label'] ?? $opt) : $opt;
+                    })->toArray();
+                }
+                
+                // Build results for each option
+                foreach ($options as $option) {
+                    $optionStr = (string)$option;
+                    $count = 0;
+                    
+                    foreach ($answerCounts as $row) {
+                        $storedValue = $row->answer_value;
+                        if (str_starts_with($storedValue, '[') || str_starts_with($storedValue, '{')) {
+                            $decoded = json_decode($storedValue, true);
+                            if (is_array($decoded)) {
+                                if (in_array($optionStr, $decoded) || in_array($option, $decoded)) {
+                                    $count += $row->count;
+                                }
+                            }
+                        } else {
+                            if ((string)$storedValue === $optionStr) {
+                                $count += $row->count;
+                            }
+                        }
+                    }
+                    
+                    $percentage = $totalVotes > 0 ? ($count / $totalVotes) * 100 : 0;
+                    $results[] = [
+                        'option' => $optionStr,
+                        'count' => $count,
+                        'percentage' => round($percentage, 1),
+                    ];
+                }
+                
+                usort($results, fn($a, $b) => $b['percentage'] <=> $a['percentage']);
+            }
+            
+            // Get the user's previously submitted answer
+            $userAnswer = $existingAnswer->value ?: json_decode($existingAnswer->value_array, true);
+            
             return response()->json([
                 'error' => 'Already Submitted',
-                'message' => 'You have already submitted your response for this question.'
+                'message' => 'You have already submitted your response for this question.',
+                'already_submitted' => true,
+                'data' => [
+                    'results' => $results,
+                    'total_votes' => $totalVotes,
+                    'question_id' => $questionId,
+                    'user_answer' => $userAnswer,
+                ]
             ], 400);
         }
         

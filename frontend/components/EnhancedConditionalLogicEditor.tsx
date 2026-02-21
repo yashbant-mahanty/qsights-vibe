@@ -153,11 +153,15 @@ export default function EnhancedConditionalLogicEditor({
     if (question.conditionalLogic?.metadata?.optionMappings) {
       console.log('[ConditionalLogicEditor] Loading saved optionMappings:', question.conditionalLogic.metadata.optionMappings);
       console.log('[ConditionalLogicEditor] Loading saved indices:', question.conditionalLogic.metadata.optionMappingsWithIndices);
-      console.log('[ConditionalLogicEditor] Current childQuestions IDs:', childQuestions.map(q => q.id));
+      console.log('[ConditionalLogicEditor] Current allQuestions count:', allQuestions.length);
       
       const savedMappings = question.conditionalLogic.metadata.optionMappings;
       const savedIndices = question.conditionalLogic.metadata.optionMappingsWithIndices;
       const convertedMappings: OptionMapping = {};
+      
+      // CRITICAL FIX: Use allQuestions (full list) for index lookup, not filtered childQuestions
+      // Indices are stored relative to parent's position in the FULL question list
+      const currentQuestionIndex = allQuestions.findIndex(q => String(q.id) === String(question.id));
       
       for (const [option, savedIds] of Object.entries(savedMappings)) {
         const validIds: (string | number)[] = [];
@@ -168,25 +172,29 @@ export default function EnhancedConditionalLogicEditor({
         const savedIndicesArray = indicesData?.indices as number[] || [];
         
         // First try to match by saved indices (most reliable)
-        if (savedIndicesArray.length > 0) {
+        // FIXED: Use allQuestions with proper offset, not filtered childQuestions
+        if (savedIndicesArray.length > 0 && currentQuestionIndex >= 0) {
           for (const relativeIdx of savedIndicesArray) {
-            // relativeIdx is relative to parent, 1 = first child, 2 = second child
-            if (relativeIdx > 0 && relativeIdx <= childQuestions.length) {
-              const childQ = childQuestions[relativeIdx - 1];
+            // relativeIdx is relative to parent: 1 = first question after parent, 2 = second, etc.
+            const absoluteIdx = currentQuestionIndex + relativeIdx;
+            if (absoluteIdx > currentQuestionIndex && absoluteIdx < allQuestions.length) {
+              const childQ = allQuestions[absoluteIdx];
               if (childQ) {
                 validIds.push(childQ.id);
+                console.log(`[ConditionalLogicEditor] Matched by index: relativeIdx=${relativeIdx} -> Q${childQ.id}`);
               }
             }
           }
         }
         
-        // If no indices or they didn't match, fall back to ID matching
+        // If no indices or they didn't match, fall back to ID matching in full list
         if (validIds.length === 0) {
           for (const savedId of savedIdArray) {
-            // Try direct match
-            const directMatch = childQuestions.find(q => idMatchesHelper(q.id, savedId));
+            // Try direct match in full question list
+            const directMatch = allQuestions.find(q => idMatchesHelper(q.id, savedId));
             if (directMatch) {
               validIds.push(directMatch.id);
+              console.log(`[ConditionalLogicEditor] Matched by ID: ${savedId} -> Q${directMatch.id}`);
             }
           }
         }
@@ -207,7 +215,7 @@ export default function EnhancedConditionalLogicEditor({
       // Has advanced mode rules
       setActiveTab('advanced');
     }
-  }, [question.conditionalLogic, childQuestions]);
+  }, [question.conditionalLogic, allQuestions, question.id]);
 
   // Validate logic
   useEffect(() => {

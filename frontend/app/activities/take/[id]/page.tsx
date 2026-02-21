@@ -63,6 +63,9 @@ import {
   Tooltip,
 } from "recharts";
 
+// Constant for "Other" option value - must match backend
+const OTHER_OPTION_VALUE = '__other__';
+
 interface FormField {
   id: string;
   type: "text" | "email" | "phone" | "number" | "date" | "textarea" | "select" | "address" | "organization" | "country";
@@ -445,6 +448,8 @@ export default function TakeActivityPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, any>>({});
   const [questionComments, setQuestionComments] = useState<Record<string, string>>({});
+  // State for "Other (Please Specify)" text inputs per question
+  const [otherTexts, setOtherTexts] = useState<Record<string, string>>({});
 
   // Compute filtered sections with conditional logic applied
   const allFilteredSections = useMemo(() => {
@@ -527,6 +532,39 @@ export default function TakeActivityPage() {
   const [waitingForQuestion, setWaitingForQuestion] = useState(false);
   const [pollTimers, setPollTimers] = useState<Record<string, { remaining: number | null; initial: number | null }>>({}); // Per-question timers
   const pollTimersRef = useRef<Record<string, { remaining: number | null; initial: number | null }>>({}); // Ref to avoid stale closure
+
+  // UX Enhancement: Track highlighted unanswered mandatory question for scroll-to-error feature
+  const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
+  
+  // CRITICAL FIX: Filter poll questions to only show ACTIVE questions in "all" display mode
+  // This ensures questions are only displayed when admin activates them via Live Question Control
+  // Also include questions that have already been answered (so user can see their results)
+  const activePollQuestions = useMemo(() => {
+    if (!pollQuestions || pollQuestions.length === 0) return [];
+    // Only show questions that are: (1) activated by admin, OR (2) already answered by participant
+    return pollQuestions.filter((q: PollQuestion) => 
+      q.is_active === true || pollSubmittedQuestions.has(Number(q.id))
+    );
+  }, [pollQuestions, pollSubmittedQuestions]);
+  
+  // Calculate required questions status for Poll All Mode
+  // This checks which mandatory questions have been SAVED (not just selected)
+  const pollRequiredQuestionsStatus = useMemo(() => {
+    if (!activePollQuestions || activePollQuestions.length === 0) {
+      return { total: 0, saved: 0, allSaved: true, unsavedRequired: [] as any[] };
+    }
+    // Get all required questions from active poll questions
+    const requiredQuestions = activePollQuestions.filter((q: any) => q.is_required && q.type !== 'information');
+    // Check which required questions have been SAVED (in pollSubmittedQuestions)
+    const savedRequired = requiredQuestions.filter((q: any) => pollSubmittedQuestions.has(Number(q.id)));
+    const unsavedRequired = requiredQuestions.filter((q: any) => !pollSubmittedQuestions.has(Number(q.id)));
+    return {
+      total: requiredQuestions.length,
+      saved: savedRequired.length,
+      allSaved: unsavedRequired.length === 0,
+      unsavedRequired
+    };
+  }, [activePollQuestions, pollSubmittedQuestions]);
 
   // Timer state
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -813,7 +851,9 @@ export default function TakeActivityPage() {
         }
         
         // Only restore if not submitted or if explicitly continuing
-        if (session.submitted && urlType !== "continue") {
+        // POLL FIX: For Poll type, always allow restore (show results, not Thank You page)
+        const isPollActivity = session.activityType === 'poll';
+        if (session.submitted && urlType !== "continue" && !isPollActivity) {
           console.log('Previous submission found, not restoring. Clear localStorage to start fresh.');
           // Don't auto-restore submitted sessions unless explicitly continuing
           return;
@@ -837,11 +877,16 @@ export default function TakeActivityPage() {
           if (session.currentQuestionIndex !== undefined) {
             setCurrentQuestionIndex(session.currentQuestionIndex);
           }
-          if (session.submitted) {
+          // POLL FIX: For Poll activities, never set submitted=true (show results view instead)
+          if (session.submitted && !isPollActivity) {
             setSubmitted(session.submitted);
           }
           if (session.submittedQuestions) {
             setSubmittedQuestions(new Set(session.submittedQuestions));
+          }
+          // POLL FIX: Restore poll submitted questions
+          if (session.pollSubmittedQuestions) {
+            setPollSubmittedQuestions(new Set(session.pollSubmittedQuestions));
           }
           if (session.assessmentResult && session.assessmentResult.score !== undefined) {
             console.log('Restoring assessment result from session:', session.assessmentResult);
@@ -877,8 +922,10 @@ export default function TakeActivityPage() {
         currentQuestionIndex,
         submitted: false, // Always false for active sessions
         submittedQuestions: Array.from(submittedQuestions),
+        pollSubmittedQuestions: Array.from(pollSubmittedQuestions), // POLL FIX: Persist poll submitted questions
         assessmentResult,
         selectedLanguage,
+        activityType: activity?.type, // POLL FIX: Store activity type for restore logic
         timestamp: Date.now()
       };
       storage.setItem(`activity_${activityId}_session`, JSON.stringify(session));
@@ -891,11 +938,43 @@ export default function TakeActivityPage() {
         responses,
         assessmentResult,
         selectedLanguage,
+        activityType: activity?.type, // POLL FIX: Store activity type for restore logic
+        pollSubmittedQuestions: Array.from(pollSubmittedQuestions), // POLL FIX: Persist poll submitted questions
         timestamp: Date.now()
       };
       storage.setItem(`activity_${activityId}_session`, JSON.stringify(session));
     }
-  }, [participantId, participantData, startTime, responses, currentSectionIndex, currentQuestionIndex, submitted, submittedQuestions, started, activityId, isPreview, assessmentResult, selectedLanguage, searchParams]);
+  }, [participantId, participantData, startTime, responses, currentSectionIndex, currentQuestionIndex, submitted, submittedQuestions, pollSubmittedQuestions, started, activityId, isPreview, assessmentResult, selectedLanguage, searchParams, activity]);
+
+  // CRITICAL UX FIX: Scroll to top when navigating between questions/sections
+  // This ensures users always see the new question from the top of the page
+  // Works for: Next, Previous, direct navigation, section changes, and poll question changes
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    // Skip scroll on initial page load to avoid unnecessary scroll
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    // Only scroll if activity has started and we're viewing questions
+    if (started && !submitted && !showForm) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentQuestionIndex, currentSectionIndex, currentPollQuestionIndex, started, submitted, showForm]);
+
+  // UX Enhancement: Clear error highlight when user answers the highlighted question
+  useEffect(() => {
+    if (!highlightedQuestionId) return;
+    
+    const answer = responses[highlightedQuestionId];
+    const hasAnswer = answer !== undefined && answer !== null && answer !== '' && 
+                      (!Array.isArray(answer) || answer.length > 0);
+    
+    if (hasAnswer) {
+      setHighlightedQuestionId(null);
+    }
+  }, [responses, highlightedQuestionId]);
 
   // Timer logic
   useEffect(() => {
@@ -991,6 +1070,26 @@ export default function TakeActivityPage() {
               ...prev,
               ...resultsWithNumberKeys
             }));
+          } else {
+            // FALLBACK: If results not in API response, fetch them individually for each answered question
+            console.log('[POLL DEBUG] No results in API response, fetching results for answered questions:', answeredIds);
+            answeredIds.forEach(async (qId) => {
+              try {
+                const response = await fetch(`/api/public/activities/${activityId}/poll-results/${qId}`);
+                if (response.ok) {
+                  const data = await response.json();
+                  console.log('[POLL DEBUG] Fetched results for already-answered Q', qId, ':', data.data?.results);
+                  if (data.data?.results) {
+                    setPollResults(prev => ({
+                      ...prev,
+                      [qId]: data.data.results
+                    }));
+                  }
+                }
+              } catch (err) {
+                console.error('[POLL DEBUG] Failed to fetch results for Q', qId, ':', err);
+              }
+            });
           }
         }
         
@@ -1150,6 +1249,189 @@ export default function TakeActivityPage() {
     }
   };
 
+  // Finish Poll - Navigate to Thank You page
+  // CRITICAL FIX: Call finalizePoll API before showing Thank You page
+  // This ensures the response status is updated to 'submitted' in the database
+  const handleFinishPoll = async () => {
+    console.log('[POLL] Finishing poll - calling finalizePoll API');
+    
+    try {
+      // Call backend to finalize poll submission (update status to 'submitted')
+      const response = await fetch(`/api/public/activities/${activityId}/finalize-poll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participant_id: participantId }),
+      });
+      
+      const data = await response.json();
+      console.log('[POLL] finalizePoll response:', data);
+      
+      if (!response.ok && !data.already_submitted) {
+        console.error('[POLL] Failed to finalize poll:', data);
+        // Still show thank you page even if API fails - user has answered all questions
+      }
+    } catch (err) {
+      console.error('[POLL] Error calling finalizePoll:', err);
+      // Still show thank you page even if API fails
+    }
+    
+    console.log('[POLL] Navigating to Thank You page');
+    setSubmitted(true);
+  };
+
+  // ============================================
+  // POLL DISPLAY MODE HANDLERS (for 'all' and 'section' modes)
+  // ============================================
+  
+  // Get first unanswered required question for scroll-to-first-error
+  const getFirstUnansweredRequiredQuestion = (questionsToCheck: any[]) => {
+    return questionsToCheck.find(q => q.is_required && !responses[q.id]);
+  };
+
+  // Handle Poll 'All Questions' Mode Submit - validate all required questions and submit
+  const handlePollAllQuestionsSubmit = async () => {
+    // GUARD: Only for POLL type with 'all' display mode
+    if (activity?.type !== 'poll' || displayMode !== 'all') {
+      return;
+    }
+
+    // CRITICAL FIX: Check if all required questions have been SAVED (not just selected)
+    // User must click "Save Answer" button for each mandatory question
+    if (!pollRequiredQuestionsStatus.allSaved) {
+      const firstUnsaved = pollRequiredQuestionsStatus.unsavedRequired[0];
+      
+      // Show error toast
+      toast({
+        title: 'Missing Required Answers',
+        description: `Please save all mandatory questions before submitting. ${pollRequiredQuestionsStatus.total - pollRequiredQuestionsStatus.saved} remaining.`,
+        variant: 'error',
+      });
+      
+      // Scroll to first unsaved required question and highlight it
+      if (firstUnsaved) {
+        setHighlightedQuestionId(firstUnsaved.id);
+        setTimeout(() => {
+          const element = document.getElementById(`question-${firstUnsaved.id}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+        // Clear highlight after 3 seconds
+        setTimeout(() => setHighlightedQuestionId(null), 3000);
+      }
+      
+      return;
+    }
+
+    // All required questions answered - submit
+    // CRITICAL FIX: Call finalizePoll API before showing Thank You page
+    console.log('[POLL ALL MODE] All required questions answered, calling finalizePoll...');
+    
+    try {
+      const response = await fetch(`/api/public/activities/${activityId}/finalize-poll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participant_id: participantId }),
+      });
+      
+      const data = await response.json();
+      console.log('[POLL ALL MODE] finalizePoll response:', data);
+      
+      if (!response.ok && !data.already_submitted) {
+        console.error('[POLL ALL MODE] Failed to finalize poll:', data);
+      }
+    } catch (err) {
+      console.error('[POLL ALL MODE] Error calling finalizePoll:', err);
+    }
+    
+    setSubmitted(true);
+  };
+
+  // Handle Poll 'Section-wise' Mode Submit - validate current section and advance
+  const handlePollSectionSubmit = async () => {
+    // GUARD: Only for POLL type with 'section' display mode
+    if (activity?.type !== 'poll' || displayMode !== 'section') {
+      return;
+    }
+
+    const currentSection = allFilteredSections[currentSectionIndex];
+    if (!currentSection) return;
+
+    // Get all visible questions in current section
+    const sectionQuestions = currentSection.questions || [];
+    
+    // Find first unanswered required question in THIS section
+    const firstUnanswered = getFirstUnansweredRequiredQuestion(sectionQuestions);
+    
+    if (firstUnanswered) {
+      // Show error toast
+      toast({
+        title: 'Missing Required Answer',
+        description: `Please answer all mandatory questions in this section`,
+        variant: 'error',
+      });
+      
+      // Scroll to first unanswered question
+      setTimeout(() => {
+        const element = document.getElementById(`question-${firstUnanswered.id}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      
+      return;
+    }
+
+    // All section questions answered
+    // If last section - finish poll
+    if (currentSectionIndex >= allFilteredSections.length - 1) {
+      // CRITICAL FIX: Call finalizePoll API before showing Thank You page
+      console.log('[POLL SECTION MODE] Last section completed, calling finalizePoll...');
+      
+      try {
+        const response = await fetch(`/api/public/activities/${activityId}/finalize-poll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participant_id: participantId }),
+        });
+        
+        const data = await response.json();
+        console.log('[POLL SECTION MODE] finalizePoll response:', data);
+        
+        if (!response.ok && !data.already_submitted) {
+          console.error('[POLL SECTION MODE] Failed to finalize poll:', data);
+        }
+      } catch (err) {
+        console.error('[POLL SECTION MODE] Error calling finalizePoll:', err);
+      }
+      
+      setSubmitted(true);
+    } else {
+      // Move to next section
+      console.log('[POLL SECTION MODE] Section completed, moving to next section...');
+      setCurrentSectionIndex(prev => prev + 1);
+      setCurrentQuestionIndex(0);
+      
+      // Scroll to top
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+    }
+  };
+
+  // Handle Poll 'Section-wise' Mode Previous Button
+  const handlePollSectionPrevious = () => {
+    if (currentSectionIndex > 0) {
+      setCurrentSectionIndex(prev => prev - 1);
+      setCurrentQuestionIndex(0);
+      
+      // Scroll to top
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+    }
+  };
+
   // Check if current poll question's timer is expired (submission blocked)
   // Returns false if no timer is configured (timer_seconds = 0)
   // CRITICAL FIX (Feb 18, 2026): Now checks server's is_timer_expired as primary source
@@ -1180,8 +1462,67 @@ export default function TakeActivityPage() {
     }
   }, [submittedParam]);
 
+  // CRITICAL FOR POLL RE-LOGIN: Fetch poll results for already-answered questions
+  // This ensures results are displayed when user re-logs in after having submitted answers
+  useEffect(() => {
+    const fetchResultsForSubmittedQuestions = async () => {
+      // Only run for Poll activities
+      if (activity?.type !== 'Poll') return;
+      
+      // Need participantId and activityId to fetch results
+      if (!participantId || !activityId) return;
+      
+      // Get all submitted question IDs that don't have results yet
+      const submittedIds = Array.from(pollSubmittedQuestions);
+      const missingResultIds = submittedIds.filter(qId => !pollResults[qId]);
+      
+      if (missingResultIds.length === 0) return;
+      
+      console.log('[POLL RE-LOGIN] Fetching results for already-submitted questions:', missingResultIds);
+      
+      // Fetch results for each question that needs it
+      for (const questionId of missingResultIds) {
+        try {
+          // Attempt to submit the answer - backend will return results even for already-submitted
+          const response = await fetch(`/api/public/activities/${activityId}/poll-answer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              participant_id: participantId,
+              question_id: questionId,
+              answer: responses[questionId], // Use existing answer
+            }),
+          });
+          
+          const data = await response.json();
+          
+          // For already-submitted, backend returns results with 400 status
+          if (data.already_submitted && data.data?.results) {
+            console.log('[POLL RE-LOGIN] Got results for question:', questionId, data.data.results);
+            setPollResults(prev => ({
+              ...prev,
+              [questionId]: data.data.results
+            }));
+          } else if (response.ok && data.data?.results) {
+            // Fresh submission returned results
+            console.log('[POLL RE-LOGIN] Got fresh results for question:', questionId, data.data.results);
+            setPollResults(prev => ({
+              ...prev,
+              [questionId]: data.data.results
+            }));
+          }
+        } catch (err) {
+          console.error('[POLL RE-LOGIN] Failed to fetch results for question:', questionId, err);
+        }
+      }
+    };
+    
+    fetchResultsForSubmittedQuestions();
+  }, [pollSubmittedQuestions, activity?.type, participantId, activityId]);
+
   // Validate token if present - but wait for generated link validation to complete first
   // This prevents the access token validation from running when URL has a generated link token
+  // POLL FIX: Also wait for activity to load so we can check activity type
   useEffect(() => {
     // Wait for generated link validation to complete first
     if (!generatedLinkValidated) return;
@@ -1189,11 +1530,14 @@ export default function TakeActivityPage() {
     // Skip if it was validated as a generated link token
     if (generatedLinkToken) return;
     
+    // POLL FIX: Wait for activity to load before validating (needed for poll check)
+    if (!activity) return;
+    
     // Now validate as access token if present
     if (token && !tokenValidated && !tokenValidating) {
       validateAccessToken();
     }
-  }, [token, generatedLinkValidated, generatedLinkToken, tokenValidated, tokenValidating]);
+  }, [token, generatedLinkValidated, generatedLinkToken, tokenValidated, tokenValidating, activity]);
 
   // Handle anonymous generated links - auto-start questionnaire when validated
   useEffect(() => {
@@ -1335,7 +1679,39 @@ export default function TakeActivityPage() {
 
       if (!data.valid) {
         // Special handling for already completed - show thank you page directly
+        // POLL FIX: For Poll activities, don't show Thank You - show results view instead
         if (data.already_completed) {
+          const isPollActivity = activity?.type === 'poll' || questionnaire?.type === 'poll';
+          
+          if (isPollActivity) {
+            // For Poll: Allow user to view results, don't redirect to Thank You
+            console.log('Poll already completed - allowing results view');
+            setTokenValidated(true);
+            setTokenValidating(false);
+            setShowForm(false);
+            setStarted(true); // Start to show poll questions
+            // Don't setSubmitted(true) - this prevents Thank You page
+            
+            // Set participant data from token response if available
+            if (data.participant) {
+              setParticipantId(data.participant.id);
+              setParticipantData({
+                name: data.participant.name,
+                email: data.participant.email,
+                ...data.participant.additional_data
+              });
+            }
+            
+            toast({
+              title: "Welcome Back!",
+              description: "View your poll results below.",
+              variant: "success",
+              duration: 4000
+            });
+            return;
+          }
+          
+          // For non-Poll activities: Show thank you page
           console.log('Activity already completed - showing thank you page');
           setTokenValidated(true);
           setTokenValidating(false);
@@ -1789,7 +2165,13 @@ export default function TakeActivityPage() {
       if (registerResponse.status === 409 && registerData?.data?.existing_response) {
         const participantIdValue = registerData.data.participant_id;
         setParticipantId(participantIdValue);
-        setResponses(registerData.data.existing_response.answers || {});
+        const existingAnswers409 = registerData.data.existing_response.answers || {};
+        setResponses(existingAnswers409);
+        // Mark poll questions as submitted
+        const answeredIds409 = Object.keys(existingAnswers409).map(id => Number(id));
+        if (answeredIds409.length > 0) {
+          setPollSubmittedQuestions(prev => new Set([...prev, ...answeredIds409]));
+        }
         setSubmitted(true);
         setShowForm(false);
         setStarted(false);
@@ -1892,7 +2274,13 @@ export default function TakeActivityPage() {
         // For preview mode, show the thank you page immediately
         if (isPreview) {
           setSubmitted(true);
-          setResponses(registerData.data.existing_response.answers || {});
+          const previewAnswers = registerData.data.existing_response.answers || {};
+          setResponses(previewAnswers);
+          // Mark answered questions as submitted for polls
+          const previewAnsweredIds = Object.keys(previewAnswers).map(id => Number(id));
+          if (previewAnsweredIds.length > 0) {
+            setPollSubmittedQuestions(prev => new Set([...prev, ...previewAnsweredIds]));
+          }
           toast({ 
             title: "Already Completed", 
             description: "You have already submitted your response for this activity in preview mode.", 
@@ -1905,7 +2293,16 @@ export default function TakeActivityPage() {
         // For registration/anonymous links: Allow them to continue to the event
         // They will see their previous responses but can go through the flow
         // Backend will prevent duplicate submission on final submit
-        setResponses(registerData.data.existing_response.answers || {});
+        const existingAnswers = registerData.data.existing_response.answers || {};
+        setResponses(existingAnswers);
+        
+        // CRITICAL FOR POLLS: Mark already-answered questions as submitted
+        // This ensures "Your vote has been recorded" message shows on re-login
+        const answeredQuestionIds = Object.keys(existingAnswers).map(id => Number(id));
+        if (answeredQuestionIds.length > 0) {
+          setPollSubmittedQuestions(prev => new Set([...prev, ...answeredQuestionIds]));
+          console.log('[POLL RE-LOGIN] Marked questions as submitted:', answeredQuestionIds);
+        }
         
         // Show informational message (not blocking)
         toast({ 
@@ -2225,8 +2622,13 @@ export default function TakeActivityPage() {
         [questionId]: value,
       };
       
-      // Auto-save progress to backend (debounced by React state batching)
-      saveProgress(updated);
+      // CRITICAL FIX: Do NOT auto-save progress for POLL type activities
+      // For polls, user must manually click "Save Answer" button for each question
+      // Auto-saving would cause premature submission and show results before user intended
+      if (activity?.type !== 'poll') {
+        // Auto-save progress to backend (debounced by React state batching)
+        saveProgress(updated);
+      }
       
       return updated;
     });
@@ -2307,6 +2709,20 @@ export default function TakeActivityPage() {
       if (isPostSubmissionFlow) {
         console.log('[SUBMIT] POST-SUBMISSION FLOW - Redirecting to registration page');
         try {
+          // Transform responses to include other_text for __other__ values (for temp submission too)
+          const tempTransformedAnswers = Object.entries(responses).reduce((acc, [questionId, value]) => {
+            const otherText = otherTexts[questionId] || '';
+            
+            if (Array.isArray(value) && value.includes(OTHER_OPTION_VALUE)) {
+              acc[questionId] = { value_array: value, other_text: otherText };
+            } else if (value === OTHER_OPTION_VALUE) {
+              acc[questionId] = { value: OTHER_OPTION_VALUE, other_text: otherText };
+            } else {
+              acc[questionId] = value;
+            }
+            return acc;
+          }, {} as Record<string, any>);
+          
           // Save responses to temporary storage
           const tempResponse = await fetch(`/api/public/activities/${activityId}/temporary-submissions`, {
             method: "POST",
@@ -2314,7 +2730,7 @@ export default function TakeActivityPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              answers: responses,
+              answers: tempTransformedAnswers,
               session_token: tempSessionToken,
               is_preview: isPreview,
               is_anonymous: isAnonymous,
@@ -2332,9 +2748,9 @@ export default function TakeActivityPage() {
           const tempData = await tempResponse.json();
           console.log('[SUBMIT] Temp submission saved:', tempData);
           
-          // Store in localStorage
+          // Store in localStorage (use transformed answers for consistency)
           localStorage.setItem(`temp_session_${activityId}`, tempData.data.session_token);
-          localStorage.setItem(`temp_responses_${activityId}`, JSON.stringify(responses));
+          localStorage.setItem(`temp_responses_${activityId}`, JSON.stringify(tempTransformedAnswers));
           
           // Store mode flags for registration page
           if (isPreview) {
@@ -2413,9 +2829,35 @@ export default function TakeActivityPage() {
       // Get generated link tag from state or localStorage (for post-submission flow)
       const linkTag = generatedLinkTag || localStorage.getItem(`generated_link_tag_${activityId}`);
       
+      // Transform responses to include other_text for __other__ values
+      const transformedAnswers = Object.entries(responses).reduce((acc, [questionId, value]) => {
+        const otherText = otherTexts[questionId] || '';
+        
+        // Handle multiselect with __other__
+        if (Array.isArray(value) && value.includes(OTHER_OPTION_VALUE)) {
+          acc[questionId] = {
+            value_array: value,
+            other_text: otherText
+          };
+        }
+        // Handle single select with __other__
+        else if (value === OTHER_OPTION_VALUE) {
+          acc[questionId] = {
+            value: OTHER_OPTION_VALUE,
+            other_text: otherText
+          };
+        }
+        // Regular values - no transformation needed
+        else {
+          acc[questionId] = value;
+        }
+        
+        return acc;
+      }, {} as Record<string, any>);
+      
       const payload = {
         participant_id: currentParticipantId,
-        answers: responses,
+        answers: transformedAnswers,
         comments: questionComments, // Optional comments per question
         started_at,
         time_expired_at,
@@ -2601,6 +3043,51 @@ export default function TakeActivityPage() {
     }
   };
 
+  // UX Enhancement: Scroll to and highlight the first unanswered mandatory question
+  const scrollToAndHighlightQuestion = (questionId: string) => {
+    // Set the highlighted question ID for visual styling
+    setHighlightedQuestionId(questionId);
+    
+    // Find the question element in the DOM using data attribute
+    const questionElement = document.querySelector(`[data-question-id="${questionId}"]`);
+    
+    if (questionElement) {
+      // Calculate scroll position with offset for fixed header (if any)
+      const headerOffset = 100; // Adjust this if there's a fixed header
+      const elementPosition = questionElement.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      
+      // Smooth scroll to the question
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+      
+      // Add a subtle shake animation to draw attention
+      questionElement.classList.add('animate-shake');
+      setTimeout(() => {
+        questionElement.classList.remove('animate-shake');
+      }, 600);
+    }
+  };
+
+  // Helper function to check if a question is unanswered
+  const isQuestionUnanswered = (question: any): boolean => {
+    const answer = responses[question.id];
+    
+    // Check if answer exists and is not empty
+    if (answer === undefined || answer === null || answer === '') {
+      return true;
+    }
+    
+    // For multiple choice, check if array is empty
+    if (Array.isArray(answer) && answer.length === 0) {
+      return true;
+    }
+    
+    return false;
+  };
+
   // Validate if current question(s) have been answered
   const validateCurrentAnswers = (): boolean => {
     const isAssessment = questionnaire?.type === 'assessment' || activity?.type === 'assessment';
@@ -2657,6 +3144,9 @@ export default function TakeActivityPage() {
       const currentSection = questionnaire?.sections?.[currentSectionIndex];
       if (!currentSection) return true;
       
+      // Find the first unanswered mandatory question for scrolling/highlighting
+      let firstUnansweredQuestion: any = null;
+      
       for (const question of currentSectionFiltered) {
         // For Assessments: ALWAYS require an answer
         // For Surveys/Polls: Only require if question is mandatory
@@ -2666,6 +3156,9 @@ export default function TakeActivityPage() {
           const answer = responses[question.id];
           
           if (answer === undefined || answer === null || answer === '') {
+            if (!firstUnansweredQuestion) firstUnansweredQuestion = question;
+            // Scroll to and highlight the first unanswered mandatory question
+            scrollToAndHighlightQuestion(firstUnansweredQuestion.id);
             toast({
               title: "Answer Required",
               description: isAssessment 
@@ -2677,6 +3170,9 @@ export default function TakeActivityPage() {
           }
           
           if (Array.isArray(answer) && answer.length === 0) {
+            if (!firstUnansweredQuestion) firstUnansweredQuestion = question;
+            // Scroll to and highlight the first unanswered mandatory question
+            scrollToAndHighlightQuestion(firstUnansweredQuestion.id);
             toast({
               title: "Answer Required",
               description: isAssessment 
@@ -2691,6 +3187,8 @@ export default function TakeActivityPage() {
         // Check min_selection for multiple choice questions (even if not required, if user started answering)
         const answer = responses[question.id];
         if (Array.isArray(answer) && answer.length > 0 && question.min_selection && answer.length < question.min_selection) {
+          // Scroll to and highlight question with selection error
+          scrollToAndHighlightQuestion(question.id);
           toast({
             title: "Selection Required",
             description: `Please select at least ${question.min_selection} option${question.min_selection > 1 ? 's' : ''} for "${question.title}" to continue.`,
@@ -2704,6 +3202,8 @@ export default function TakeActivityPage() {
           const percentages = answer as Record<string, number>;
           const total = Object.values(percentages).reduce((sum: number, val: number) => sum + (parseFloat(String(val)) || 0), 0);
           if (total !== 100) {
+            // Scroll to and highlight question with percentage error
+            scrollToAndHighlightQuestion(question.id);
             toast({
               title: "Invalid Total",
               description: `Percentage allocation must total exactly 100% (currently ${total.toFixed(1)}%) for "${question.title}".`,
@@ -2729,6 +3229,8 @@ export default function TakeActivityPage() {
             const answer = responses[question.id];
             
             if (answer === undefined || answer === null || answer === '') {
+              // Scroll to and highlight the first unanswered mandatory question
+              scrollToAndHighlightQuestion(question.id);
               toast({
                 title: "Incomplete Answers",
                 description: isAssessment 
@@ -2740,6 +3242,8 @@ export default function TakeActivityPage() {
             }
             
             if (Array.isArray(answer) && answer.length === 0) {
+              // Scroll to and highlight the first unanswered mandatory question
+              scrollToAndHighlightQuestion(question.id);
               toast({
                 title: "Incomplete Answers",
                 description: isAssessment 
@@ -2754,6 +3258,8 @@ export default function TakeActivityPage() {
           // Check min_selection for multiple choice questions (even if not required, if user started answering)
           const answer = responses[question.id];
           if (Array.isArray(answer) && answer.length > 0 && question.min_selection && answer.length < question.min_selection) {
+            // Scroll to and highlight question with selection error
+            scrollToAndHighlightQuestion(question.id);
             toast({
               title: "Selection Required",
               description: `Please select at least ${question.min_selection} option${question.min_selection > 1 ? 's' : ''} for "${question.title}" before submitting.`,
@@ -2767,6 +3273,8 @@ export default function TakeActivityPage() {
             const percentages = answer as Record<string, number>;
             const total = Object.values(percentages).reduce((sum: number, val: number) => sum + (parseFloat(String(val)) || 0), 0);
             if (total !== 100) {
+              // Scroll to and highlight question with percentage error
+              scrollToAndHighlightQuestion(question.id);
               toast({
                 title: "Invalid Total",
                 description: `Percentage allocation must total exactly 100% (currently ${total.toFixed(1)}%) for "${question.title}".`,
@@ -2982,13 +3490,38 @@ export default function TakeActivityPage() {
           }));
         }
       } else {
-        console.log('[POLL RESULTS DEBUG] API error response, generating empty results');
-        // API returned error - show empty results (no fake data)
-        const emptyResults = generateEmptyPollResults(question, responses[questionId]);
-        setPollResults(prev => ({
-          ...prev,
-          [questionId]: emptyResults
-        }));
+        // CRITICAL FIX: Handle "Already Submitted" response from backend
+        // Backend now returns poll results along with the error
+        const errorData = await response.json();
+        console.log('[POLL ALREADY SUBMITTED DEBUG] Backend returned error:', errorData);
+        
+        if (errorData.already_submitted && errorData.data?.results) {
+          // Use the results returned by backend for already-submitted question
+          console.log('[POLL ALREADY SUBMITTED DEBUG] Using results from backend:', errorData.data.results);
+          setPollResults(prev => ({
+            ...prev,
+            [questionId]: errorData.data.results
+          }));
+          
+          // Also update the user's stored answer if returned
+          if (errorData.data?.user_answer !== undefined) {
+            setResponses(prev => ({
+              ...prev,
+              [questionId]: errorData.data.user_answer
+            }));
+          }
+          
+          // Ensure question is marked as submitted
+          setPollSubmittedQuestions(prev => new Set([...prev, numericQuestionId]));
+        } else {
+          console.log('[POLL RESULTS DEBUG] API error response, generating empty results');
+          // API returned other error - show empty results (no fake data)
+          const emptyResults = generateEmptyPollResults(question, responses[questionId]);
+          setPollResults(prev => ({
+            ...prev,
+            [questionId]: emptyResults
+          }));
+        }
       }
     } catch (err) {
       console.error("Failed to submit poll answer:", err);
@@ -3330,6 +3863,49 @@ export default function TakeActivityPage() {
               );
             })}
             
+            {/* Other (Please Specify) option for radio/single choice */}
+            {question.settings?.allow_other && !isPoll && (
+              <>
+                <div
+                  onClick={() => !isSubmitted && !showPollResults && handleResponseChange(questionId, OTHER_OPTION_VALUE)}
+                  className={`relative overflow-hidden flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
+                    (isSubmitted || showPollResults) ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                  } ${
+                    responses[questionId] === OTHER_OPTION_VALUE
+                      ? "border-qsights-blue bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 flex-1 relative z-10">
+                    <Circle
+                      className={`w-5 h-5 ${
+                        responses[questionId] === OTHER_OPTION_VALUE
+                          ? "text-qsights-blue fill-qsights-blue"
+                          : "text-gray-400"
+                      }`}
+                    />
+                    <span className="text-sm text-gray-700">Other (Please Specify)</span>
+                  </div>
+                  {isSubmitted && responses[questionId] === OTHER_OPTION_VALUE && (
+                    <span className="ml-auto text-xs text-gray-500 relative z-10">(Submitted)</span>
+                  )}
+                </div>
+                {/* Text input for "Other" option - show when Other is selected */}
+                {responses[questionId] === OTHER_OPTION_VALUE && (
+                  <div className="ml-8 mt-2">
+                    <Input
+                      type="text"
+                      placeholder="Please specify..."
+                      value={otherTexts[questionId] || ""}
+                      onChange={(e) => setOtherTexts(prev => ({ ...prev, [questionId]: e.target.value }))}
+                      disabled={isSubmitted}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+            
             {/* Show your vote indicator for polls - only when actually submitted */}
             {isPollSubmitted && (
               <div className="flex items-center gap-2 px-2 pt-2 text-xs text-gray-500">
@@ -3532,6 +4108,62 @@ export default function TakeActivityPage() {
                 </div>
               );
             })}
+            
+            {/* Other (Please Specify) option for multiselect/checkbox */}
+            {question.settings?.allow_other && !isPoll_multi && (
+              <>
+                {(() => {
+                  const currentSelection = responses[questionId] || [];
+                  const isOtherSelected = Array.isArray(currentSelection) && currentSelection.includes(OTHER_OPTION_VALUE);
+                  const isMaxReachedForOther = hasMaxSelection && selectedCount >= question.max_selection && !isOtherSelected;
+                  
+                  return (
+                    <>
+                      <div
+                        onClick={() => {
+                          if (isSubmitted || isMaxReachedForOther || showPollResults_multi) return;
+                          // Toggle Other option in multiselect
+                          const current = responses[questionId] || [];
+                          const newValues = current.includes(OTHER_OPTION_VALUE)
+                            ? current.filter((v: string) => v !== OTHER_OPTION_VALUE)
+                            : [...current, OTHER_OPTION_VALUE];
+                          handleResponseChange(questionId, newValues);
+                        }}
+                        className={`relative overflow-hidden flex items-center gap-3 p-4 border-2 rounded-lg transition-all ${
+                          isSubmitted || isMaxReachedForOther || showPollResults_multi ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                        } ${
+                          isOtherSelected ? "border-qsights-blue bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <Square
+                          className={`w-5 h-5 relative z-10 ${isOtherSelected ? "text-qsights-blue fill-qsights-blue" : "text-gray-400"}`}
+                        />
+                        <span className="text-sm text-gray-700 flex-1 relative z-10">Other (Please Specify)</span>
+                        {isSubmitted && isOtherSelected && (
+                          <span className="ml-auto text-xs text-gray-500 relative z-10">(Submitted)</span>
+                        )}
+                        {isMaxReachedForOther && !showPollResults_multi && (
+                          <span className="ml-auto text-xs text-gray-400">(Limit reached)</span>
+                        )}
+                      </div>
+                      {/* Text input for "Other" option - show when Other is selected */}
+                      {isOtherSelected && (
+                        <div className="ml-8 mt-2">
+                          <Input
+                            type="text"
+                            placeholder="Please specify..."
+                            value={otherTexts[questionId] || ""}
+                            onChange={(e) => setOtherTexts(prev => ({ ...prev, [questionId]: e.target.value }))}
+                            disabled={isSubmitted}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
+            )}
             
             {/* Show your vote indicator for polls */}
             {isPollSubmitted_multi && (
@@ -4804,7 +5436,7 @@ export default function TakeActivityPage() {
                 <h1 className="text-3xl font-bold text-gray-900">
                   {activity?.landing_config?.thankYouTitle || "Thank you!"}
                 </h1>
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+                <div className="p-4">
                   <p className="text-lg text-gray-700 mb-2">
                     {isPreview 
                       ? "Preview completed" 
@@ -6542,7 +7174,7 @@ export default function TakeActivityPage() {
               <CardContent className="p-6 space-y-6 overflow-x-auto">
                 {/* Live Poll Mode - Admin controls which questions are active */}
                 {/* Multiple questions can be active simultaneously */}
-                {livePollMode && activity?.type === 'poll' ? (
+                {livePollMode && activity?.type === 'poll' && displayMode === 'single' ? (
                   pollQuestions.length === 0 ? (
                     // No questions loaded yet
                     <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -6789,8 +7421,8 @@ export default function TakeActivityPage() {
                       )}
                     </div>
                   )
-                ) : displayMode === 'single' ? (
-                  // Single Question Mode - show one question at a time
+                ) : displayMode === 'single' && activity?.type !== 'poll' ? (
+                  // Single Question Mode - show one question at a time (NON-POLL)
                   currentSectionFiltered && currentSectionFiltered.length > 0 ? (
                     (() => {
                       const question = currentSectionFiltered[currentQuestionIndex];
@@ -6885,12 +7517,269 @@ export default function TakeActivityPage() {
                       <p className="text-sm text-gray-500">No questions in this section</p>
                     </div>
                   )
+                ) : displayMode === 'single' && activity?.type === 'poll' ? (
+                  // Single Question Mode - FOR POLLS (participant mode without livePollMode)
+                  pollQuestions && pollQuestions.length > 0 && pollQuestions[currentPollQuestionIndex] ? (
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-3">
+                        {questionnaire?.settings?.question_numbering_enabled !== false && (
+                          <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                            {pollQuestions[currentPollQuestionIndex]?.question_number || currentPollQuestionIndex + 1}
+                          </span>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div 
+                            className="text-base font-medium text-gray-900 prose prose-sm max-w-none"
+                            dangerouslySetInnerHTML={{ 
+                              __html: pollQuestions[currentPollQuestionIndex]?.title || '' 
+                            }}
+                          />
+                          {pollQuestions[currentPollQuestionIndex]?.description && (
+                            <p className="text-sm text-gray-500 mt-1">{pollQuestions[currentPollQuestionIndex].description}</p>
+                          )}
+                          {pollQuestions[currentPollQuestionIndex]?.image_url && (
+                            <div className="mt-3 mb-4">
+                              <img
+                                src={pollQuestions[currentPollQuestionIndex].image_url}
+                                alt="Question"
+                                className="w-full h-auto object-contain rounded-lg border border-gray-200"
+                                style={{ maxHeight: '300px' }}
+                              />
+                            </div>
+                          )}
+                          <div className="mt-4 w-full max-w-full">
+                            {renderQuestion({
+                              ...pollQuestions[currentPollQuestionIndex],
+                              id: pollQuestions[currentPollQuestionIndex]?.id,
+                              question: pollQuestions[currentPollQuestionIndex]?.title,
+                              formattedQuestion: pollQuestions[currentPollQuestionIndex]?.title,
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                        <p className="text-sm text-gray-500">
+                          Question {currentPollQuestionIndex + 1} of {pollQuestions.length}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">Loading poll questions...</p>
+                    </div>
+                  )
+                ) : displayMode === 'section' && activity?.type !== 'poll' ? (
+                  // Section Mode - show ALL questions in current section (NON-POLL)
+                  currentSectionFiltered && currentSectionFiltered.length > 0 ? (
+                    <div className="space-y-6">
+                      {currentSectionFiltered.map((question: any, qIndex: number) => (
+                        <div 
+                          key={question.id || qIndex} 
+                          id={activity?.type === 'poll' ? `question-${question.id}` : undefined}
+                          data-question-id={question.id}
+                          className={`space-y-3 pb-6 border-b border-gray-200 last:border-b-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''} ${highlightedQuestionId === question.id ? 'ring-2 ring-red-500 bg-red-50 rounded-lg p-4 -mx-4 transition-all duration-300' : ''}`}
+                        >
+                          {question.type === 'information' ? (
+                            // Information block - render only the formatted content without number/title/description
+                            <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                          ) : (
+                            <div className="flex items-start gap-3">
+                              {questionnaire?.settings?.question_numbering_enabled !== false && (
+                                <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                  {formatQuestionNumber(qIndex, questionnaire?.settings?.question_numbering_format)}
+                                </span>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <div 
+                                      className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_p]:inline [&_div]:inline [&_font]:inline [&_span]:inline"
+                                      dangerouslySetInnerHTML={{ 
+                                        __html: (getTranslatedText(question as any, 'question') as string) + (question.is_required ? ' <span class="text-red-500 text-sm font-medium">*</span>' : '') 
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className="text-xs text-gray-400 hidden">{question.type}</span>
+                                    <PerQuestionLanguageSwitcher
+                                      availableLanguages={questionnaire?.languages || activity?.languages || []}
+                                      currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
+                                      onLanguageChange={(lang) => {
+                                        setPerQuestionLanguages(prev => ({
+                                          ...prev,
+                                          [question.id]: lang
+                                        }));
+                                      }}
+                                      questionId={question.id}
+                                      isEnabled={enablePerQuestionLanguageSwitch}
+                                    />
+                                  </div>
+                                </div>
+                                {question.description && (
+                                  <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                                )}
+                                {/* References - After Question */}
+                                {question.references && question.references.filter((r: any) => r.display_position === 'AFTER_QUESTION').length > 0 && (
+                                  <ReferencesDisplay 
+                                    references={question.references.filter((r: any) => r.display_position === 'AFTER_QUESTION')} 
+                                    className="mt-2"
+                                  />
+                                )}
+                                {/* Question Image */}
+                                {question.settings?.imageUrl && <QuestionImage imageUrl={question.settings.imageUrl} />}
+                                <div className="mt-4 w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                                {/* References - After Answer */}
+                                {question.references && question.references.filter((r: any) => r.display_position === 'AFTER_ANSWER').length > 0 && (
+                                  <ReferencesDisplay 
+                                    references={question.references.filter((r: any) => r.display_position === 'AFTER_ANSWER')} 
+                                    className="mt-3"
+                                  />
+                                )}
+                                {/* Comment Box - shows after answering if enabled */}
+                                {renderCommentBox(question)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No questions in this section</p>
+                    </div>
+                  )
+                ) : displayMode === 'section' && activity?.type === 'poll' ? (
+                  // Section Mode - FOR POLLS - show all poll questions in current section
+                  (() => {
+                    const currentSectionId = questionnaire?.sections?.[currentSectionIndex]?.id;
+                    const sectionPollQuestions = pollQuestions.filter((q: any) => q.section_id === currentSectionId);
+                    
+                    return sectionPollQuestions && sectionPollQuestions.length > 0 ? (
+                      <div className="space-y-6">
+                        {sectionPollQuestions.map((question: any, qIndex: number) => (
+                          <div 
+                            key={question.id || qIndex} 
+                            id={`question-${question.id}`}
+                            data-question-id={question.id}
+                            className={`space-y-3 pb-6 border-b border-gray-200 last:border-b-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''} ${highlightedQuestionId === question.id ? 'ring-2 ring-red-500 bg-red-50 rounded-lg p-4 -mx-4 transition-all duration-300' : ''}`}
+                          >
+                            {question.type === 'information' ? (
+                              // Information block - render only the formatted content without number/title/description
+                              <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                            ) : (
+                              <div className="flex items-start gap-3">
+                                {questionnaire?.settings?.question_numbering_enabled !== false && (
+                                  <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                    {question.question_number || qIndex + 1}
+                                  </span>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1">
+                                      <div 
+                                        className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_p]:inline [&_div]:inline [&_font]:inline [&_span]:inline"
+                                        dangerouslySetInnerHTML={{ 
+                                          __html: (getTranslatedText(question as any, 'question') as string) + (question.is_required ? ' <span class="text-red-500 text-sm font-medium">*</span>' : '') 
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <span className="text-xs text-gray-400 hidden">{question.type}</span>
+                                      <PerQuestionLanguageSwitcher
+                                        availableLanguages={questionnaire?.languages || activity?.languages || []}
+                                        currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
+                                        onLanguageChange={(lang) => {
+                                          setPerQuestionLanguages(prev => ({
+                                            ...prev,
+                                            [question.id]: lang
+                                          }));
+                                        }}
+                                        questionId={question.id}
+                                        isEnabled={enablePerQuestionLanguageSwitch}
+                                      />
+                                    </div>
+                                  </div>
+                                  {question.description && (
+                                    <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                                  )}
+                                  {/* Question Image */}
+                                  {question.image_url && (
+                                    <div className="mt-3 mb-4">
+                                      <img
+                                        src={question.image_url}
+                                        alt="Question"
+                                        className="w-full h-auto object-contain rounded-lg border border-gray-200"
+                                        style={{ maxHeight: '300px' }}
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="mt-4 w-full max-w-full">
+                                    {renderQuestion({
+                                      ...question,
+                                      // Map fields for compatibility with renderQuestion
+                                      id: question?.id,
+                                      question: question?.title,
+                                      formattedQuestion: question?.title,
+                                    })}
+                                  </div>
+                                  
+                                  {/* POLL Save Button - for 'section' mode */}
+                                  {activity?.type === 'poll' && displayMode === 'section' && question.type !== 'information' && (
+                                    <div className="mt-4 flex gap-2">
+                                      {pollSubmittedQuestions.has(question.id) ? (
+                                        // Already saved - show status
+                                        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-300 rounded-lg flex-1">
+                                          <CheckCircle className="w-4 h-4 text-green-600" />
+                                          <span className="text-sm text-green-700 font-medium">Answer saved</span>
+                                        </div>
+                                      ) : (
+                                        // Not saved - show Save button
+                                        <button
+                                          onClick={async () => {
+                                            if (!responses[question.id]) {
+                                              toast({
+                                                title: 'Missing Answer',
+                                                description: 'Please select an answer before saving',
+                                                variant: 'error',
+                                              });
+                                              return;
+                                            }
+                                            await handlePollAnswer(question.id);
+                                          }}
+                                          className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
+                                        >
+                                          <Send className="w-4 h-4" />
+                                          Save Answer
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No questions in this section</p>
+                      </div>
+                    );
+                  })()
                 ) : displayMode === 'section' ? (
                   // Section Mode - show ALL questions in current section
                   currentSectionFiltered && currentSectionFiltered.length > 0 ? (
                     <div className="space-y-6">
                       {currentSectionFiltered.map((question: any, qIndex: number) => (
-                        <div key={question.id || qIndex} className={`space-y-3 pb-6 border-b border-gray-200 last:border-b-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''}`}>
+                        <div 
+                          key={question.id || qIndex} 
+                          id={activity?.type === 'poll' ? `question-${question.id}` : undefined}
+                          data-question-id={question.id}
+                          className={`space-y-3 pb-6 border-b border-gray-200 last:border-b-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''} ${highlightedQuestionId === question.id ? 'ring-2 ring-red-500 bg-red-50 rounded-lg p-4 -mx-4 transition-all duration-300' : ''}`}
+                        >
                           {question.type === 'information' ? (
                             // Information block - render only the formatted content without number/title/description
                             <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
@@ -6949,6 +7838,38 @@ export default function TakeActivityPage() {
                                 )}
                                 {/* Comment Box - shows after answering if enabled */}
                                 {renderCommentBox(question)}
+                                
+                                {/* POLL Save Button - for 'all' and 'section' modes */}
+                                {activity?.type === 'poll' && (displayMode === 'all' || displayMode === 'section') && question.type !== 'information' && (
+                                  <div className="mt-4 flex gap-2">
+                                    {pollSubmittedQuestions.has(question.id) ? (
+                                      // Already saved - show status
+                                      <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-300 rounded-lg flex-1">
+                                        <CheckCircle className="w-4 h-4 text-green-600" />
+                                        <span className="text-sm text-green-700 font-medium">Answer saved</span>
+                                      </div>
+                                    ) : (
+                                      // Not saved - show Save button
+                                      <button
+                                        onClick={async () => {
+                                          if (!responses[question.id]) {
+                                            toast({
+                                              title: 'Missing Answer',
+                                              description: 'Please select an answer before saving',
+                                              variant: 'error',
+                                            });
+                                            return;
+                                          }
+                                          await handlePollAnswer(question.id);
+                                        }}
+                                        className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
+                                      >
+                                        <Send className="w-4 h-4" />
+                                        Save Answer
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
@@ -6961,8 +7882,230 @@ export default function TakeActivityPage() {
                       <p className="text-sm text-gray-500">No questions in this section</p>
                     </div>
                   )
+                ) : displayMode === 'all' && activity?.type === 'poll' ? (
+                  // All Questions Mode - FOR POLLS - show ONLY ACTIVATED poll questions
+                  // CRITICAL: Uses activePollQuestions which filters by is_active status
+                  <div className="space-y-6">
+                    {activePollQuestions && activePollQuestions.length > 0 ? (
+                      activePollQuestions.map((question: any, qIdx: number) => (
+                        <div 
+                          key={question.id || qIdx} 
+                          id={`question-${question.id}`}
+                          data-question-id={question.id}
+                          className={`space-y-3 pb-6 border-b border-gray-200 last:border-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''} ${highlightedQuestionId === question.id ? 'ring-2 ring-red-500 bg-red-50 rounded-lg p-4 -mx-4 transition-all duration-300' : ''}`}
+                        >
+                          {question.type === 'information' ? (
+                            // Information block - render only the formatted content without number/title/description
+                            <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
+                          ) : (
+                            <div className="flex items-start gap-3">
+                              {questionnaire?.settings?.question_numbering_enabled !== false && (
+                                <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                  {question.question_number || qIdx + 1}
+                                </span>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <div 
+                                      className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_p]:inline [&_div]:inline [&_font]:inline [&_span]:inline"
+                                      dangerouslySetInnerHTML={{ 
+                                        __html: (getTranslatedText(question as any, 'question') as string) + (question.is_required ? ' <span class="text-red-500 text-sm font-medium">*</span>' : '') 
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className="text-xs text-gray-400 hidden">{question.type}</span>
+                                    <PerQuestionLanguageSwitcher
+                                      availableLanguages={questionnaire?.languages || activity?.languages || []}
+                                      currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
+                                      onLanguageChange={(lang) => {
+                                        setPerQuestionLanguages(prev => ({
+                                          ...prev,
+                                          [question.id]: lang
+                                        }));
+                                      }}
+                                      questionId={question.id}
+                                      isEnabled={enablePerQuestionLanguageSwitch}
+                                    />
+                                  </div>
+                                </div>
+                                {question.description && (
+                                  <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                                )}
+                                {/* Question Image */}
+                                {question.image_url && (
+                                  <div className="mt-3 mb-4">
+                                    <img
+                                      src={question.image_url}
+                                      alt="Question"
+                                      className="w-full h-auto object-contain rounded-lg border border-gray-200"
+                                      style={{ maxHeight: '300px' }}
+                                    />
+                                  </div>
+                                )}
+                                <div className="mt-4 w-full max-w-full">
+                                  {renderQuestion({
+                                    ...question,
+                                    // Map fields for compatibility with renderQuestion
+                                    id: question?.id,
+                                    question: question?.title,
+                                    formattedQuestion: question?.title,
+                                  })}
+                                </div>
+                                
+                                {/* POLL Save Button - for 'all' mode */}
+                                {activity?.type === 'poll' && displayMode === 'all' && question.type !== 'information' && (
+                                  <div className="mt-4 flex gap-2">
+                                    {pollSubmittedQuestions.has(question.id) ? (
+                                      // Already saved - show status
+                                      <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-300 rounded-lg flex-1">
+                                        <CheckCircle className="w-4 h-4 text-green-600" />
+                                        <span className="text-sm text-green-700 font-medium">Answer saved</span>
+                                      </div>
+                                    ) : (
+                                      // Not saved - show Save button
+                                      <button
+                                        onClick={async () => {
+                                          if (!responses[question.id]) {
+                                            toast({
+                                              title: 'Missing Answer',
+                                              description: 'Please select an answer before saving',
+                                              variant: 'error',
+                                            });
+                                            return;
+                                          }
+                                          await handlePollAnswer(question.id);
+                                        }}
+                                        className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
+                                      >
+                                        <Send className="w-4 h-4" />
+                                        Save Answer
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <Clock className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600 font-medium">Waiting for questions...</p>
+                        <p className="text-xs text-gray-500 mt-1">Questions will appear here when activated by the moderator</p>
+                      </div>
+                    )}
+                  </div>
+                ) : displayMode === 'all' && activity?.type === 'poll' ? (
+                  // All Questions Mode - FOR POLLS - show ONLY ACTIVATED poll questions on one page
+                  // CRITICAL: Uses activePollQuestions which filters by is_active status
+                  <div className="space-y-6">
+                    {activePollQuestions && activePollQuestions.length > 0 ? (
+                      activePollQuestions.map((question: any, qIdx: number) => (
+                        <div 
+                          key={question.id || qIdx} 
+                          id={`question-${question.id}`}
+                          data-question-id={question.id}
+                          className={`space-y-3 pb-6 border-b border-gray-200 last:border-b-0 ${highlightedQuestionId === question.id ? 'ring-2 ring-red-500 bg-red-50 rounded-lg p-4 -mx-4 transition-all duration-300' : ''}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            {questionnaire?.settings?.question_numbering_enabled !== false && (
+                              <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-qsights-dark text-white rounded-full text-sm font-semibold">
+                                {question.question_number || (qIdx + 1)}
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1">
+                                  <div 
+                                    className="inline text-base font-medium text-gray-900 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_p]:inline [&_div]:inline [&_font]:inline [&_span]:inline"
+                                    dangerouslySetInnerHTML={{ 
+                                      __html: (getTranslatedText(question as any, 'question') as string) + (question.is_required ? ' <span class="text-red-500 text-sm font-medium">*</span>' : '') 
+                                    }}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <span className="text-xs text-gray-400 hidden">{question.type}</span>
+                                  <PerQuestionLanguageSwitcher
+                                    availableLanguages={questionnaire?.languages || activity?.languages || []}
+                                    currentLanguage={perQuestionLanguages[question.id] || selectedLanguage || 'EN'}
+                                    onLanguageChange={(lang) => {
+                                      setPerQuestionLanguages(prev => ({
+                                        ...prev,
+                                        [question.id]: lang
+                                      }));
+                                    }}
+                                    questionId={question.id}
+                                    isEnabled={enablePerQuestionLanguageSwitch}
+                                  />
+                                </div>
+                              </div>
+                              {question.description && (
+                                <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                              )}
+                              {/* Question Image */}
+                              {question.image_url && (
+                                <div className="mt-3 mb-4">
+                                  <img 
+                                    src={question.image_url} 
+                                    alt="Question" 
+                                    className="max-w-full h-auto rounded-lg shadow-sm"
+                                  />
+                                </div>
+                              )}
+                              <div className="w-full max-w-full overflow-x-auto mt-3">
+                                {renderQuestion({
+                                  ...question,
+                                  question: question.title,
+                                  options: question.options,
+                                  required: question.is_required,
+                                })}
+                              </div>
+                              {/* Individual Save Answer button for each question */}
+                              {activity?.type === 'poll' && (
+                                <div className="mt-4 flex justify-end">
+                                  {pollSubmittedQuestions.has(question.id) ? (
+                                    <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                                      <CheckCircle className="w-4 h-4" />
+                                      Answer Saved
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={async () => {
+                                        if (!responses[question.id]) {
+                                          toast({
+                                            title: 'Missing Answer',
+                                            description: 'Please select an answer before saving',
+                                            variant: 'error',
+                                          });
+                                          return;
+                                        }
+                                        await handlePollAnswer(question.id);
+                                      }}
+                                      className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
+                                    >
+                                      <Send className="w-4 h-4" />
+                                      Save Answer
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <Clock className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600 font-medium">Waiting for questions...</p>
+                        <p className="text-xs text-gray-500 mt-1">Questions will appear here when activated by the moderator</p>
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  // All Questions Mode - show ALL sections and ALL questions
+                  // All Questions Mode - show ALL sections and ALL questions (FOR NON-POLL TYPES)
                   <div className="space-y-8">
                     {allFilteredSections && allFilteredSections.length > 0 ? (
                       allFilteredSections.map((section: any, sectionIdx: number) => (
@@ -6985,7 +8128,12 @@ export default function TakeActivityPage() {
                           {/* Section Questions */}
                           {section.questions && section.questions.length > 0 ? (
                             section.questions.map((question: any, qIdx: number) => (
-                              <div key={question.id || qIdx} className={`space-y-3 pb-6 border-b border-gray-200 last:border-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''}`}>
+                              <div 
+                                key={question.id || qIdx} 
+                                id={activity?.type === 'poll' ? `question-${question.id}` : undefined}
+                                data-question-id={question.id}
+                                className={`space-y-3 pb-6 border-b border-gray-200 last:border-0 ${question.type === 'information' ? 'border-b-0 pb-0' : ''} ${highlightedQuestionId === question.id ? 'ring-2 ring-red-500 bg-red-50 rounded-lg p-4 -mx-4 transition-all duration-300' : ''}`}
+                              >
                                 {question.type === 'information' ? (
                                   // Information block - render only the formatted content without number/title/description
                                   <div className="w-full max-w-full overflow-x-auto">{renderQuestion(question)}</div>
@@ -7044,6 +8192,38 @@ export default function TakeActivityPage() {
                                       )}
                                       {/* Comment Box - shows after answering if enabled */}
                                       {renderCommentBox(question)}
+                                      
+                                      {/* POLL Save Button - for 'all' and 'section' modes */}
+                                      {activity?.type === 'poll' && (displayMode === 'all' || displayMode === 'section') && question.type !== 'information' && (
+                                        <div className="mt-4 flex gap-2">
+                                          {pollSubmittedQuestions.has(question.id) ? (
+                                            // Already saved - show status
+                                            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-300 rounded-lg flex-1">
+                                              <CheckCircle className="w-4 h-4 text-green-600" />
+                                              <span className="text-sm text-green-700 font-medium">Answer saved</span>
+                                            </div>
+                                          ) : (
+                                            // Not saved - show Save button
+                                            <button
+                                              onClick={async () => {
+                                                if (!responses[question.id]) {
+                                                  toast({
+                                                    title: 'Missing Answer',
+                                                    description: 'Please select an answer before saving',
+                                                    variant: 'error',
+                                                  });
+                                                  return;
+                                                }
+                                                await handlePollAnswer(question.id);
+                                              }}
+                                              className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
+                                            >
+                                              <Send className="w-4 h-4" />
+                                              Save Answer
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 )}
@@ -7097,20 +8277,28 @@ export default function TakeActivityPage() {
                           <Timer className="w-4 h-4 text-yellow-600 animate-pulse" />
                           <span className="text-yellow-700 text-sm font-medium">Not yet activated</span>
                         </div>
-                        <button
-                          onClick={handlePollNext}
-                          disabled={isLastQuestion}
-                          className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Next
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                        {isLastQuestion ? (
+                          <button
+                            onClick={handleFinishPoll}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+                          >
+                            Finish Poll
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handlePollNext}
+                            className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
+                          >
+                            Next
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     );
                   }
                   
-                  // Already submitted - show Previous and Next buttons
-                  // Next is always enabled (user can view waiting message on next question)
+                  // Already submitted - show Previous and Next/Finish buttons
                   if (isQuestionSubmitted) {
                     return (
                       <div className="flex items-center justify-between">
@@ -7122,20 +8310,28 @@ export default function TakeActivityPage() {
                           <ChevronLeft className="w-4 h-4" />
                           Previous
                         </button>
-                        <button
-                          onClick={handlePollNext}
-                          disabled={isLastQuestion}
-                          className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Next
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                        {isLastQuestion ? (
+                          <button
+                            onClick={handleFinishPoll}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+                          >
+                            Finish Poll
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handlePollNext}
+                            className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
+                          >
+                            Next
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     );
                   }
                   
-                  // Timer expired - show Previous and Next (no submit)
-                  // Next is always enabled (user can view waiting message on next question)
+                  // Timer expired - show Previous and Next/Finish (no submit)
                   if (isTimerExpired) {
                     return (
                       <div className="flex items-center justify-between">
@@ -7148,14 +8344,23 @@ export default function TakeActivityPage() {
                           Previous
                         </button>
                         <span className="text-sm text-gray-500">Time Expired</span>
-                        <button
-                          onClick={handlePollNext}
-                          disabled={isLastQuestion}
-                          className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Next
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                        {isLastQuestion ? (
+                          <button
+                            onClick={handleFinishPoll}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+                          >
+                            Finish Poll
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handlePollNext}
+                            className="px-4 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2"
+                          >
+                            Next
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     );
                   }
@@ -7377,8 +8582,76 @@ export default function TakeActivityPage() {
                 })()}
               </div>
               )
+            ) : activity?.type === 'poll' && displayMode === 'all' ? (
+              // POLL All Questions Mode - show Submit All button at bottom
+              // CRITICAL: Button is disabled until ALL mandatory questions are SAVED
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-500">
+                  {pollRequiredQuestionsStatus.total === 0 
+                    ? (pollSubmittedQuestions.size === 0 
+                        ? 'Save at least one answer to submit'
+                        : `${pollSubmittedQuestions.size} answer${pollSubmittedQuestions.size !== 1 ? 's' : ''} saved`)
+                    : (!pollRequiredQuestionsStatus.allSaved
+                        ? `Save all mandatory questions (${pollRequiredQuestionsStatus.saved}/${pollRequiredQuestionsStatus.total} saved)`
+                        : `All ${pollRequiredQuestionsStatus.total} mandatory question${pollRequiredQuestionsStatus.total !== 1 ? 's' : ''} saved ✓`)
+                  }
+                </div>
+                <button
+                  onClick={handlePollAllQuestionsSubmit}
+                  disabled={submitting || (pollRequiredQuestionsStatus.total > 0 ? !pollRequiredQuestionsStatus.allSaved : pollSubmittedQuestions.size === 0)}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Submit All
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : activity?.type === 'poll' && displayMode === 'section' ? (
+              // POLL Section-wise Mode - show Previous/Next section navigation with Submit Section button
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={handlePollSectionPrevious}
+                  disabled={currentSectionIndex === 0}
+                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous Section
+                </button>
+
+                {(() => {
+                  const isLastSection = currentSectionIndex === totalSections - 1;
+
+                  return (
+                    <button
+                      onClick={handlePollSectionSubmit}
+                      disabled={submitting}
+                      className="px-6 py-2 bg-qsights-cyan text-white rounded-lg text-sm font-medium hover:bg-qsights-cyan/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          {isLastSection ? 'Finishing...' : 'Processing...'}
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          {isLastSection ? 'Finish Poll' : 'Submit Section'}
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
+              </div>
             ) : displayMode === 'section' ? (
-              // Section-wise Mode - show Previous/Next section navigation
+              // Section-wise Mode - show Previous/Next section navigation (for Survey/Assessment, NOT POLL)
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => {
